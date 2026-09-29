@@ -6,6 +6,9 @@
 
 The package can be installed from npm or Git, and uses GitHub Actions for type checking, automated tests, and npm Trusted Publishing via OIDC.
 
+> [!IMPORTANT]
+> `pi-ui-extension` is designed for **Pi fullscreen mode**. Please run Pi in fullscreen mode when using this extension. In non-fullscreen mode, sidebar panels, layout sizing, and related UI behavior may be unavailable or displayed incorrectly.
+
 ## Preview
 
 <img width="1377" height="671" alt="pi-ui-extension preview" src="https://github.com/user-attachments/assets/ddea5dc9-8796-433a-abfc-c7ea2adec089" />
@@ -22,7 +25,7 @@ The extension mounts a right-side sidebar in Pi's fullscreen TUI. It contains th
 
 The sidebar supports mouse interaction, wheel scrolling, and terminal resize handling. Panels shrink or become scrollable when vertical space is limited.
 
-> The sidebar depends on Pi fullscreen TUI mode. In non-fullscreen mode, the extension degrades safely and does not force layout replacement.
+> The sidebar depends on **Pi fullscreen mode**. Non-fullscreen mode is not a supported display mode for this extension; sidebar panels, layout sizing, and related UI behavior may be unavailable or displayed incorrectly.
 
 ### 2. Session management
 

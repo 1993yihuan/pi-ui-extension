@@ -6,6 +6,9 @@
 
 当前包同时支持通过 npm 或 Git 安装，并使用 GitHub Actions 完成类型检查、自动化测试和 npm Trusted Publishing（OIDC）发布。
 
+> [!IMPORTANT]
+> `pi-ui-extension` **需要在 Pi 的 fullscreen 模式下使用**。请在 fullscreen 模式下运行 Pi；非 fullscreen 模式不属于本扩展的支持范围，Sidebar、面板尺寸计算及相关布局可能无法正常显示。
+
 ## 界面预览
 
 <img width="1377" height="671" alt="pi-ui-extension 界面预览" src="https://github.com/user-attachments/assets/ddea5dc9-8796-433a-abfc-c7ea2adec089" />
@@ -22,7 +25,7 @@
 
 Sidebar 支持鼠标交互、滚轮滚动和终端尺寸变化。终端高度不足时，各区域会根据可用空间自动收缩或出现滚动区域。
 
-> 右侧 Sidebar 依赖 Pi fullscreen TUI。非 fullscreen 场景下不会强行替换布局。
+> 右侧 Sidebar 依赖 **Pi fullscreen 模式**。非 fullscreen 模式不属于本扩展的支持范围，Sidebar、面板尺寸计算及相关布局可能无法正常显示。
 
 ### 2. Sessions 会话管理
 
