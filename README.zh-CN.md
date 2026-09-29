@@ -383,4 +383,4 @@ npm 发布使用 GitHub Actions OIDC Trusted Publishing，不需要在 GitHub Re
 
 ## License
 
-当前仓库尚未声明独立 LICENSE。如准备将项目作为正式开源项目长期维护，建议补充明确的开源许可证。
+本项目采用 [MIT License](LICENSE) 开源许可证。

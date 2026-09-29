@@ -383,4 +383,4 @@ npm publishing uses GitHub Actions OIDC Trusted Publishing, so no long-lived `NP
 
 ## License
 
-This repository does not currently declare a dedicated LICENSE. If the project is intended for long-term public open-source use, adding an explicit license is recommended.
+This project is licensed under the [MIT License](LICENSE).
