@@ -1,63 +1,65 @@
+[English](README.md) | [简体中文](README.zh-CN.md)
+
 # pi-ui-extension
 
-`pi-ui-extension` 是一个面向 [Pi Coding Agent](https://github.com/earendil-works/pi) 的终端 UI 增强包，在不修改 Pi Core 的前提下，为全屏 TUI 增加右侧信息栏、会话管理、上下文观察、工具调用统计以及更紧凑的 Footer。
+`pi-ui-extension` is a terminal UI enhancement package for [Pi Coding Agent](https://github.com/earendil-works/pi). It adds a right-side information sidebar, session management, context inspection, tool/MCP usage tracking, and a compact footer without modifying Pi Core.
 
-当前包同时支持通过 npm 或 Git 安装，并使用 GitHub Actions 完成类型检查、自动化测试和 npm Trusted Publishing（OIDC）发布。
+The package can be installed from npm or Git, and uses GitHub Actions for type checking, automated tests, and npm Trusted Publishing via OIDC.
 
-## 功能概览
+## Features
 
-### 1. 右侧 Sidebar
+### 1. Right-side Sidebar
 
-扩展会在 Pi 的全屏 TUI 中挂载右侧 Sidebar。默认包含三个区域：
+The extension mounts a right-side sidebar in Pi's fullscreen TUI. It contains three default panels:
 
-- **SESSIONS**：最近会话与资源入口。
-- **CTX**：当前模型、上下文窗口、组成估算以及运行性能。
-- **TOOL VIEW**：工具输出显示模式与 Tool / MCP 调用统计。
+- **SESSIONS**: recent sessions and resource shortcuts.
+- **CTX**: model, context window, composition estimates, and runtime performance.
+- **TOOL VIEW**: tool transcript display modes and Tool/MCP usage statistics.
 
-Sidebar 支持鼠标交互、滚轮滚动和终端尺寸变化。终端高度不足时，各区域会根据可用空间自动收缩或出现滚动区域。
+The sidebar supports mouse interaction, wheel scrolling, and terminal resize handling. Panels shrink or become scrollable when vertical space is limited.
 
-> 右侧 Sidebar 依赖 Pi fullscreen TUI。非 fullscreen 场景下不会强行替换布局。
+> The sidebar depends on Pi fullscreen TUI mode. In non-fullscreen mode, the extension degrades safely and does not force layout replacement.
 
-### 2. Sessions 会话管理
+### 2. Session management
 
-`SESSIONS` 面板提供最近会话的快速管理：
+The `SESSIONS` panel provides quick access to recent sessions:
 
-- 点击会话切换到对应 Session。
-- 重命名非当前 Session。
-- 删除非当前 Session。
-- 使用右上角 `⊗` 清理除当前 Session 外的其他会话。
-- 点击 `SESSIONS ↻` 刷新会话列表。
+- Click a session to switch to it.
+- Rename a non-current session.
+- Delete a non-current session.
+- Use the `⊗` action to remove all other sessions.
+- Click `SESSIONS ↻` to refresh the session list.
 
-为避免正在执行中的 Agent 状态被破坏，会话切换、重命名、删除和批量清理只会在 Pi 空闲时执行；当前正在使用的 Session 不允许删除。
+To avoid corrupting active agent state, switching, renaming, deleting, and bulk cleanup are only allowed while Pi is idle. The current session cannot be deleted.
 
-### 3. 资源快速查看
+### 3. Resource shortcuts
 
-`SESSIONS` 面板底部提供四类资源入口：
+The bottom of the `SESSIONS` panel exposes four resource categories:
 
 - `AGENTS.md`
 - `Skills`
 - `Extensions`
 - `MCP`
 
-点击后可以直接查看当前项目 / 当前 Pi 环境中已加载的相关资源，便于快速确认 Agent 当前实际使用了哪些上下文、Skill、Extension 和 MCP Server。
+These shortcuts let you inspect the resources currently loaded by the project/Pi environment, making it easier to verify which agent instructions, skills, extensions, and MCP servers are actually available.
 
-### 4. CTX 上下文观察
+### 4. CTX context inspection
 
-`CTX` 面板用于观察当前模型请求相关的上下文状态，主要包括：
+The `CTX` panel shows context and runtime information for the current model request, including:
 
-- 当前模型名称。
-- Thinking Level。
-- Pi 当前 context usage / context window。
-- 当前提问相对上一轮 settled 状态的上下文增量。
-- Context composition 分类估算。
-- 图片数量。
-- 当前 Run 的 turn 数量与耗时。
-- 平均 TTFT（Time To First Token）。
-- 平均 TPS（Tokens Per Second）。
-- 最近一次 TTFT 及速度标签。
-- 可观测时显示缓存命中相关数据。
+- Current model name.
+- Thinking level.
+- Pi context usage / context window.
+- Current-question context delta relative to the previous settled state.
+- Context composition estimates.
+- Image count.
+- Turn count and run duration.
+- Average TTFT (Time To First Token).
+- Average TPS (Tokens Per Second).
+- Latest observed TTFT with speed label.
+- Cache-related metrics when observable.
 
-Composition 会将当前可观测上下文拆分为：
+Context composition is grouped into:
 
 - `System`
 - `Tools`
@@ -66,69 +68,69 @@ Composition 会将当前可观测上下文拆分为：
 - `Summary`
 - `Other`
 
-其中 token 数量是本地启发式估算，主要用于观察组成比例和变化趋势，并不是模型厂商的精确 tokenizer 结果，也不等同于计费 token。
+Token counts are local heuristic estimates intended for composition and trend visibility. They are **not** provider-accurate tokenizer results and are not billing-token counts.
 
-工具定义会优先基于 provider request 中实际可观测到的 tool payload 统计；在请求尚未发生时，则回退到 Pi 当前启用工具的 schema 估算。
+For tool definitions, the extension prefers the observable provider-request tool payload when available. Before a provider request exists, it falls back to estimating the schemas of Pi's currently enabled tools.
 
-### 5. Tool View 模式切换
+### 5. Tool View modes
 
-`TOOL VIEW` 支持三种工具输出显示模式：
+`TOOL VIEW` supports three transcript display modes:
 
-- **Normal**：正常显示工具 transcript。
-- **Compact**：使用更紧凑的工具输出展示。
-- **Hidden**：隐藏工具 transcript。
+- **Normal**: standard tool transcript rendering.
+- **Compact**: denser tool output rendering.
+- **Hidden**: hide tool transcripts.
 
-可以直接使用鼠标点击模式进行切换。
+Modes can be changed directly with mouse clicks.
 
-当 Fabric 接管工具展示行为时，扩展会保留 Tool View 面板和调用统计，但不再显示本地模式选择器，并提示 `View controlled by Fabric`，避免与 Fabric 的展示逻辑互相抢占。
+When Fabric takes ownership of tool rendering, the panel remains visible for usage statistics but the local mode selector is hidden and replaced with `View controlled by Fabric`. This avoids conflicting display control.
 
-### 6. Tool / MCP 调用统计
+### 6. Tool / MCP usage statistics
 
-Tool View 会将调用拆成两类展示：
+Tool View groups usage into:
 
 - `TOOLS`
 - `MCP`
 
-每一项使用：
+Each entry is shown as:
 
 ```text
-当前提问调用数 / 当前 Session 累计调用数
+current-question calls / current-session calls
 ```
 
-例如：
+Example:
 
 ```text
 task_todos                         1/5
 ```
 
-统计会跟随当前 active branch 重建，切换分支或恢复 Session 时不会简单沿用旧分支的累计结果。
+Usage state is rebuilt when the active branch changes, so restored sessions and branch switches do not blindly reuse counts from another branch.
 
-对于通过 MCP gateway、`mcpScript` 等路径发起的调用，扩展会尽量归属到实际 MCP Server，而不是只统计为一个模糊的外层工具调用。
+For calls made through MCP gateways, `mcpScript`, and similar wrappers, the extension attempts to attribute activity to the actual MCP server instead of counting only the outer wrapper tool.
 
 ### 7. Footer
 
-扩展替换默认 Footer，保持界面简洁，显示：
+The extension replaces the default footer with a compact view that displays:
 
-- 当前工作目录。
-- 当前 Git branch（存在 Git 仓库时）。
+- Current working directory.
+- Current Git branch, when available.
 
-路径会自动压缩到终端宽度以内。
+The path is automatically truncated to fit terminal width.
 
-## 安装
+## Installation
 
-### 推荐：从 npm 安装
+### Recommended: install from npm
 
 ```bash
 pi install npm:pi-ui-extension
 ```
 
-Pi 会安装 package，并将声明写入个人配置：
+Pi installs the package and writes the declaration to:
 
 ```text
 ~/.pi/agent/settings.json
 ```
 
-对应配置类似：
+Example configuration:
 
 ```json
 {
@@ -138,13 +140,13 @@ Pi 会安装 package，并将声明写入个人配置：
 }
 ```
 
-如果希望固定版本：
+To pin a specific version:
 
 ```bash
 pi install npm:pi-ui-extension@1.1.1
 ```
 
-或者：
+or:
 
 ```json
 {
@@ -154,17 +156,17 @@ pi install npm:pi-ui-extension@1.1.1
 }
 ```
 
-固定版本属于 pinned package，不会自动移动到后续版本。
+Pinned packages do not automatically move to newer versions.
 
-### 从 GitHub 安装
+### Install from GitHub
 
-也可以直接使用 Git 仓库：
+You can also install directly from the Git repository:
 
 ```bash
 pi install git:github.com/1993yihuan/pi-ui-extension
 ```
 
-配置形式：
+Configuration form:
 
 ```json
 {
@@ -174,143 +176,143 @@ pi install git:github.com/1993yihuan/pi-ui-extension
 }
 ```
 
-固定到 Git tag：
+Pin to a Git tag:
 
 ```bash
 pi install git:github.com/1993yihuan/pi-ui-extension@v1.1.1
 ```
 
-### 临时试用
+### Temporary usage
 
-如果只想在一次 Pi 启动中测试，不修改 `settings.json`：
+To load the package for a single Pi launch without modifying `settings.json`:
 
 ```bash
 pi -e npm:pi-ui-extension
 ```
 
-### 项目级安装
+### Project-local installation
 
-需要只对当前项目生效时：
+To enable the package only for the current project:
 
 ```bash
 pi install --local npm:pi-ui-extension
 ```
 
-声明会写入：
+The declaration is written to:
 
 ```text
 <project>/.pi/settings.json
 ```
 
-项目级 Package 只有在项目被 Pi 信任后才会加载。
+Project-local packages are loaded only after the project is trusted by Pi.
 
-## 更新与卸载
+## Update and removal
 
-更新未固定版本的扩展：
+Update unpinned extensions:
 
 ```bash
 pi update --extensions
 ```
 
-查看当前配置的 Package：
+List configured packages:
 
 ```bash
 pi list
 ```
 
-卸载 npm 版本：
+Remove the npm source:
 
 ```bash
 pi remove npm:pi-ui-extension
 ```
 
-如果安装的是 Git 源，则使用对应 Git source 删除：
+If installed from Git, remove the corresponding Git source:
 
 ```bash
 pi remove git:github.com/1993yihuan/pi-ui-extension
 ```
 
-## npm 与 Git 应该选哪个？
+## npm or Git?
 
-日常使用推荐 npm：
+For normal usage, npm is recommended:
 
 ```text
 npm:pi-ui-extension
 ```
 
-优点是版本语义清晰、安装速度稳定，并且可以直接固定 SemVer 版本。
+It provides clear SemVer versioning, predictable installation, and easy version pinning.
 
-如果希望始终跟随仓库最新代码，或者需要测试尚未发布到 npm 的提交，可以使用：
+Use Git when you want to follow the latest repository state or test changes that have not yet been published to npm:
 
 ```text
 git:github.com/1993yihuan/pi-ui-extension
 ```
 
-本地开发阶段则推荐直接加载本地源码目录，避免每次调试都必须 commit / push / update。
+For active local development, loading a local checkout is usually faster than committing, pushing, and updating on every change.
 
-## 本地开发
+## Local development
 
-克隆仓库：
+Clone the repository:
 
 ```bash
 git clone https://github.com/1993yihuan/pi-ui-extension.git
 cd pi-ui-extension
 ```
 
-安装开发依赖：
+Install dependencies:
 
 ```bash
 npm ci
 ```
 
-完整检查：
+Run the full validation suite:
 
 ```bash
 npm run check
 ```
 
-等价于：
+Equivalent commands:
 
 ```bash
 npm run typecheck
 npm test
 ```
 
-当前自动化测试覆盖 Sidebar、CTX、Session、Tool View、MCP resource、Fabric detection、鼠标滚轮 / resize 等主要行为。
+The test suite covers the main behavior of Sidebar, CTX, Session management, Tool View, MCP resources, Fabric detection, mouse scrolling, and resize handling.
 
-开发时可以直接让 Pi 加载本地目录：
+During development, Pi can load the local source directory directly:
 
 ```bash
 pi install ./path/to/pi-ui-extension
 ```
 
-或者在一次启动中临时加载：
+Or load it temporarily for one run:
 
 ```bash
 pi -e ./path/to/pi-ui-extension
 ```
 
-## Package 结构
+## Package structure
 
 ```text
 pi-ui-extension/
 ├── extensions/
-│   ├── ctx/                 # 上下文组成、增量与运行性能
+│   ├── ctx/                 # Context composition, delta, runtime metrics
 │   ├── footer/              # Footer
-│   ├── mcp/                 # MCP resource / usage 集成
-│   ├── session/             # Session 列表与操作
-│   ├── sidebar/             # Sidebar 布局、滚动和 resize
-│   ├── tool-view/           # Tool View 模式与调用统计
-│   ├── fabric-detection.ts  # Fabric 工具接管检测
-│   └── index.ts             # Pi Extension 入口
+│   ├── mcp/                 # MCP resource / usage integration
+│   ├── session/             # Session list and actions
+│   ├── sidebar/             # Sidebar layout, scrolling, resize
+│   ├── tool-view/           # Tool View modes and usage statistics
+│   ├── fabric-detection.ts  # Fabric ownership detection
+│   └── index.ts             # Pi Extension entry point
 ├── .github/workflows/
-│   ├── ci.yml               # push / PR 自动检查
-│   └── release.yml          # tag 自动发布 npm + GitHub Release
+│   ├── ci.yml               # Automatic checks on push / PR
+│   └── release.yml          # npm publishing + GitHub Release on tags
 ├── package.json
 └── tsconfig.check.json
 ```
 
-Pi 的扩展入口在 `package.json` 中显式声明：
+Pi's extension entry point is declared explicitly in `package.json`:
 
 ```json
 {
@@ -324,7 +326,7 @@ Pi 的扩展入口在 `package.json` 中显式声明：
 
 ## CI / Release
 
-提交到 `main` 或创建 PR 时，GitHub Actions 会自动执行：
+Every push to `main` and every pull request runs:
 
 ```text
 npm ci
@@ -332,7 +334,7 @@ npm ci
 → npm test
 ```
 
-发布版本时使用 Git tag，例如：
+To publish a release, create a version tag, for example:
 
 ```bash
 npm version patch
@@ -340,37 +342,37 @@ git push
 git push --tags
 ```
 
-`v*` tag 会触发 Release workflow：
+A `v*` tag triggers the release workflow:
 
 ```text
 Checkout
 → Node.js 24
 → npm ci
 → npm run check
-→ 校验 tag 与 package.json version
+→ verify tag == package.json version
 → npm pack --dry-run
 → npm Trusted Publishing (OIDC)
 → npm publish
 → GitHub Release
 ```
 
-npm 发布使用 GitHub Actions OIDC Trusted Publishing，不需要在 GitHub Repository 中保存长期 `NPM_TOKEN`。
+npm publishing uses GitHub Actions OIDC Trusted Publishing, so no long-lived `NPM_TOKEN` is required in the repository.
 
-## 兼容性与设计原则
+## Compatibility and design principles
 
-- 不修改 Pi Core。
-- Pi host 提供的 `@earendil-works/pi-coding-agent` 和 `@earendil-works/pi-tui` 使用 `peerDependencies`，避免产生重复运行时实例。
-- 对 Fabric 做显式检测，避免 Tool View 模式控制发生冲突。
-- Session 与资源操作尽量通过 Pi 已公开 API 完成。
-- Context composition 明确标记为估算值，不冒充 provider 精确 token 统计。
-- fullscreen Sidebar 不可用时安全降级，不影响 Pi 主流程。
+- Does not modify Pi Core.
+- `@earendil-works/pi-coding-agent` and `@earendil-works/pi-tui` are host-provided peer dependencies to avoid duplicate runtime instances.
+- Fabric ownership is detected explicitly to avoid conflicting Tool View controls.
+- Session and resource operations use Pi public APIs wherever possible.
+- Context composition is clearly presented as an estimate, not provider-exact token accounting.
+- Fullscreen sidebar behavior degrades safely when fullscreen layout is unavailable.
 
 ## Requirements
 
 - Pi Coding Agent
-- Node.js `>= 22.19.0`（建议使用当前 Pi 支持的 Node 版本）
-- 开发与 CI 当前使用 Node.js 24
+- Node.js `>= 22.19.0` (use a Node version supported by your Pi installation)
+- Development and CI currently use Node.js 24
 
 ## License
 
-当前仓库尚未声明独立 LICENSE。如准备将项目作为正式开源项目长期维护，建议补充明确的开源许可证。
+This repository does not currently declare a dedicated LICENSE. If the project is intended for long-term public open-source use, adding an explicit license is recommended.
