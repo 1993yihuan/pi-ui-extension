@@ -120,6 +120,10 @@ task_todos                         1/5
 
 路径会自动压缩到终端宽度以内。
 
+## Pi Package Catalog
+
+本包发布到 npm 时包含 `pi-package` keyword 和 Pi manifest，因此具备被 `pi.dev/packages` 的 Pi Package Catalog 发现和索引的条件。包元数据同时声明了上方的预览图，用于 Catalog / Gallery 展示。
+
 ## 安装
 
 ### 推荐：从 npm 安装

@@ -120,6 +120,10 @@ The extension replaces the default footer with a compact view that displays:
 
 The path is automatically truncated to fit terminal width.
 
+## Pi Package Catalog
+
+This package is published to npm with the `pi-package` keyword and a Pi manifest, so it can be discovered by the Pi package catalog at `pi.dev/packages`. The package metadata also declares the preview image shown above for catalog/gallery presentation.
+
 ## Installation
 
 ### Recommended: install from npm
