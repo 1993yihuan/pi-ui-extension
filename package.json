@@ -1,6 +1,6 @@
 {
   "name": "pi-ui-extension",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "type": "module",
   "description": "Pi UI extension with footer, split-view sidebar, and configurable tool transcript rendering",
   "keywords": [
