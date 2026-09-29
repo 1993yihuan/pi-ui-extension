@@ -1,0 +1,29 @@
+{
+  "name": "pi-ui-extension",
+  "version": "1.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Pi UI extension with footer, split-view sidebar, and configurable tool transcript rendering",
+  "keywords": ["pi-package"],
+  "pi": {
+    "extensions": ["./extensions/index.ts"]
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.check.json",
+    "test": "node --import tsx --test",
+    "check": "npm run typecheck && npm test"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*"
+  },
+  "peerDependenciesMeta": {
+    "@earendil-works/pi-coding-agent": { "optional": true },
+    "@earendil-works/pi-tui": { "optional": true }
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.20.6",
+    "typescript": "^7.0.2"
+  }
+}
