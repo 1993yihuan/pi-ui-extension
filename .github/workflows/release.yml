@@ -15,14 +15,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
-          cache: npm
+          package-manager-cache: false
+
+      - name: Ensure OIDC-capable npm
+        run: npm install --global 'npm@>=11.5.1 <12'
 
       - name: Install dependencies
         run: npm ci
@@ -44,11 +47,9 @@ jobs:
       - name: Inspect package contents
         run: npm pack --dry-run
 
-      - name: Publish to npm
+      - name: Publish to npm with OIDC
         if: github.event_name == 'push'
-        run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public
 
       - name: Create GitHub Release
         if: github.event_name == 'push'
