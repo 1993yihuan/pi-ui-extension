@@ -6,6 +6,10 @@
 
 The package can be installed from npm or Git, and uses GitHub Actions for type checking, automated tests, and npm Trusted Publishing via OIDC.
 
+## Preview
+
+<img width="1377" height="671" alt="pi-ui-extension preview" src="https://github.com/user-attachments/assets/ddea5dc9-8796-433a-abfc-c7ea2adec089" />
+
 ## Features
 
 ### 1. Right-side Sidebar

@@ -6,6 +6,10 @@
 
 当前包同时支持通过 npm 或 Git 安装，并使用 GitHub Actions 完成类型检查、自动化测试和 npm Trusted Publishing（OIDC）发布。
 
+## 界面预览
+
+<img width="1377" height="671" alt="pi-ui-extension 界面预览" src="https://github.com/user-attachments/assets/ddea5dc9-8796-433a-abfc-c7ea2adec089" />
+
 ## 功能概览
 
 ### 1. 右侧 Sidebar
