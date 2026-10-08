@@ -11,7 +11,7 @@
 
 ## 界面预览
 
-<img width="1377" height="671" alt="pi-ui-extension 界面预览" src="https://github.com/user-attachments/assets/ddea5dc9-8796-433a-abfc-c7ea2adec089" />
+<img width="1377" height="671" alt="pi-ui-extension 界面预览" src="https://github.com/1993yihuan/pi-ui-extension/releases/download/v1.1.6/preview.png" />
 
 ## 功能概览
 

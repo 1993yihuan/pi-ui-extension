@@ -17,7 +17,7 @@
     "extensions": [
       "./extensions/index.ts"
     ],
-    "image": "https://github.com/user-attachments/assets/ddea5dc9-8796-433a-abfc-c7ea2adec089"
+    "image": "https://github.com/1993yihuan/pi-ui-extension/releases/download/v1.1.6/preview.png"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.check.json",
