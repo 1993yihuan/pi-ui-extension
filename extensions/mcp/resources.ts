@@ -1,7 +1,39 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 export type McpResourceEntry = {
   readonly name: string;
   readonly description: string;
 };
+
+export function mcpResourceEntriesFromConfig(agentDir: string, cwd: string, trusted: boolean): readonly McpResourceEntry[] {
+  const paths = [join(agentDir, "mcp.json")];
+  if (trusted) paths.push(join(cwd, ".pi", "mcp.json"));
+  const rows = new Map<string, McpResourceEntry>();
+  for (const path of paths) {
+    try {
+      const config: unknown = JSON.parse(readFileSync(path, "utf8"));
+      if (!config || typeof config !== "object" || Array.isArray(config)) continue;
+      const servers = (config as { mcpServers?: unknown }).mcpServers;
+      if (!servers || typeof servers !== "object" || Array.isArray(servers)) continue;
+      for (const [name, value] of Object.entries(servers)) {
+        if (!name.trim() || !value || typeof value !== "object" || Array.isArray(value)) continue;
+        if ((value as { disabled?: unknown }).disabled === true) {
+          rows.delete(name);
+          continue;
+        }
+        rows.set(name, { name, description: "Configured MCP server (connection not verified)" });
+      }
+    } catch { /* Missing or invalid configuration is not fatal. */ }
+  }
+  return [...rows.values()];
+}
+
+export function mergeMcpResourceEntries(configured: readonly McpResourceEntry[], live: readonly McpResourceEntry[]): readonly McpResourceEntry[] {
+  const rows = new Map(configured.map((entry) => [entry.name, entry]));
+  for (const entry of live) rows.set(entry.name, entry);
+  return [...rows.values()];
+}
 
 type McpStatusServer = {
   readonly name?: unknown;

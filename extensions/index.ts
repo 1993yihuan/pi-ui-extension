@@ -13,7 +13,7 @@ import { installContextEstimates } from "./ctx/data.ts";
 import { createActivityTracker, type ActivityTracker } from "./ctx/activity.ts";
 import { installFooter, type FooterController } from "./footer/index.ts";
 import { isFabricFullCodeMode } from "./fabric-detection.ts";
-import { mcpResourceEntriesFromStatus } from "./mcp/resources.ts";
+import { mcpResourceEntriesFromConfig, mcpResourceEntriesFromStatus, mergeMcpResourceEntries } from "./mcp/resources.ts";
 import {
   createDefaultSidebarPanels,
   SESSION_PANEL_ID,
@@ -185,6 +185,9 @@ async function clearOtherSessions(
 export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
   const toolView = await installToolViewController(pi);
   let mcpResources: readonly ResourceEntry[] = [];
+  let liveMcpResources: readonly ResourceEntry[] = [];
+  const currentMcpResources = (cwd: string, trusted: boolean): readonly ResourceEntry[] =>
+    mergeMcpResourceEntries(mcpResourceEntriesFromConfig(getAgentDir(), cwd, trusted), liveMcpResources);
   let toolViewMode: ToolViewMode | undefined;
   let footer: FooterController | undefined;
   let sidebar: SidebarController | undefined;
@@ -219,7 +222,8 @@ export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
   let switchRequested = false;
   const getMcpServerNames = () => mcpResources.map((server) => server.name);
   const unsubscribeMcpStatus = pi.events.on("pi-mcp-adapter/status/v1", (value) => {
-    mcpResources = mcpResourceEntriesFromStatus(value);
+    liveMcpResources = mcpResourceEntriesFromStatus(value);
+    mcpResources = mergeMcpResourceEntries(mcpResources, liveMcpResources);
     const branch = getCurrentBranch?.();
     if (branch) toolUsage?.resetSession(branch, getMcpServerNames(), { preserveExchange: true });
     sidebar?.refresh();
@@ -452,6 +456,7 @@ export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
     // Pi resets extension UI before starting/reloading a session. Do not call
     // stale controllers from the previous runtime after that reset.
     clearControllers();
+    mcpResources = currentMcpResources(ctx.cwd, ctx.isProjectTrusted());
     toolViewMode = toolView.getMode();
     getCurrentBranch = () => ctx.sessionManager.getBranch();
     const branch = ctx.sessionManager.getBranch();
@@ -529,7 +534,7 @@ export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
               ctx.ui.notify("Wait for the current run to finish before opening resources", "warning");
               return;
             }
-            void loadResourceEntries(pi, ctx.cwd, mcpResources, ctx.isProjectTrusted(), button)
+            void loadResourceEntries(pi, ctx.cwd, button === "mcp" ? currentMcpResources(ctx.cwd, ctx.isProjectTrusted()) : mcpResources, ctx.isProjectTrusted(), button)
               .then((rows) => {
                 if (!rows || rows.length === 0) {
                   ctx.ui.notify("No resources of this kind loaded", "info");

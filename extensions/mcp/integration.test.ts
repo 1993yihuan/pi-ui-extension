@@ -25,7 +25,7 @@ test("entry wires early/late MCP status into restored and live usage without dou
     events: { on(name: string, fn: any) { bus.set(name, fn); return () => bus.delete(name); } },
   };
   const ctx: any = {
-    mode: "tui", cwd: directory, getSystemPrompt: () => "", getContextUsage: () => undefined,
+    mode: "tui", cwd: directory, isProjectTrusted: () => true, getSystemPrompt: () => "", getContextUsage: () => undefined,
     sessionManager: { getBranch: () => branch, buildContextEntries: () => [], getSessionId: () => "test", getSessionDir: () => directory },
     ui: { setStatus() {}, setFooter(factory: any) { footer?.dispose(); footer = factory?.(tui, theme, { onBranchChange: () => () => {}, getGitBranch: () => null }); } },
   };
