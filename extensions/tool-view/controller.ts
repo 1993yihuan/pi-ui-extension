@@ -11,6 +11,7 @@ import { Box, Container, Text } from "@earendil-works/pi-tui";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { readFile, rename, writeFile } from "node:fs/promises";
 import { TOOL_VIEW_MODES, isToolViewMode, type ToolViewMode } from "./types.ts";
+import { renderCodemodeCompactCall, renderCodemodeCompactResult } from "./codemode-compact.ts";
 
 const DEFAULT_MODE_FILE = resolve(getAgentDir(), "tool-view-mode.json");
 const MODE_STATUS_ID = "pi-ui-extension:tool-view";
@@ -75,54 +76,6 @@ function formatCount(count: number, singular: string, plural = `${singular}s`): 
   return `${count} ${count === 1 ? singular : plural}`;
 }
 
-function formatDuration(durationMs: unknown): string | undefined {
-  if (typeof durationMs !== "number" || !Number.isFinite(durationMs) || durationMs < 0) return undefined;
-  return durationMs < 1000 ? `${Math.round(durationMs)}ms` : `${(durationMs / 1000).toFixed(1)}s`;
-}
-
-function codemodeSummary(result: AnyToolResult, context: AnyRenderContext, options: ToolRenderResultOptions): string {
-  const rawCalls = result.details?.calls;
-  const calls: readonly unknown[] = Array.isArray(rawCalls) ? rawCalls : [];
-  let succeeded = 0;
-  let failed = 0;
-  let cancelled = 0;
-  let running = 0;
-  for (const call of calls) {
-    if (call === null || typeof call !== "object") continue;
-    const status = (call as { status?: unknown }).status;
-    if (status === "ok") succeeded++;
-    else if (status === "error") failed++;
-    else if (status === "cancelled") cancelled++;
-    else if (status === "running") running++;
-  }
-  const parts = [options.isPartial ? "运行中" : context.isError ? "执行失败" : "已完成"];
-  if (calls.length > 0) {
-    parts.push(`${calls.length} calls`);
-    if (succeeded > 0) parts.push(`${succeeded} 成功`);
-    if (failed > 0) parts.push(`${failed} 失败`);
-    if (cancelled > 0) parts.push(`${cancelled} 取消`);
-    if (running > 0) parts.push(`${running} 进行中`);
-  }
-  if (!options.isPartial) {
-    // Count output incrementally: Codemode can spill very large text results.
-    // Never copy the original output into the compact renderer.
-    let lines = 0;
-    let images = 0;
-    for (const block of result.content) {
-      if (block.type === "image") images++;
-      else if (block.type === "text" &&
-        !/^Script (completed|failed)\nWall time [\d.]+ seconds\nOutput:\n$/.test(block.text)) {
-        lines += nonEmptyLineCount(block.text);
-      }
-    }
-    if (lines > 0) parts.push(`${lines} 行输出`);
-    if (images > 0) parts.push(`${images} images`);
-  }
-  const duration = formatDuration(context.durationMs);
-  if (duration) parts.push(duration);
-  return parts.join(" · ");
-}
-
 function diffStats(diff: string | undefined): string {
   if (!diff) return "已应用";
   let additions = 0;
@@ -154,15 +107,6 @@ function isLikelySkillPath(filePath: string): boolean {
 }
 
 const COMPACT_SPECS: Record<string, CompactToolSpec> = {
-  codemode: {
-    call: (args) => ({
-      title: "codemode",
-      detail: typeof args?.code === "string"
-        ? `${formatCount(args.code.length > 0 ? args.code.split("\n").length : 0, "line")}`
-        : "…",
-    }),
-    result: codemodeSummary,
-  },
   read: {
     call: (args) => ({ title: "read", detail: compactText(args.path) || "…" }),
     result: (result) => {
@@ -379,6 +323,7 @@ export async function installToolViewController(
   }
 
   function compactCall(toolName: string, args: any, theme: Theme) {
+    if (toolName === "codemode") return renderCodemodeCompactCall(args, theme);
     const summary = COMPACT_SPECS[toolName]!.call(args);
     const title = theme.fg("toolTitle", theme.bold(summary.title));
     const detail = summary.detail ? ` ${theme.fg("accent", summary.detail)}` : "";
@@ -392,6 +337,7 @@ export async function installToolViewController(
     context: AnyRenderContext,
     options: ToolRenderResultOptions,
   ) {
+    if (toolName === "codemode") return renderCodemodeCompactResult(result, theme, context, options);
     const summary = COMPACT_SPECS[toolName]!.result(result, context, options);
     const statusColor = context.isError ? "error" : options.isPartial ? "warning" : "success";
     const icon = context.isError ? "✗ " : options.isPartial ? "… " : "✓ ";
@@ -406,7 +352,7 @@ export async function installToolViewController(
     throw new Error("Tool View requires Pi with registerToolRenderer(). Update Pi to use this extension.");
   }
   pi.registerToolRenderer((toolName, next) => {
-    if (!Object.hasOwn(COMPACT_SPECS, toolName)) return next();
+    if (toolName !== "codemode" && !Object.hasOwn(COMPACT_SPECS, toolName)) return next();
     const nativeDefinition = next();
     // Codemode must stay summarized in Compact, even for expanded/error rows.
     // Its own renderer already provides rich details in Normal mode.

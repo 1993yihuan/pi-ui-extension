@@ -105,8 +105,15 @@ Tool View uses Pi's official `pi.registerToolRenderer()` hook for the built-in t
 For **Codemode** specifically:
 
 - **Normal** retains Pi's native script, nested-call, and output rendering (including its own expand/collapse behavior).
-- **Compact** shows the script line count, live/completed/failed state, nested-call outcome counts, output line/image counts, and elapsed time when available. It omits script source, nested-call arguments, and actual output, even if the row is expanded or execution fails.
+- **Compact** uses a two-line, status-colored summary with Chinese labels: a highlighted Codemode title and script line count, followed by grouped execution status, nested-call counts, output size, and duration. It omits script source, nested-call arguments, and actual output, even if the row is expanded or execution fails. On narrow terminals it keeps each part to one row and prioritizes status and failures over less important metrics.
 - **Hidden** removes the Codemode transcript row, including expanded and failed results, without stopping execution or removing Tool/MCP usage accounting.
+
+Example Compact output:
+
+```text
+▸ codemode  8 行代码
+✓ 已完成  │  1 次调用 · 1 成功  │  59 行输出 · 85ms
+```
 
 Changing the Tool View mode also updates previously rendered tool rows in the current session. Other third-party tools are unaffected.
 

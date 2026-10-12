@@ -3,6 +3,7 @@ import test from "node:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { visibleWidth } from "@earendil-works/pi-tui";
 import type { ToolRendererResolver, ToolRenderers } from "@earendil-works/pi-coding-agent";
 import { installToolViewController } from "./controller.ts";
 
@@ -80,13 +81,13 @@ test("Codemode uses the official native renderer in Normal, summary in Compact, 
     const visible = () => stripAnsi(transcript.render(110).join("\n"));
 
     // Default compact mode summarizes metadata, never executable code or nested arguments.
-    assert.match(visible(), /codemode.*2 lines/);
-    assert.match(visible(), /3 calls/);
+    assert.match(visible(), /▸ codemode.*2 行代码/);
+    assert.match(visible(), /3 次调用/);
     assert.match(visible(), /1 成功/);
     assert.match(visible(), /1 失败/);
     assert.match(visible(), /1 取消/);
     assert.match(visible(), /2 行输出/);
-    assert.match(visible(), /1 images/);
+    assert.match(visible(), /1 张图片/);
     assert.match(visible(), /1.3s/);
     assert.doesNotMatch(visible(), /DO_NOT_DISPLAY|PRIVATE_OUTPUT_TEXT|PRIVATE_NESTED_ARGS/);
     transcript.setExpanded(true);
@@ -106,7 +107,7 @@ test("Codemode uses the official native renderer in Normal, summary in Compact, 
 
     await controller.setMode("compact", ctx);
     transcript.setExpanded(false);
-    assert.match(visible(), /3 calls/);
+    assert.match(visible(), /3 次调用/);
 
     // The in-progress callback is a metadata-only summary as well.
     transcript.updateResult({
@@ -128,7 +129,7 @@ test("Codemode uses the official native renderer in Normal, summary in Compact, 
       durationMs: 400,
     }, false);
     transcript.setExpanded(true);
-    assert.match(visible(), /执行失败/);
+    assert.match(visible(), /✗ 失败/);
     assert.match(visible(), /1 失败/);
     assert.match(visible(), /400ms/);
     assert.doesNotMatch(visible(), /DO_NOT_DISPLAY|PRIVATE_OUTPUT_TEXT|PRIVATE_NESTED_ARGS/);
@@ -157,9 +158,51 @@ test("Codemode Compact handles missing, malformed, or very large metadata withou
       { content: [], details: { calls: [{ status: "unknown" }, null, { status: "ok" }] } },
       { isPartial: false, expanded: false }, theme, context,
     );
-    assert.match(response.render(100).join(""), /3 calls/);
+    assert.match(response.render(100).join(""), /3 次调用/);
     assert.match(response.render(100).join(""), /1 成功/);
     assert.doesNotMatch(response.render(100).join(""), /NaN/);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("Codemode Compact keeps each styled row to one terminal line and prioritizes useful metrics", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "codemode-width-"));
+  let resolver: ToolRendererResolver | undefined;
+  const pi = {
+    registerToolRenderer(cb: ToolRendererResolver) { resolver = cb; },
+    registerCommand() {}, registerShortcut() {}, on() {},
+  } as any;
+  try {
+    await installToolViewController(pi, { modeFile: join(directory, "mode.json") });
+    const renderer = resolver!("codemode", () => ({}))!;
+    const theme = {
+      fg: (_color: string, text: string) => text,
+      bold: (text: string) => text,
+    } as any;
+    const context = { args: { code: "one\ntwo\nthree" }, state: {}, durationMs: 1480, isError: true } as any;
+    const call = renderer.renderCall!({ code: "one\ntwo\nthree" }, theme, context);
+    const result = renderer.renderResult!({
+      content: [{ type: "text", text: "output\nmore output" }],
+      details: { calls: [
+        { status: "ok" }, { status: "ok" }, { status: "error" }, { status: "cancelled" },
+      ] },
+    }, { isPartial: false, expanded: true }, theme, context);
+    for (const width of [1, 6, 12, 20, 28, 40, 60, 95]) {
+      for (const component of [call, result]) {
+        const lines = component.render(width);
+        assert.equal(lines.length, 1, `width ${width} must stay one line`);
+        assert.ok(visibleWidth(lines[0]!) <= width, `width ${width} overflow: ${lines[0]}`);
+      }
+    }
+    assert.match(result.render(28).join(""), /失败/);
+    assert.match(result.render(28).join(""), /4 次调用/);
+    assert.doesNotMatch(result.render(28).join(""), /2 行输出/);
+    assert.match(result.render(95).join(""), /2 行输出/);
+    assert.match(result.render(95).join(""), /1\.5s/);
+    assert.match(call.render(95).join(""), /3 行代码/);
+    assert.deepEqual(call.render(0), []);
+    assert.deepEqual(result.render(0), []);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
