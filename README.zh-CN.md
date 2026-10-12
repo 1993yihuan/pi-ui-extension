@@ -100,7 +100,15 @@ Composition 会将当前可观测上下文拆分为：
 
 可以直接使用鼠标点击模式进行切换。
 
-Tool View 使用 Pi 官方的 `pi.registerToolRenderer()` 接口管理内置工具（`read`、`bash`、`edit`、`write`、`grep`、`find` 和 `ls`）的展示，不再重注册工具定义或接管工具执行逻辑。其他 Tool 保留其自身的渲染方式。
+Tool View 使用 Pi 官方的 `pi.registerToolRenderer()` 接口管理内置工具（`read`、`bash`、`edit`、`write`、`grep`、`find` 和 `ls`）**以及内置 `codemode` 工具**的展示，不再重注册工具定义或接管工具执行逻辑。其他 Tool 保留其自身的渲染方式。
+
+对于 **Codemode**：
+
+- **Normal**：保留 Pi 原生的脚本、子工具调用、输出详情，以及原生展开 / 收起行为。
+- **Compact**：只展示代码行数、运行 / 成功 / 失败状态、子调用结果数量、输出行数 / 图片数，以及可获取的耗时。即使展开或执行失败，也不会在 Compact 模式中展示完整代码、子调用参数或真实输出。
+- **Hidden**：隐藏 Codemode 工具记录（包括展开和失败结果），但不影响实际执行或 Tool / MCP 调用统计。
+
+切换 Tool View 模式也会更新当前会话中已经展示的历史工具记录；其他第三方工具保持原有渲染方式。
 
 ### 6. Tool / MCP 调用统计
 

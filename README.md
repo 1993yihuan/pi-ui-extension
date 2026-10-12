@@ -100,7 +100,15 @@ For tool definitions, the extension prefers the observable provider-request tool
 
 Modes can be changed directly with mouse clicks.
 
-Tool View uses Pi's official `pi.registerToolRenderer()` hook for the built-in tools (`read`, `bash`, `edit`, `write`, `grep`, `find`, and `ls`). It does not replace the built-in tool definitions or execution functions. Other tools keep their own renderers.
+Tool View uses Pi's official `pi.registerToolRenderer()` hook for the built-in tools (`read`, `bash`, `edit`, `write`, `grep`, `find`, and `ls`) **and the built-in `codemode` tool**. It never replaces tool definitions or execution functions. Other tools retain their own renderers.
+
+For **Codemode** specifically:
+
+- **Normal** retains Pi's native script, nested-call, and output rendering (including its own expand/collapse behavior).
+- **Compact** shows the script line count, live/completed/failed state, nested-call outcome counts, output line/image counts, and elapsed time when available. It omits script source, nested-call arguments, and actual output, even if the row is expanded or execution fails.
+- **Hidden** removes the Codemode transcript row, including expanded and failed results, without stopping execution or removing Tool/MCP usage accounting.
+
+Changing the Tool View mode also updates previously rendered tool rows in the current session. Other third-party tools are unaffected.
 
 ### 6. Tool / MCP usage statistics
 
