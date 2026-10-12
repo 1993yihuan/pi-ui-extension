@@ -14,9 +14,14 @@ updates:
     commit-message:
       prefix: "chore(deps)"
     groups:
+      pi-core:
+        patterns:
+          - "@earendil-works/pi-*"
       npm-dependencies:
         patterns:
           - "*"
+        exclude-patterns:
+          - "@earendil-works/pi-*"
 
   - package-ecosystem: "github-actions"
     directory: "/"
