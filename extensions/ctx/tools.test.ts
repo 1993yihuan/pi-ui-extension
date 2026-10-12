@@ -3,7 +3,7 @@ import test from "node:test";
 import { createReadTool } from "@earendil-works/pi-coding-agent";
 import { estimateContext, estimateProviderToolsTokens, installContextEstimates } from "./data.ts";
 
-const tool = { name: "fabric_exec", description: "Execute TypeScript", parameters: createReadTool(process.cwd()).parameters };
+const tool = { name: "sample_runner", description: "Execute TypeScript", parameters: createReadTool(process.cwd()).parameters };
 const expected = Math.ceil(JSON.stringify(tool).length / 4);
 const toolsCategory = (snapshot: ReturnType<typeof estimateContext>) => snapshot.categories.find(c => c.name === "Tools")!;
 
@@ -25,7 +25,7 @@ test("Tools counts schema JSON only and contributes to totals and percentages", 
 
 test("tracker filters active tools, refreshes dynamic schemas, caches reads and resets", () => {
  const handlers = new Map<string, Function>();
- let active = ["fabric_exec", "fabric_exec"];
+ let active = ["sample_runner", "sample_runner"];
  let all = [tool, {...tool,name:"captured_read",description:"not exposed".repeat(100)}];
  let reads = 0;
  let fail = false;
@@ -44,7 +44,7 @@ test("tracker filters active tools, refreshes dynamic schemas, caches reads and 
  assert.ok(toolsCategory(tracker.getSnapshot()).tokens! > expected);
  handlers.get("before_provider_request")!({payload:{tools:[tool]}},ctx);
  assert.equal(toolsCategory(tracker.getSnapshot()).tokens, Math.ceil(JSON.stringify([tool]).length/4));
- all = [{...tool,description:"changed"}]; active = ["fabric_exec"];
+ all = [{...tool,description:"changed"}]; active = ["sample_runner"];
  handlers.get("turn_end")!({},ctx);
  // The last provider payload remains authoritative through active-branch refresh.
  assert.equal(toolsCategory(tracker.getSnapshot()).tokens, Math.ceil(JSON.stringify([tool]).length/4));

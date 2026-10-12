@@ -20,7 +20,7 @@ test("entry wires early/late MCP status into restored and live usage without dou
   };
   const theme: any = { fg: (_: string, text: string) => text, bold: (text: string) => text };
   const pi: any = {
-    registerTool() {}, registerCommand() {}, registerShortcut() {},
+    registerTool() { throw new Error("Tool View must not register tools"); }, registerToolRenderer() {}, registerCommand() {}, registerShortcut() {},
     getCommands: () => [], getActiveTools: () => [], getAllTools: () => [], getThinkingLevel: () => "off",
     getMcpServers: () => registrations,
     on(name: string, fn: any) { handlers.set(name, [...(handlers.get(name) ?? []), fn]); },

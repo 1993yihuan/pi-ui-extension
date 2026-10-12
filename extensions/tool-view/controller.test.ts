@@ -18,7 +18,8 @@ test("applies a mode change from another context wrapper in the active session",
   let toolsExpanded = false;
 
   const pi = {
-    registerTool() {},
+    registerTool() { throw new Error("Tool View must not register tools"); },
+    registerToolRenderer() {},
     registerCommand() {},
     registerShortcut() {},
     getCommands: () => [],

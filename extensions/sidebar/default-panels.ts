@@ -65,7 +65,6 @@ export type DefaultSidebarPanelOptions = {
   readonly getToolViewMode: () => ToolViewMode | undefined;
   readonly getToolUsage: () => ToolUsageSnapshot | undefined;
   readonly onSelectToolViewMode: (mode: ToolViewMode) => void;
-  readonly showToolViewModeSelector?: () => boolean;
   readonly loadSessions: () => Promise<readonly SessionListItem[]>;
   readonly onSelectSession: (session: SessionListItem) => void;
   readonly onRenameSession: (session: SessionListItem) => void;
@@ -142,7 +141,6 @@ export function createDefaultSidebarPanels(
         getMode: options.getToolViewMode,
         getUsage: options.getToolUsage,
         onSelect: options.onSelectToolViewMode,
-        showModeSelector: options.showToolViewModeSelector,
         showBottomBorder: false,
       });
       const scroll = createToolViewScrollView(panel, theme);

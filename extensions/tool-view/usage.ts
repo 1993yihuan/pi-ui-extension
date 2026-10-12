@@ -39,15 +39,6 @@ type ParsedUsage = {
   readonly mcpServers: readonly string[];
 };
 
-type FabricOperation = {
-  readonly ref?: unknown;
-  readonly provider?: unknown;
-  readonly action?: unknown;
-  readonly args?: unknown;
-};
-
-const FABRIC_EXEC_TOOL = "fabric_exec";
-const FABRIC_NESTED_TOOL_CALL_ID_PREFIX = "fabric_";
 const MCP_PROXY_TOOLS = new Set(["mcp", "mcpScript"]);
 const CONTEXT_MODE_TOOL_NAMES = new Set([
   "ctx_execute",
@@ -166,55 +157,6 @@ function parseUsage(toolName: string, result: unknown, knownServers: readonly st
   return { topLevelName, mcpServers: mcpServer ? [mcpServer] : [] };
 }
 
-function fabricOperationUsage(value: unknown, knownServers: readonly string[]): ParsedUsage | undefined {
-  const operation = asRecord(value) as FabricOperation | undefined;
-  const ref = nonEmptyString(operation?.ref);
-  if (!ref) return undefined;
-  const provider = nonEmptyString(operation?.provider) ?? ref.split(".", 1)[0];
-  const action = nonEmptyString(operation?.action);
-
-  if (provider === "mcp" || ref.startsWith("mcp.")) {
-    const suffix = ref.startsWith("mcp.") ? ref.slice(4) : action ?? "";
-    if (suffix.startsWith("$")) {
-      const server = suffix === "$call" ? nonEmptyString(asRecord(operation?.args)?.server) : undefined;
-      return server
-        ? { mcpServers: [server] }
-        : { topLevelName: ref, mcpServers: [] };
-    }
-    const separator = suffix.indexOf(".");
-    const server = separator > 0 ? suffix.slice(0, separator) : undefined;
-    return server ? { mcpServers: [server] } : { topLevelName: ref, mcpServers: [] };
-  }
-
-  if (provider === "pi" || ref.startsWith("pi.")) {
-    return parseUsage(action ?? ref.slice(3), undefined, knownServers);
-  }
-  if (provider === "extensions" || ref.startsWith("extensions.")) {
-    return parseUsage(action ?? ref.slice("extensions.".length), undefined, knownServers);
-  }
-  return parseUsage(ref, undefined, knownServers);
-}
-
-function fabricNestedUsages(result: unknown, knownServers: readonly string[]): ParsedUsage[] {
-  const details = asRecord(asRecord(result)?.details);
-  const trace = asRecord(details?.trace);
-  const operations = Array.isArray(trace?.operations)
-    ? trace.operations
-    : Array.isArray(details?.audits)
-      ? details.audits
-      : [];
-  return operations
-    .map((operation) => fabricOperationUsage(operation, knownServers))
-    .filter((usage): usage is ParsedUsage => usage !== undefined);
-}
-
-function parseUsages(toolName: string, result: unknown, knownServers: readonly string[]): ParsedUsage[] {
-  const topLevel = parseUsage(toolName, result, knownServers);
-  return toolName === FABRIC_EXEC_TOOL
-    ? [topLevel, ...fabricNestedUsages(result, knownServers)]
-    : [topLevel];
-}
-
 function snapshotCounts(exchangeCounts: MutableCounts, sessionCounts: MutableCounts): ToolUsageSnapshot {
   const kindOrder: Record<ToolUsageKind, number> = { tool: 0, mcp: 1 };
   return Object.freeze({
@@ -246,9 +188,7 @@ export function createToolUsageTracker(
   };
 
   const recordExecution = (counts: MutableCounts, execution: RecordedExecution, knownServers: readonly string[]): void => {
-    for (const usage of parseUsages(execution.toolName, execution.result, knownServers)) {
-      recordParsed(counts, usage);
-    }
+    recordParsed(counts, parseUsage(execution.toolName, execution.result, knownServers));
   };
 
   return {
@@ -273,11 +213,6 @@ export function createToolUsageTracker(
       }
     },
     record(event): void {
-      // Fabric persists every nested operation in the outer result trace. Ignore
-      // replayed nested lifecycle events here, then count the trace once when
-      // fabric_exec ends so Pi tools, captured extensions and MCP calls cannot
-      // disappear or be double-counted depending on provider implementation.
-      if (event.toolCallId.startsWith(FABRIC_NESTED_TOOL_CALL_ID_PREFIX)) return;
       const execution = { toolName: event.toolName, result: event.result };
       exchangeExecutions.push(execution);
       const knownServers = [...getMcpServerNames()];
@@ -303,10 +238,9 @@ function usageCountsFromBranch(entries: readonly unknown[], mcpServerNames: Iter
     if (message?.role !== "toolResult") continue;
     const toolName = nonEmptyString(message.toolName);
     if (!toolName) continue;
-    for (const usage of parseUsages(toolName, { details: message.details }, knownServers)) {
-      if (usage.topLevelName) counts.push({ name: usage.topLevelName, kind: "tool" });
-      counts.push(...usage.mcpServers.map((name) => ({ name, kind: "mcp" as const })));
-    }
+    const usage = parseUsage(toolName, { details: message.details }, knownServers);
+    if (usage.topLevelName) counts.push({ name: usage.topLevelName, kind: "tool" });
+    counts.push(...usage.mcpServers.map((name) => ({ name, kind: "mcp" as const })));
   }
   return counts;
 }

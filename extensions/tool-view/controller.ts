@@ -1,18 +1,10 @@
 import {
-  createBashToolDefinition,
-  createEditToolDefinition,
-  createFindToolDefinition,
-  createGrepToolDefinition,
-  createLsToolDefinition,
-  createReadToolDefinition,
-  createWriteToolDefinition,
   getAgentDir,
-  SettingsManager,
   type AgentToolResult,
   type ExtensionAPI,
   type ExtensionContext,
   type Theme,
-  type ToolDefinition,
+  type ToolRenderers,
   type ToolRenderResultOptions,
 } from "@earendil-works/pi-coding-agent";
 import { Box, Container, Text } from "@earendil-works/pi-tui";
@@ -26,14 +18,13 @@ const MODE_COMMAND = "tool-view";
 const MODE_SHORTCUT = "ctrl+shift+o";
 const MODE_ORDER = TOOL_VIEW_MODES;
 
-type AnyToolDefinition = ToolDefinition<any, any, any>;
 type AnyToolResult = AgentToolResult<any>;
-type AnyRenderContext = Parameters<NonNullable<AnyToolDefinition["renderCall"]>>[2];
+type AnyRenderContext = Parameters<NonNullable<ToolRenderers["renderCall"]>>[2];
 
 type RendererState = {
   nativeState?: any;
-  nativeCallComponent?: ReturnType<NonNullable<AnyToolDefinition["renderCall"]>>;
-  nativeResultComponent?: ReturnType<NonNullable<AnyToolDefinition["renderResult"]>>;
+  nativeCallComponent?: ReturnType<NonNullable<ToolRenderers["renderCall"]>>;
+  nativeResultComponent?: ReturnType<NonNullable<ToolRenderers["renderResult"]>>;
   nativeBox?: Box;
 };
 
@@ -283,7 +274,8 @@ export async function installToolViewController(
   }
 
   function callNativeRenderer(
-    definition: AnyToolDefinition,
+    definition: ToolRenderers,
+    toolName: string,
     args: any,
     theme: Theme,
     context: AnyRenderContext,
@@ -300,12 +292,12 @@ export async function installToolViewController(
       return component;
     } catch {
       state.nativeCallComponent = undefined;
-      return new Text(theme.fg("toolTitle", theme.bold(definition.name)), 0, 0);
+      return new Text(theme.fg("toolTitle", theme.bold(toolName)), 0, 0);
     }
   }
 
   function resultNativeRenderer(
-    definition: AnyToolDefinition,
+    definition: ToolRenderers,
     result: AnyToolResult,
     options: ToolRenderResultOptions,
     theme: Theme,
@@ -346,44 +338,30 @@ export async function installToolViewController(
     return new Text(theme.fg("success", "✓ ") + theme.fg("muted", summary), 0, 0);
   }
 
-  function registerManagedTool(definitionFactory: (cwd: string, projectTrusted: boolean) => AnyToolDefinition): void {
-    // Registration and rendering must never opt into project settings.
-    const initialDefinition = definitionFactory(process.cwd(), false);
-    const definitionsByCwd = new Map<string, AnyToolDefinition>([[process.cwd(), initialDefinition]]);
-    const definitionFor = (cwd: string): AnyToolDefinition => {
-      const cached = definitionsByCwd.get(cwd);
-      if (cached) return cached;
-      const created = definitionFactory(cwd, false);
-      definitionsByCwd.set(cwd, created);
-      return created;
-    };
+  // Resolve renderers only. Pi retains its registered tools, execution pipeline,
+  // arguments, permissions, project trust behavior, and native tool definitions.
+  // A fixed self shell lets mode changes re-render historical rows and lets the
+  // hidden mode remove all visual content without replacing tool execution.
+  if (typeof pi.registerToolRenderer !== "function") {
+    throw new Error("Tool View requires Pi with registerToolRenderer(). Update Pi to use this extension.");
+  }
+  pi.registerToolRenderer((toolName, next) => {
+    if (!Object.hasOwn(COMPACT_SPECS, toolName)) return next();
+    const nativeDefinition = next();
+    const preserveCall = (args: any, context: AnyRenderContext): boolean =>
+      toolName === "read" && shouldPreserveReadRenderer(args, context);
+    const useNativeCall = (args: any, context: AnyRenderContext): boolean =>
+      preserveCall(args, context) || mode === "normal" ||
+      (mode === "compact" && (context.isError || context.expanded));
+    const useNativeResult = (context: AnyRenderContext, options: ToolRenderResultOptions): boolean =>
+      preserveCall(context.args, context) || mode === "normal" ||
+      (mode === "compact" && (context.isError || options.expanded));
 
-    const toolName = initialDefinition.name;
-    pi.registerTool({
-      name: initialDefinition.name,
-      label: initialDefinition.label,
-      description: initialDefinition.description,
-      promptSnippet: initialDefinition.promptSnippet,
-      promptGuidelines: initialDefinition.promptGuidelines,
-      parameters: initialDefinition.parameters,
-      constrainedSampling: initialDefinition.constrainedSampling,
-      prepareArguments: initialDefinition.prepareArguments,
-      executionMode: initialDefinition.executionMode,
-      // Use a self-rendered shell so hidden mode can remove the entire row. In
-      // normal mode, wrap native renderers to reproduce Pi's default shell.
+    return {
       renderShell: "self",
-
-      async execute(toolCallId, params, signal, onUpdate, ctx) {
-        // Resolve current settings and trust on every execution, independently of the render cache.
-        return definitionFactory(ctx.cwd, ctx.isProjectTrusted()).execute(toolCallId, params, signal, onUpdate, ctx);
-      },
-
       renderCall(args, theme, context) {
-        const nativeDefinition = definitionFor(context.cwd);
-        const preserveNative = toolName === "read" && shouldPreserveReadRenderer(args, context);
-        const useNative = preserveNative || mode === "normal" || (mode === "compact" && (context.isError || context.expanded || !COMPACT_SPECS[toolName]));
-        if (useNative) {
-          const component = callNativeRenderer(nativeDefinition, args, theme, context);
+        if (useNativeCall(args, context) && nativeDefinition) {
+          const component = callNativeRenderer(nativeDefinition, toolName, args, theme, context);
           if (nativeDefinition.renderShell === "self") return component;
           const state = context.state as RendererState;
           const box = state.nativeBox ?? new Box(1, 1);
@@ -401,10 +379,7 @@ export async function installToolViewController(
       },
 
       renderResult(result, options, theme, context) {
-        const nativeDefinition = definitionFor(context.cwd);
-        const preserveNative = toolName === "read" && shouldPreserveReadRenderer(context.args, context);
-        const useNative = preserveNative || mode === "normal" || (mode === "compact" && (context.isError || options.expanded || !COMPACT_SPECS[toolName]));
-        if (useNative) {
+        if (useNativeResult(context, options) && nativeDefinition) {
           const component = resultNativeRenderer(nativeDefinition, result, options, theme, context);
           if (nativeDefinition.renderShell === "self") return component;
           const state = context.state as RendererState;
@@ -418,37 +393,20 @@ export async function installToolViewController(
           // If this row previously used a native streaming renderer (notably
           // bash), let its final render run once so timers/resources settle,
           // then discard the visual component.
-          if (!options.isPartial && state.nativeResultComponent) {
+          if (!options.isPartial && state.nativeResultComponent && nativeDefinition) {
             resultNativeRenderer(nativeDefinition, result, options, theme, context);
           }
           return new Container();
         }
         if (options.isPartial) return new Text(theme.fg("warning", "运行中…"), 0, 0);
         const state = context.state as RendererState;
-        if (state.nativeResultComponent) {
+        if (state.nativeResultComponent && nativeDefinition) {
           resultNativeRenderer(nativeDefinition, result, options, theme, context);
         }
         return compactResult(toolName, result, theme, context);
       },
-    });
-  }
-
-  registerManagedTool((cwd, projectTrusted) => {
-    const settings = SettingsManager.create(cwd, getAgentDir(), { projectTrusted });
-    return createReadToolDefinition(cwd, { autoResizeImages: settings.getImageAutoResize() });
+    };
   });
-  registerManagedTool((cwd, projectTrusted) => {
-    const settings = SettingsManager.create(cwd, getAgentDir(), { projectTrusted });
-    return createBashToolDefinition(cwd, {
-      commandPrefix: settings.getShellCommandPrefix(),
-      shellPath: settings.getShellPath(),
-    });
-  });
-  registerManagedTool((cwd) => createEditToolDefinition(cwd));
-  registerManagedTool((cwd) => createWriteToolDefinition(cwd));
-  registerManagedTool((cwd) => createGrepToolDefinition(cwd));
-  registerManagedTool((cwd) => createFindToolDefinition(cwd));
-  registerManagedTool((cwd) => createLsToolDefinition(cwd));
 
   pi.registerCommand(MODE_COMMAND, {
     description: "切换工具显示模式：normal、compact、hidden、status",

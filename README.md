@@ -100,7 +100,7 @@ For tool definitions, the extension prefers the observable provider-request tool
 
 Modes can be changed directly with mouse clicks.
 
-When Fabric takes ownership of tool rendering, the panel remains visible for usage statistics but the local mode selector is hidden and replaced with `View controlled by Fabric`. This avoids conflicting display control.
+Tool View uses Pi's official `pi.registerToolRenderer()` hook for the built-in tools (`read`, `bash`, `edit`, `write`, `grep`, `find`, and `ls`). It does not replace the built-in tool definitions or execution functions. Other tools keep their own renderers.
 
 ### 6. Tool / MCP usage statistics
 
@@ -300,7 +300,7 @@ npm run typecheck
 npm test
 ```
 
-The test suite covers the main behavior of Sidebar, CTX, Session management, Tool View, MCP resources, Fabric detection, mouse scrolling, and resize handling.
+The test suite covers Sidebar, CTX, Session management, official Tool View renderers, MCP resources, mouse scrolling, and resize handling.
 
 During development, Pi can load the local source directory directly:
 
@@ -325,7 +325,6 @@ pi-ui-extension/
 │   ├── session/             # Session list and actions
 │   ├── sidebar/             # Sidebar layout, scrolling, resize
 │   ├── tool-view/           # Tool View modes and usage statistics
-│   ├── fabric-detection.ts  # Fabric ownership detection
 │   └── index.ts             # Pi Extension entry point
 ├── .github/workflows/
 │   ├── ci.yml               # Automatic checks on push / PR
@@ -386,14 +385,14 @@ npm publishing uses GitHub Actions OIDC Trusted Publishing, so no long-lived `NP
 
 - Does not modify Pi Core.
 - `@earendil-works/pi-coding-agent` and `@earendil-works/pi-tui` are host-provided peer dependencies to avoid duplicate runtime instances.
-- Fabric ownership is detected explicitly to avoid conflicting Tool View controls.
+- Tool View changes only how built-in tool calls are rendered, using Pi's public renderer resolver rather than overriding their implementations.
 - Session and resource operations use Pi public APIs wherever possible.
 - Context composition is clearly presented as an estimate, not provider-exact token accounting.
 - Fullscreen sidebar behavior degrades safely when fullscreen layout is unavailable.
 
 ## Requirements
 
-- Pi Coding Agent
+- Pi Coding Agent with the official `registerToolRenderer()` API (tested with `@earendil-works/pi-coding-agent@1.1.0`)
 - Node.js `>= 22.19.0` (use a Node version supported by your Pi installation)
 - CI validates Node.js 22.19.0 and 24; releases use Node.js 24
 

@@ -100,7 +100,7 @@ Composition 会将当前可观测上下文拆分为：
 
 可以直接使用鼠标点击模式进行切换。
 
-当 Fabric 接管工具展示行为时，扩展会保留 Tool View 面板和调用统计，但不再显示本地模式选择器，并提示 `View controlled by Fabric`，避免与 Fabric 的展示逻辑互相抢占。
+Tool View 使用 Pi 官方的 `pi.registerToolRenderer()` 接口管理内置工具（`read`、`bash`、`edit`、`write`、`grep`、`find` 和 `ls`）的展示，不再重注册工具定义或接管工具执行逻辑。其他 Tool 保留其自身的渲染方式。
 
 ### 6. Tool / MCP 调用统计
 
@@ -300,7 +300,7 @@ npm run typecheck
 npm test
 ```
 
-当前自动化测试覆盖 Sidebar、CTX、Session、Tool View、MCP resource、Fabric detection、鼠标滚轮 / resize 等主要行为。
+当前自动化测试覆盖 Sidebar、CTX、Session、官方 Tool Renderer、MCP resource、鼠标滚轮 / resize 等主要行为。
 
 开发时可以直接让 Pi 加载本地目录：
 
@@ -325,7 +325,6 @@ pi-ui-extension/
 │   ├── session/             # Session 列表与操作
 │   ├── sidebar/             # Sidebar 布局、滚动和 resize
 │   ├── tool-view/           # Tool View 模式与调用统计
-│   ├── fabric-detection.ts  # Fabric 工具接管检测
 │   └── index.ts             # Pi Extension 入口
 ├── .github/workflows/
 │   ├── ci.yml               # push / PR 自动检查
@@ -386,14 +385,14 @@ npm 发布使用 GitHub Actions OIDC Trusted Publishing，不需要在 GitHub Re
 
 - 不修改 Pi Core。
 - Pi host 提供的 `@earendil-works/pi-coding-agent` 和 `@earendil-works/pi-tui` 使用 `peerDependencies`，避免产生重复运行时实例。
-- 对 Fabric 做显式检测，避免 Tool View 模式控制发生冲突。
+- Tool View 只通过 Pi 官方 Renderer Resolver 控制内置工具的显示，不覆写工具定义或执行逻辑。
 - Session 与资源操作尽量通过 Pi 已公开 API 完成。
 - Context composition 明确标记为估算值，不冒充 provider 精确 token 统计。
 - fullscreen Sidebar 不可用时安全降级，不影响 Pi 主流程。
 
 ## Requirements
 
-- Pi Coding Agent
+- 支持官方 `registerToolRenderer()` API 的 Pi Coding Agent（已使用 `@earendil-works/pi-coding-agent@1.1.0` 验证）
 - Node.js `>= 22.19.0`（建议使用当前 Pi 支持的 Node 版本）
 - CI 覆盖 Node.js 22.19.0 和 24；发布工作流使用 Node.js 24
 

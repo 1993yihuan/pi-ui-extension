@@ -17,7 +17,6 @@ export type ToolViewPanelOptions = {
   readonly getMode: () => ToolViewMode | undefined;
   readonly getUsage: () => ToolUsageSnapshot | undefined;
   readonly onSelect: (mode: ToolViewMode) => void;
-  readonly showModeSelector?: () => boolean;
   readonly showBottomBorder?: boolean;
 };
 
@@ -94,7 +93,6 @@ export class ToolViewPanel implements Component {
   }
 
   private modeAt(x: number, y: number): ToolViewMode | undefined {
-    if (this.options.showModeSelector?.() === false) return undefined;
     const box = this.getLayoutBox();
     if (!box || !contains(box.clip, x, y) || !contains(box.rect, x, y)) return undefined;
     if (y - box.rect.y !== 1) return undefined;
@@ -163,7 +161,6 @@ export class ToolViewPanel implements Component {
   render(width: number): string[] {
     const renderWidth = Math.max(1, Math.min(width, this.options.getDesiredWidth()));
     const contentWidth = Math.max(1, renderWidth - 4);
-    const showModeSelector = this.options.showModeSelector?.() !== false;
     const currentMode = this.options.getMode();
     const connected = currentMode !== undefined;
     const baseWidth = Math.floor(contentWidth / TOOL_VIEW_MODES.length);
@@ -180,9 +177,6 @@ export class ToolViewPanel implements Component {
           ? this.theme.fg("success", text)
           : this.theme.fg("dim", text);
     }).join("");
-    const selectorBody = showModeSelector
-      ? body
-      : this.theme.fg("dim", centerText("View controlled by Fabric", contentWidth));
     const usage = this.options.getUsage();
     const grouped = groupUsageCounts(usage?.counts ?? []);
     const usageRows: string[] = [];
@@ -203,7 +197,7 @@ export class ToolViewPanel implements Component {
 
     const lines = [
       panelTop(this.theme, "TOOL VIEW", renderWidth),
-      panelContent(this.theme, selectorBody, "dim", contentWidth),
+      panelContent(this.theme, body, "dim", contentWidth),
       ...usageRows,
     ];
     if (this.options.showBottomBorder !== false) lines.push(panelBottom(this.theme, renderWidth));

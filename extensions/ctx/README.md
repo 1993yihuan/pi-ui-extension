@@ -6,11 +6,11 @@
 
 - approx = 本地可观测文本 UTF-16 长度 / 4，逐消息向上取整；不是模型 tokenizer。已知消息先经公开 SDK `convertToLlm` 转换，再提取文本，因此包含摘要包装、bash 无输出/退出/取消/截断提示；仍按原始角色分类。未知角色安全降级为外层 content 文本，`excludeFromContext` 的 bash 不计入。
 - 六类为 System、Tools、Messages、Tool Results、Summary、Other。百分比分母是已覆盖分类的估算 token 合计，不是模型窗口；pi usage 单独展示，不校准分类。
-- System 使用 ctx.getSystemPrompt() 的可观测字符串；无法取得时 unknown。Tools 通过 pi.getActiveTools()/getAllTools() 仅选取当前启用的工具，逐工具序列化 `{name, description, parameters}`，按 UTF-16 长度 / 4 向上取整后合计，并纳入分类百分比分母。不计 sourceInfo、执行函数及已归入 System 的 promptGuidelines；Fabric 捕获但未直接启用的工具不重复计入。无启用工具为 0；API 不可用、启用工具缺少定义或 schema 无法序列化时保持 unknown，避免显示不完整合计。工具定义在每次现有快照事件刷新时重新读取（包括动态启用/禁用），不在 render 中读取；空闲时注册工具将在下一次快照事件反映。
+- System 使用 ctx.getSystemPrompt() 的可观测字符串；无法取得时 unknown。Tools 通过 pi.getActiveTools()/getAllTools() 仅选取当前启用的工具，逐工具序列化 `{name, description, parameters}`，按 UTF-16 长度 / 4 向上取整后合计，并纳入分类百分比分母。不计 sourceInfo、执行函数及已归入 System 的 promptGuidelines；未直接启用的工具不重复计入。无启用工具为 0；API 不可用、启用工具缺少定义或 schema 无法序列化时保持 unknown，避免显示不完整合计。工具定义在每次现有快照事件刷新时重新读取（包括动态启用/禁用），不在 render 中读取；空闲时注册工具将在下一次快照事件反映。
 - Tools 在 `before_provider_request` 事件后优先统计 provider-specific payload 的 `tools` 字段序列化文本（仍按 UTF-16 长度 / 4 估算）；请求发出前未观察到 payload 时，回退到当前启用工具 schema 的本地估算。它仍不是模型 tokenizer、HTTP 字节数或计费 token，也不包含 headers；如果后续扩展继续改写 payload，面板值可能是本扩展处理时观察到的版本。Images 仅统计图片块数量，不序列化请求或计算未展示的字节数；在 `before_provider_request` 可取得最终 provider payload 时优先统计该 payload，否则统计当前 context 消息；未能观测时显示 `not observed`。
 - context 事件提供调用前的消息快照；session_start/tree/compact、turn_end、agent_settled 使用 buildContextEntries() 重建 compaction-applied active branch。后者显示 active branch，前者显示 context hook。事件之外只读取缓存，不在 render 中扫描历史。
 - Messages 包括 user/assistant 文本、thinking 和 tool call 名称/参数；Tool Results 仅计 content；Summary 包括 compaction/branch summary；Other 包括可发送 custom message 和非排除的用户 bash。
-- Tool Results 按当前快照工具结果文本估算。Fabric 外层 content 只计一次，不遍历内部操作；不读 details、全量 JSONL、沙箱、截断前原始输出或被压缩结果。已返回 content 内的截断提示本身仍属于可发送文本。
+- Tool Results 按当前快照工具结果文本估算。每条 Tool Result 的 content 只计一次，不遍历内部操作；不读 details、全量 JSONL、沙箱、截断前原始输出或被压缩结果。已返回 content 内的截断提示本身仍属于可发送文本。
 
 Composition 的 token 估算使用 `~` 前缀及 K/M 紧凑缩写（四舍五入），百分比保留一位小数。宽度不足时标签与数值拆行；支持的最小侧栏宽 18 可完整显示如 `~100K 100.0%`。
 
@@ -32,4 +32,4 @@ Composition 的 token 估算使用 `~` 前缀及 K/M 紧凑缩写（四舍五入
 
 这是明确标记的本地估算，不宣称最终请求精确统计。后加载扩展仍可能改写 context 或 provider payload；不同 provider 的转换、剔除、包装开销未知。恢复/回合结束时 active branch 可能不同于上次请求经过 context 扩展裁剪后的快照；下一次 context 事件会替换它。模型生成过程中不逐 token 更新分类，最终回合/settled 时更新。只含图片的消息可见文本为零，不代表图片成本为零。
 
-未修改 pi core、Fabric 或全局配置。全屏鼠标/极短终端还应在用户真实终端手工确认。
+未修改 Pi Core 或全局配置。全屏鼠标/极短终端还应在用户真实终端手工确认。

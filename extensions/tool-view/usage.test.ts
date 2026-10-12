@@ -32,43 +32,6 @@ test("tracks top-level tools for the current question and session", () => {
   ]);
 });
 
-test("counts nested Fabric trace operations as their actual tools", () => {
-  const tracker = createToolUsageTracker();
-  tracker.startExchange();
-  tracker.record({ ...ended("fabric_exec", {
-    success: true,
-    trace: {
-      kind: "pi-fabric.execution",
-      version: 1,
-      outcome: "succeeded",
-      phases: [],
-      operations: [
-        { type: "call", sequence: 1, ref: "pi.read", provider: "pi", action: "read", args: {}, outcome: "succeeded" },
-        { type: "call", sequence: 2, ref: "pi.bash", provider: "pi", action: "bash", args: {}, outcome: "succeeded" },
-        { type: "call", sequence: 3, ref: "mcp.context7.query-docs", provider: "mcp", action: "query-docs", args: {}, outcome: "succeeded" },
-        { type: "call", sequence: 4, ref: "extensions.ask_user_question", provider: "extensions", action: "ask_user_question", args: {}, outcome: "succeeded" },
-      ],
-      counts: { droppedValues: 0, truncatedValues: 0, redactedValues: 0, droppedOperations: 0 },
-    },
-  }), toolCallId: "call_outer_fabric" });
-
-  assert.deepEqual(tracker.getSnapshot().counts, [
-    { name: "ask_user_question", kind: "tool", exchange: 1, session: 1 },
-    { name: "bash", kind: "tool", exchange: 1, session: 1 },
-    { name: "fabric_exec", kind: "tool", exchange: 1, session: 1 },
-    { name: "read", kind: "tool", exchange: 1, session: 1 },
-    { name: "context7", kind: "mcp", exchange: 1, session: 1 },
-  ]);
-});
-
-test("does not double-count nested lifecycle events replayed by Fabric", () => {
-  const tracker = createToolUsageTracker();
-  tracker.startExchange();
-  tracker.record(ended("read", {},));
-  tracker.record({ ...ended("read"), toolCallId: "fabric_nested", result: { content: [], details: {} } });
-  assert.equal(tracker.getSnapshot().counts.find((count) => count.name === "read")?.exchange, 1);
-});
-
 test("adds the MCP server for proxy calls without hiding the gateway count", () => {
   const tracker = createToolUsageTracker();
   tracker.startExchange();

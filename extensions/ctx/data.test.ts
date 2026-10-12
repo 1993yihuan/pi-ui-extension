@@ -3,8 +3,8 @@ import test from "node:test";
 import { createReadTool, SessionManager } from "@earendil-works/pi-coding-agent";
 import { estimateContext, installContextEstimates, messagesFromContextEntries } from "./data.ts";
 
-const result = (n: number) => ({ role: "toolResult", toolName: "fabric_exec", toolCallId: String(n), content: [{ type: "text", text: "x".repeat(n * 4) }], details: { fullOutput: "x".repeat(100000), operations: [{ toolName: "read" }] } });
-const tool = { name: "fabric_exec", description: "Execute TypeScript", parameters: createReadTool(process.cwd()).parameters };
+const result = (n: number) => ({ role: "toolResult", toolName: "sample_runner", toolCallId: String(n), content: [{ type: "text", text: "x".repeat(n * 4) }], details: { fullOutput: "x".repeat(100000), operations: [{ toolName: "read" }] } });
+const tool = { name: "sample_runner", description: "Execute TypeScript", parameters: createReadTool(process.cwd()).parameters };
 
 test("context estimate keeps tool schemas, summaries, images and active branch semantics", () => {
   const snapshot = estimateContext([{role:"user",content:"abcd"}, result(4), {role:"compactionSummary",summary:"abcd"}], "abcd", "context hook", [tool]);
@@ -16,7 +16,7 @@ test("context estimate keeps tool schemas, summaries, images and active branch s
 
 test("tracker filters active tools, refreshes schemas, caches snapshots and resets", () => {
   const handlers = new Map<string, Function>();
-  let active = ["fabric_exec"];
+  let active = ["sample_runner"];
   let all = [tool];
   const tracker = installContextEstimates({
     on: (name: string, fn: Function) => handlers.set(name, fn),

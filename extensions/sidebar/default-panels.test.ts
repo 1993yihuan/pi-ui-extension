@@ -4,7 +4,7 @@ import { createDefaultSidebarPanels, createToolViewScrollView, SESSION_PANEL_ID,
 import { renderLayoutFrame } from "@earendil-works/pi-tui/dist/layout.js";
 import { ToolViewPanel } from "../tool-view/panel.ts";
 
-function options(showToolViewModeSelector?: boolean): Parameters<typeof createDefaultSidebarPanels>[0] {
+function options(): Parameters<typeof createDefaultSidebarPanels>[0] {
   return {
     getContextUsage: () => undefined,
     getModel: () => "test-model",
@@ -12,7 +12,6 @@ function options(showToolViewModeSelector?: boolean): Parameters<typeof createDe
     getToolViewMode: () => "compact",
     getToolUsage: () => undefined,
     onSelectToolViewMode() {},
-    showToolViewModeSelector: () => showToolViewModeSelector ?? true,
     loadSessions: async () => [],
     onSelectSession() {},
     onRenameSession() {},
@@ -23,12 +22,12 @@ function options(showToolViewModeSelector?: boolean): Parameters<typeof createDe
 }
 
 test("registers sessions without removed standalone panels", () => {
-  const ids = createDefaultSidebarPanels(options(true)).map((panel) => panel.id);
+  const ids = createDefaultSidebarPanels(options()).map((panel) => panel.id);
   assert.deepEqual(ids, [SESSION_PANEL_ID, "context", TOOL_VIEW_PANEL_ID]);
   assert.ok(!ids.includes("activity"));
   assert.ok(ids.includes("context"));
-  const context = createDefaultSidebarPanels(options(true)).find(panel => panel.id === "context")!;
-  const sessions = createDefaultSidebarPanels(options(true)).find(panel => panel.id === SESSION_PANEL_ID)!;
+  const context = createDefaultSidebarPanels(options()).find(panel => panel.id === "context")!;
+  const sessions = createDefaultSidebarPanels(options()).find(panel => panel.id === SESSION_PANEL_ID)!;
   assert.equal(sessions.layout?.maxSize, 9);
   assert.equal(context.layout?.minSize, 10);
   assert.ok(!ids.includes("resources"));
@@ -36,15 +35,11 @@ test("registers sessions without removed standalone panels", () => {
 });
 
 
-test("always registers Tool View without Fabric", () => {
-  const ids = createDefaultSidebarPanels(options(true)).map((panel) => panel.id);
+test("always registers Tool View", () => {
+  const ids = createDefaultSidebarPanels(options()).map((panel) => panel.id);
   assert.ok(ids.includes(TOOL_VIEW_PANEL_ID));
 });
 
-test("keeps Tool View registered when Fabric hides only its selector", () => {
-  const ids = createDefaultSidebarPanels(options(false)).map((panel) => panel.id);
-  assert.ok(ids.includes(TOOL_VIEW_PANEL_ID));
-});
 
 test("keeps Tool View anchored at the top when usage rows overflow", () => {
   const tui = { addInputListener: () => () => {}, requestRender() {} } as any;

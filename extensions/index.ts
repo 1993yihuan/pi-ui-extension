@@ -12,7 +12,6 @@ import {
 import { installContextEstimates } from "./ctx/data.ts";
 import { createActivityTracker, type ActivityTracker } from "./ctx/activity.ts";
 import { installFooter, type FooterController } from "./footer/index.ts";
-import { isFabricFullCodeMode } from "./fabric-detection.ts";
 import { adapterMcpServers, buildMcpStatusSnapshot, describeMcpStatus, type McpStatusSnapshot } from "./mcp/status-center.ts";
 import {
   createDefaultSidebarPanels,
@@ -524,7 +523,6 @@ export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
     toolUsage = createToolUsageTracker([], getMcpServerNames);
     toolUsage.resetSession(branch);
     if (ctx.mode !== "tui") return;
-    const showToolViewModeSelector = (): boolean => !isFabricFullCodeMode(pi.getActiveTools());
 
     activity = createActivityTracker(ctx.cwd, refreshContextUi);
     footer = installFooter(
@@ -543,7 +541,6 @@ export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
           onSelectToolViewMode: (mode): void => {
             void toolView.setMode(mode, ctx);
           },
-          showToolViewModeSelector,
           loadSessions: async (): Promise<readonly SessionListItem[]> => {
             const currentSessionId = ctx.sessionManager.getSessionId();
             const sessions = await SessionManager.list(ctx.cwd, ctx.sessionManager.getSessionDir());
