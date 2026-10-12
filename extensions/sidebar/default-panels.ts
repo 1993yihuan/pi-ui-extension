@@ -69,6 +69,7 @@ export type DefaultSidebarPanelOptions = {
   readonly onSelectSession: (session: SessionListItem) => void;
   readonly onRenameSession: (session: SessionListItem) => void;
   readonly onDeleteSession: (session: SessionListItem) => void;
+  readonly onTogglePinSession?: (session: SessionListItem) => void;
   readonly onDeleteOthers: () => void;
   readonly onOpenSessionManager?: () => void;
   readonly onOpenResources: (button: ResourceButtonId) => void;
@@ -95,6 +96,7 @@ export function createDefaultSidebarPanels(
         onSelect: options.onSelectSession,
         onRename: options.onRenameSession,
         onDelete: options.onDeleteSession,
+        onTogglePin: options.onTogglePinSession,
         onDeleteOthers: options.onDeleteOthers,
         onOpenManager: options.onOpenSessionManager,
         onOpenResources: options.onOpenResources,

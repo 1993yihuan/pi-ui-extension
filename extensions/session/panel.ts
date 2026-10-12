@@ -12,6 +12,8 @@ import { installPriorityInputListener, parseSgrMouseEvent } from "../sidebar/res
 
 const MAX_VISIBLE_SESSIONS = 5;
 const SESSION_ACTION_WIDTH = 4;
+const SESSION_PIN_ACTION_WIDTH = 2;
+const MIN_SUMMARY_WIDTH_WITH_PIN = 12;
 const SESSION_TITLE_CELLS = " SESSIONS ↻ ".length;
 const CLEAR_OTHERS_CELL = " ⊗ ";
 const MANAGE_SESSIONS_CELL = " ≡ ";
@@ -34,6 +36,7 @@ export type SessionPanelOptions = {
   readonly onSelect: (session: SessionListItem) => void;
   readonly onRename: (session: SessionListItem) => void;
   readonly onDelete: (session: SessionListItem) => void;
+  readonly onTogglePin?: (session: SessionListItem) => void;
   readonly onDeleteOthers: () => void;
   readonly onOpenManager?: () => void;
   readonly onOpenResources: (button: ResourceButtonId) => void;
@@ -47,7 +50,7 @@ const RESOURCE_BUTTONS: ReadonlyArray<{ id: ResourceButtonId; label: string }> =
   { id: "mcp", label: "MCP" },
 ];
 
-type SessionRowAction = "select" | "rename" | "delete";
+type SessionRowAction = "select" | "pin" | "rename" | "delete";
 type SessionActionTarget = {
   readonly session: SessionListItem;
   readonly action: SessionRowAction;
@@ -142,20 +145,25 @@ function formatSessionSummary(session: SessionListItem, width: number, now: numb
   return `${marker}${padToWidth(title, titleWidth)} ${metadata}`;
 }
 
-function formatSessionRow(session: SessionListItem, contentWidth: number, now: number): string {
+function showPinButton(contentWidth: number, enabled: boolean): boolean {
+  return enabled && contentWidth >= SESSION_ACTION_WIDTH + SESSION_PIN_ACTION_WIDTH + MIN_SUMMARY_WIDTH_WITH_PIN;
+}
+
+function formatSessionRow(session: SessionListItem, contentWidth: number, now: number, enablePin: boolean): string {
   if (contentWidth <= SESSION_ACTION_WIDTH) {
     return formatSessionSummary(session, contentWidth, now);
   }
-  const summaryWidth = contentWidth - SESSION_ACTION_WIDTH;
+  const pinVisible = showPinButton(contentWidth, enablePin);
+  const summaryWidth = contentWidth - SESSION_ACTION_WIDTH - (pinVisible ? SESSION_PIN_ACTION_WIDTH : 0);
   const summary = padToWidth(formatSessionSummary(session, summaryWidth, now), summaryWidth);
-  return `${summary} ✎ ${session.current ? "·" : "×"}`;
+  return `${summary}${pinVisible ? ` ${session.pinned ? "★" : "☆"}` : ""} ✎ ${session.current ? "·" : "×"}`;
 }
 
 function sameTarget(left: SessionActionTarget | undefined, right: SessionActionTarget | undefined): boolean {
   return Boolean(left && right && left.session.id === right.session.id && left.action === right.action);
 }
 
-/** Recent-session panel: click the title to refresh, a row to switch, ✎ to rename, × to delete, or ⊗ to trash every other session. */
+/** Recent sessions: click to switch, ☆/★ to pin, ✎ to rename, × to delete, or ⊗ to bulk trash. */
 export class SessionPanel implements Component {
   private pressedResource: ResourceButtonId | undefined;
   private clearPressed = false;
@@ -215,8 +223,13 @@ export class SessionPanel implements Component {
     const contentWidth = Math.max(1, renderWidth - 4);
     const contentColumn = x - box.rect.x - 2;
     if (contentColumn < 0 || contentColumn >= contentWidth) return undefined;
-    if (contentWidth <= SESSION_ACTION_WIDTH || contentColumn < contentWidth - SESSION_ACTION_WIDTH) {
+    const pinVisible = showPinButton(contentWidth, Boolean(this.options.onTogglePin));
+    if (contentWidth <= SESSION_ACTION_WIDTH ||
+        contentColumn < contentWidth - SESSION_ACTION_WIDTH - (pinVisible ? SESSION_PIN_ACTION_WIDTH : 0)) {
       return { session, action: "select" };
+    }
+    if (pinVisible && contentColumn < contentWidth - SESSION_ACTION_WIDTH) {
+      return { session, action: "pin" };
     }
     if (contentColumn < contentWidth - 2) return { session, action: "rename" };
     return session.current ? undefined : { session, action: "delete" };
@@ -263,6 +276,9 @@ export class SessionPanel implements Component {
     switch (target.action) {
       case "select":
         if (!target.session.current) this.options.onSelect(target.session);
+        return;
+      case "pin":
+        this.options.onTogglePin?.(target.session);
         return;
       case "rename":
         this.options.onRename(target.session);
@@ -452,7 +468,7 @@ export class SessionPanel implements Component {
     const body = this.sessions.length > 0
       ? this.sessions.map((session) => panelContent(
           this.theme,
-          formatSessionRow(session, contentWidth, now),
+          formatSessionRow(session, contentWidth, now, Boolean(this.options.onTogglePin)),
           this.pressedTarget?.session.id === session.id
             ? "warning"
             : session.current

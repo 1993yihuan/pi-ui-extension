@@ -610,6 +610,15 @@ export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
           onSelectSession: (session): void => selectSession(ctx, session),
           onRenameSession: (session): void => renameSession(ctx, session),
           onDeleteSession: (session): void => deleteSession(ctx, session),
+          onTogglePinSession: (session): void => {
+            try {
+              const pinned = toggleSessionPin(SESSION_PINS_FILE, session.id);
+              refreshSessions();
+              ctx.ui.notify(pinned ? "会话已置顶" : "已取消置顶", "info");
+            } catch (error) {
+              ctx.ui.notify(`保存置顶失败：${error instanceof Error ? error.message : String(error)}`, "error");
+            }
+          },
           onOpenSessionManager: (): void => { void launchSessionManager(ctx); },
           onDeleteOthers: (): void => {
             if (!ctx.isIdle()) {

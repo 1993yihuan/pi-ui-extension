@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { TuiInputListener } from "@earendil-works/pi-tui";
+import { stripTerminalSequences, type TuiInputListener } from "@earendil-works/pi-tui";
 import { SessionPanel, type SessionListItem } from "./panel.ts";
 
 const theme = { fg: (_color: string, text: string) => text } as any;
@@ -292,5 +292,141 @@ test("pinned session remains visible ahead of the five-item sidebar limit", asyn
   assert.match(output, /★○ Important/);
   assert.match(output, /Recent 3/);
   assert.doesNotMatch(output, /Recent 4/);
+  panel.dispose();
+});
+
+test("session row ☆/★ toggles pin in place without invoking rename, delete or switch", async () => {
+  let listener: TuiInputListener | undefined;
+  const calls: string[] = [];
+  let pinned = false;
+  const tui = {
+    addInputListener(next: TuiInputListener) { listener = next; return () => {}; },
+    requestRender() {},
+    currentLayout: undefined as any,
+  } as any;
+  const panel = new SessionPanel(theme, {
+    tui, getDesiredWidth: () => 40,
+    loadSessions: async () => [{ ...session("one", "Important session"), pinned }],
+    onSelect() { calls.push("select"); },
+    onRename() { calls.push("rename"); },
+    onDelete() { calls.push("delete"); },
+    onTogglePin(item) {
+      assert.equal(item.id, "one");
+      calls.push("pin");
+      pinned = !pinned;
+      panel.refresh();
+    },
+    onDeleteOthers() {}, onOpenResources() {}, now: () => 0,
+  });
+  tui.currentLayout = {
+    root: {
+      component: panel, rect: { x: 10, y: 5, width: 40, height: 5 },
+      clip: { x: 10, y: 5, width: 40, height: 5 }, children: [],
+    },
+  };
+  const click = (text: string) => {
+    const row = panel.render(40)[1]!;
+    const column = row.lastIndexOf(text);
+    assert.ok(column > 0, `missing button ${text}: ${row}`);
+    const x = 10 + column + 1;
+    assert.deepEqual(listener?.(`\u001b[<0;${x};7M`), { consume: true });
+    assert.deepEqual(listener?.(`\u001b[<0;${x};7m`), { consume: true });
+  };
+  panel.refresh();
+  await flushAsync();
+  assert.match(panel.render(40)[1]!, /☆ ✎ ×/);
+  click("☆");
+  await flushAsync();
+  assert.equal(pinned, true);
+  assert.match(panel.render(40)[1]!, /★ ✎ ×/);
+  assert.match(panel.render(40)[1]!, /★○ Important/);
+  click("★");
+  await flushAsync();
+  assert.equal(pinned, false);
+  assert.match(panel.render(40)[1]!, /☆ ✎ ×/);
+  assert.deepEqual(calls, ["pin", "pin"]);
+
+  click("✎");
+  await flushAsync();
+  click("×");
+  await flushAsync();
+  assert.deepEqual(calls, ["pin", "pin", "rename", "delete"]);
+  panel.dispose();
+});
+
+test("session pin hit area is distinct from rename/delete and cancelled on off-target release", async () => {
+  let listener: TuiInputListener | undefined;
+  const calls: string[] = [];
+  const tui = {
+    addInputListener(next: TuiInputListener) { listener = next; return () => {}; },
+    requestRender() {},
+    currentLayout: undefined as any,
+  } as any;
+  const panel = new SessionPanel(theme, {
+    tui, getDesiredWidth: () => 40,
+    loadSessions: async () => [{ ...session("active", "Current session"), current: true }],
+    onSelect() { calls.push("select"); }, onRename() { calls.push("rename"); },
+    onDelete() { calls.push("delete"); }, onTogglePin() { calls.push("pin"); },
+    onDeleteOthers() {}, onOpenResources() {}, now: () => 0,
+  });
+  tui.currentLayout = {
+    root: {
+      component: panel, rect: { x: 10, y: 5, width: 40, height: 5 },
+      clip: { x: 10, y: 5, width: 40, height: 5 }, children: [],
+    },
+  };
+  panel.refresh();
+  await flushAsync();
+  const line = panel.render(40)[1]!;
+  assert.match(line, /☆ ✎ ·/);
+  const pinX = 10 + line.indexOf("☆") + 1;
+  const renameX = 10 + line.indexOf("✎") + 1;
+  const endX = 10 + line.lastIndexOf("·") + 1;
+  listener?.(`\u001b[<0;${pinX};7M`);
+  listener?.(`\u001b[<0;${renameX};7m`);
+  await flushAsync();
+  assert.deepEqual(calls, []);
+  listener?.(`\u001b[<0;${endX};7M`);
+  listener?.(`\u001b[<0;${endX};7m`);
+  await flushAsync();
+  assert.deepEqual(calls, [], "current session cannot be deleted");
+  listener?.(`\u001b[<0;${pinX};7M`);
+  listener?.(`\u001b[<0;${pinX};7m`);
+  await flushAsync();
+  assert.deepEqual(calls, ["pin"], "current session can still be pinned");
+  panel.dispose();
+});
+
+test("narrow sidebar keeps prior rename/delete actions without showing a truncated pin button", async () => {
+  let listener: TuiInputListener | undefined;
+  const actions: string[] = [];
+  const tui = {
+    addInputListener(next: TuiInputListener) { listener = next; return () => {}; },
+    requestRender() {},
+    currentLayout: undefined as any,
+  } as any;
+  const panel = new SessionPanel(theme, {
+    tui, getDesiredWidth: () => 21,
+    loadSessions: async () => [session("one", "Short")],
+    onSelect() { actions.push("select"); }, onRename() { actions.push("rename"); },
+    onDelete() { actions.push("delete"); }, onTogglePin() { actions.push("pin"); },
+    onDeleteOthers() {}, onOpenResources() {}, now: () => 0,
+  });
+  tui.currentLayout = {
+    root: {
+      component: panel, rect: { x: 3, y: 2, width: 21, height: 5 },
+      clip: { x: 3, y: 2, width: 21, height: 5 }, children: [],
+    },
+  };
+  panel.refresh();
+  await flushAsync();
+  const line = stripTerminalSequences(panel.render(21)[1]!);
+  assert.match(line, / ✎ ×/);
+  assert.doesNotMatch(line, /☆/);
+  const pencilX = 3 + line.indexOf("✎") + 1;
+  assert.deepEqual(listener?.(`\u001b[<0;${pencilX};4M`), { consume: true }, `press at ${pencilX}: ${line}`);
+  assert.deepEqual(listener?.(`\u001b[<0;${pencilX};4m`), { consume: true }, `release at ${pencilX}: ${line}`);
+  await flushAsync();
+  assert.deepEqual(actions, ["rename"]);
   panel.dispose();
 });
