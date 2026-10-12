@@ -180,7 +180,7 @@ Example configuration:
 To pin a specific version:
 
 ```bash
-pi install npm:pi-ui-extension@1.1.10
+pi install npm:pi-ui-extension@1.1.11
 ```
 
 or:
@@ -188,7 +188,7 @@ or:
 ```json
 {
   "packages": [
-    "npm:pi-ui-extension@1.1.10"
+    "npm:pi-ui-extension@1.1.11"
   ]
 }
 ```
@@ -216,7 +216,7 @@ Configuration form:
 Pin to a Git tag:
 
 ```bash
-pi install git:github.com/1993yihuan/pi-ui-extension@v1.1.10
+pi install git:github.com/1993yihuan/pi-ui-extension@v1.1.11
 ```
 
 ### Temporary local-source testing

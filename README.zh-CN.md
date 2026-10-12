@@ -180,7 +180,7 @@ Pi 会安装 package，并将声明写入个人配置：
 如果希望固定版本：
 
 ```bash
-pi install npm:pi-ui-extension@1.1.10
+pi install npm:pi-ui-extension@1.1.11
 ```
 
 或者：
@@ -188,7 +188,7 @@ pi install npm:pi-ui-extension@1.1.10
 ```json
 {
   "packages": [
-    "npm:pi-ui-extension@1.1.10"
+    "npm:pi-ui-extension@1.1.11"
   ]
 }
 ```
@@ -216,7 +216,7 @@ pi install git:github.com/1993yihuan/pi-ui-extension
 固定到 Git tag：
 
 ```bash
-pi install git:github.com/1993yihuan/pi-ui-extension@v1.1.10
+pi install git:github.com/1993yihuan/pi-ui-extension@v1.1.11
 ```
 
 ### 临时加载本地源码
