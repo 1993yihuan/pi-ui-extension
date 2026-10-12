@@ -13,7 +13,7 @@ import { installContextEstimates } from "./ctx/data.ts";
 import { createActivityTracker, type ActivityTracker } from "./ctx/activity.ts";
 import { installFooter, type FooterController } from "./footer/index.ts";
 import { isFabricFullCodeMode } from "./fabric-detection.ts";
-import { mcpResourceEntriesFromConfig, mcpResourceEntriesFromStatus, mergeMcpResourceEntries } from "./mcp/resources.ts";
+import { adapterMcpServers, buildMcpStatusSnapshot, describeMcpStatus, type McpStatusSnapshot } from "./mcp/status-center.ts";
 import {
   createDefaultSidebarPanels,
   SESSION_PANEL_ID,
@@ -103,6 +103,49 @@ function showResourceDialog(
   });
 }
 
+/** Read-only MCP status picker; only safe metadata is displayed. */
+export function showMcpStatusDialog(
+  ctx: { ui: { select(title: string, options: string[]): Promise<string | undefined>; editor(title: string, prefill?: string): Promise<string | undefined>; notify(message: string, level: "info" | "warning"): void } },
+  snapshot: McpStatusSnapshot,
+): void {
+  const rows = snapshot.servers.map((server) => ({
+    name: server.name,
+    description: describeMcpStatus(server),
+    details: [
+      `Server: ${server.name}`,
+      `Source: ${server.source}`,
+      `Enabled: ${server.enabled ? "yes" : "no"}`,
+      `Observed by adapter: ${server.loaded ? "yes" : "no"}`,
+      `Status: ${describeMcpStatus(server)}`,
+      "",
+      "Only an adapter's explicit connection state establishes connected/failed.",
+      "Pi native connection health is not exposed to UI extensions.",
+      "Use Pi's built-in /mcp manager for live connection details.",
+    ].join("\n"),
+  }));
+  const warnings = snapshot.warnings.map((warning) => ({
+    name: "⚠ Configuration warning",
+    description: warning,
+    details: `${warning}\nCheck your MCP configuration with Pi's built-in /mcp manager.`,
+  }));
+  const all = [...rows, ...warnings];
+  if (all.length === 0) {
+    ctx.ui.notify("No MCP servers found. Use /mcp to configure servers.", "info");
+    return;
+  }
+  const choices = resourceDialogOptions(all);
+  const enabledCount = snapshot.servers.filter((server) => server.enabled).length;
+  void ctx.ui.select(
+    `MCP Status · ${enabledCount} enabled / ${snapshot.servers.length} total · ↵ details`,
+    choices,
+  ).then((choice) => {
+    if (!choice) return;
+    const index = choices.indexOf(choice);
+    const item = all[index];
+    if (item) void ctx.ui.editor(`${item.name} · MCP (read-only)`, item.details).then(() => {});
+  });
+}
+
 /** Load Agents.md contexts, Skills, and Extensions as display rows. */
 export async function loadResourceEntries(
   pi: ExtensionAPI,
@@ -185,9 +228,11 @@ async function clearOtherSessions(
 export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
   const toolView = await installToolViewController(pi);
   let mcpResources: readonly ResourceEntry[] = [];
-  let liveMcpResources: readonly ResourceEntry[] = [];
-  const currentMcpResources = (cwd: string, trusted: boolean): readonly ResourceEntry[] =>
-    mergeMcpResourceEntries(mcpResourceEntriesFromConfig(getAgentDir(), cwd, trusted), liveMcpResources);
+  let liveMcpServers: NonNullable<ReturnType<typeof adapterMcpServers>> = [];
+  let registeredServers: unknown = [];
+  let mcpCwd = process.cwd();
+  let mcpTrusted = false;
+  let mcpStatus: McpStatusSnapshot = { servers: [], warnings: [] };
   let toolViewMode: ToolViewMode | undefined;
   let footer: FooterController | undefined;
   let sidebar: SidebarController | undefined;
@@ -221,12 +266,24 @@ export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
   };
   let switchRequested = false;
   const getMcpServerNames = () => mcpResources.map((server) => server.name);
-  const unsubscribeMcpStatus = pi.events.on("pi-mcp-adapter/status/v1", (value) => {
-    liveMcpResources = mcpResourceEntriesFromStatus(value);
-    mcpResources = mergeMcpResourceEntries(mcpResources, liveMcpResources);
+  const updateMcpStatus = (): void => {
+    mcpStatus = buildMcpStatusSnapshot(getAgentDir(), mcpCwd, mcpTrusted, registeredServers, liveMcpServers);
+    mcpResources = mcpStatus.servers
+      .filter((server) => server.enabled)
+      .map((server) => ({ name: server.name, description: describeMcpStatus(server) }));
     const branch = getCurrentBranch?.();
     if (branch) toolUsage?.resetSession(branch, getMcpServerNames(), { preserveExchange: true });
     sidebar?.refresh();
+  };
+  const unsubscribeMcpStatus = pi.events.on("pi-mcp-adapter/status/v1", (value) => {
+    const observation = adapterMcpServers(value);
+    if (!observation) return;
+    liveMcpServers = observation;
+    updateMcpStatus();
+  });
+  pi.on("mcp_servers_change", (event) => {
+    registeredServers = event.servers;
+    updateMcpStatus();
   });
 
   pi.registerCommand(SESSION_RENAME_COMMAND, {
@@ -456,7 +513,10 @@ export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
     // Pi resets extension UI before starting/reloading a session. Do not call
     // stale controllers from the previous runtime after that reset.
     clearControllers();
-    mcpResources = currentMcpResources(ctx.cwd, ctx.isProjectTrusted());
+    mcpCwd = ctx.cwd;
+    mcpTrusted = ctx.isProjectTrusted();
+    registeredServers = typeof pi.getMcpServers === "function" ? pi.getMcpServers() : [];
+    updateMcpStatus();
     toolViewMode = toolView.getMode();
     getCurrentBranch = () => ctx.sessionManager.getBranch();
     const branch = ctx.sessionManager.getBranch();
@@ -534,7 +594,12 @@ export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
               ctx.ui.notify("Wait for the current run to finish before opening resources", "warning");
               return;
             }
-            void loadResourceEntries(pi, ctx.cwd, button === "mcp" ? currentMcpResources(ctx.cwd, ctx.isProjectTrusted()) : mcpResources, ctx.isProjectTrusted(), button)
+            if (button === "mcp") {
+              updateMcpStatus();
+              showMcpStatusDialog(ctx, mcpStatus);
+              return;
+            }
+            void loadResourceEntries(pi, ctx.cwd, mcpResources, ctx.isProjectTrusted(), button)
               .then((rows) => {
                 if (!rows || rows.length === 0) {
                   ctx.ui.notify("No resources of this kind loaded", "info");
@@ -568,6 +633,7 @@ export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
   pi.on("session_shutdown", () => {
     unsubscribeToolViewMode();
     unsubscribeMcpStatus();
+    liveMcpServers = [];
 
     // The sidebar replaces the fullscreen TUI layout root directly, so Pi
     // cannot tear it down on our behalf during session replacement. Dispose

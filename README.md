@@ -50,6 +50,17 @@ The bottom of the `SESSIONS` panel exposes four resource categories:
 
 These shortcuts let you inspect the resources currently loaded by the project/Pi environment, making it easier to verify which agent instructions, skills, extensions, and MCP servers are actually available.
 
+#### MCP Status Center
+
+Click **MCP** in the sidebar to open a read-only status picker covering global and trusted-project MCP configuration, servers registered by extensions via `pi.registerMcpServer()`, and observations from `pi-mcp-adapter/status/v1`.
+
+- See configuration scope, project overrides, and enabled/disabled state (including native Pi `enabled: false`).
+- Connection health is only shown when an adapter explicitly reports it. **Configured, registered, and loaded do not mean connected.**
+- Commands, endpoints, headers, tokens, environment values, and raw errors are never displayed.
+- Tool usage now attributes native Pi `mcp__server__tool` calls to their MCP server, alongside existing gateway and `mcpScript` counts.
+
+Pi does not currently expose its complete native MCP connection state to ordinary UI extensions. For live connection diagnostics, reconnects, authentication, or configuration changes, use Pi's built-in `/mcp` manager.
+
 ### 4. CTX context inspection
 
 The `CTX` panel shows context and runtime information for the current model request, including:

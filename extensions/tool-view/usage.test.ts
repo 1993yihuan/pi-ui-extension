@@ -80,6 +80,29 @@ test("adds the MCP server for proxy calls without hiding the gateway count", () 
   ]);
 });
 
+test("attributes Pi native MCP tools to known servers, including sanitized names", () => {
+  const tracker = createToolUsageTracker([], () => ["docs", "chrome-devtools"]);
+  tracker.startExchange();
+  tracker.record(ended("mcp__docs__search"));
+  tracker.record(ended("mcp__chrome_devtools__open_page"));
+  assert.deepEqual(tracker.getSnapshot().counts.filter((s) => s.kind === "mcp"), [
+    { name: "chrome-devtools", kind: "mcp", exchange: 1, session: 1 },
+    { name: "docs", kind: "mcp", exchange: 1, session: 1 },
+  ]);
+  const restored = [{ type: "message", message: { role: "toolResult", toolName: "mcp__docs__search", details: {} } }];
+  tracker.resetSession(restored, ["docs"]);
+  assert.deepEqual(tracker.getSnapshot().counts.filter((s) => s.kind === "mcp"), [
+    { name: "docs", kind: "mcp", exchange: 0, session: 1 },
+  ]);
+});
+
+test("does not guess an MCP server from ambiguous normalized names", () => {
+  const tracker = createToolUsageTracker([], () => ["team-core", "team_core"]);
+  tracker.startExchange();
+  tracker.record(ended("mcp__team_core__search"));
+  assert.deepEqual(tracker.getSnapshot().counts.filter((s) => s.kind === "mcp"), []);
+});
+
 test("counts each MCP call made by mcpScript", () => {
   const tracker = createToolUsageTracker([], () => ["codebase-memory-mcp", "context-mode"]);
   tracker.startExchange();

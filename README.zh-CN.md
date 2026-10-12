@@ -50,6 +50,17 @@ Sidebar 支持鼠标交互、滚轮滚动和终端尺寸变化。终端高度不
 
 点击后可以直接查看当前项目 / 当前 Pi 环境中已加载的相关资源，便于快速确认 Agent 当前实际使用了哪些上下文、Skill、Extension 和 MCP Server。
 
+#### MCP 状态中心
+
+点击 Sidebar 中的 **MCP** 按钮可打开只读状态中心，查看全局和可信项目配置的 MCP Server、扩展通过 `pi.registerMcpServer()` 注册的服务器，以及 `pi-mcp-adapter/status/v1` 提供的运行时观察结果。
+
+- 显示服务器来源、启用/禁用状态与配置覆盖情况；项目级 `enabled: false` 会正确覆盖全局配置。
+- 仅当 Adapter 明确报告连接状态时显示 Connected、Connecting、Failed 等状态；**已配置、已注册或已加载不代表已连接**。
+- 不展示命令、URL、环境变量、请求头、Token 或原始错误内容。
+- 工具调用统计支持 Pi 原生 `mcp__server__tool` 格式，继续兼容既有 MCP Gateway / `mcpScript` 统计。
+
+Pi 目前没有向普通 UI 扩展公开完整的原生 MCP 实时连接状态。查看连接错误、重新连接、登录或启停服务器，请使用 Pi 自带的 `/mcp` 管理界面；本状态中心不执行连接或配置修改。
+
 ### 4. CTX 上下文观察
 
 `CTX` 面板用于观察当前模型请求相关的上下文状态，主要包括：

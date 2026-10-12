@@ -109,6 +109,16 @@ function resolveScriptServer(path: string, knownServers: readonly string[]): str
   return candidates.size === 1 ? [...candidates][0] : undefined;
 }
 
+/** Pi native MCP tools use mcp__<sanitized-server>__<tool>. Never guess on collisions. */
+function nativeMcpServer(toolName: string, knownServers: readonly string[]): string | undefined {
+  if (!toolName.startsWith("mcp__")) return undefined;
+  const matches = knownServers.filter((server) => {
+    const normalized = server.replace(/[^A-Za-z0-9_]/g, "_");
+    return toolName.startsWith(`mcp__${normalized}__`);
+  });
+  return matches.length === 1 ? matches[0] : undefined;
+}
+
 function scriptServers(result: unknown, knownServers: readonly string[]): string[] {
   const details = asRecord(asRecord(result)?.details);
   if (details?.mode !== "script" || !Array.isArray(details.calls)) return [];
@@ -144,6 +154,9 @@ function parseUsage(toolName: string, result: unknown, knownServers: readonly st
   const topLevelName = toolName.trim() || "tool";
   const contextServer = contextModeServer(topLevelName);
   if (contextServer) return { topLevelName, mcpServers: [contextServer] };
+
+  const nativeServer = nativeMcpServer(topLevelName, knownServers);
+  if (nativeServer) return { topLevelName, mcpServers: [nativeServer] };
 
   if (topLevelName === "mcpScript") {
     return { topLevelName, mcpServers: scriptServers(result, knownServers) };
