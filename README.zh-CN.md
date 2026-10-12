@@ -48,7 +48,7 @@ Sidebar 支持鼠标交互、滚轮滚动和终端尺寸变化。终端高度不
 - `Extensions`
 - `MCP`
 
-点击后可以直接查看当前项目 / 当前 Pi 环境中已加载的相关资源，便于快速确认 Agent 当前实际使用了哪些上下文、Skill、Extension 和 MCP Server。
+点击后可以查看当前项目 / Pi 环境发现的相关资源。其中 MCP 状态中心会区分“已配置 / 已注册”和“已确认连接”，避免把配置存在误认为连接成功。
 
 #### MCP 状态中心
 
@@ -59,7 +59,7 @@ Sidebar 支持鼠标交互、滚轮滚动和终端尺寸变化。终端高度不
 - 不展示命令、URL、环境变量、请求头、Token 或原始错误内容。
 - 工具调用统计支持 Pi 原生 `mcp__server__tool` 格式，继续兼容既有 MCP Gateway / `mcpScript` 统计。
 
-Pi 目前没有向普通 UI 扩展公开完整的原生 MCP 实时连接状态。查看连接错误、重新连接、登录或启停服务器，请使用 Pi 自带的 `/mcp` 管理界面；本状态中心不执行连接或配置修改。
+Pi 目前没有向普通 UI 扩展公开完整的原生 MCP 实时连接状态。查看连接错误、重新连接、登录或启停服务器，请使用当前生效的 `/mcp` 管理界面（Pi 内置或由第三方 MCP Adapter 提供）；本状态中心不执行连接或配置修改。
 
 ### 4. CTX 上下文观察
 
@@ -165,7 +165,7 @@ Pi 会安装 package，并将声明写入个人配置：
 如果希望固定版本：
 
 ```bash
-pi install npm:pi-ui-extension@1.1.1
+pi install npm:pi-ui-extension@1.1.10
 ```
 
 或者：
@@ -173,7 +173,7 @@ pi install npm:pi-ui-extension@1.1.1
 ```json
 {
   "packages": [
-    "npm:pi-ui-extension@1.1.1"
+    "npm:pi-ui-extension@1.1.10"
   ]
 }
 ```
@@ -201,15 +201,15 @@ pi install git:github.com/1993yihuan/pi-ui-extension
 固定到 Git tag：
 
 ```bash
-pi install git:github.com/1993yihuan/pi-ui-extension@v1.1.1
+pi install git:github.com/1993yihuan/pi-ui-extension@v1.1.10
 ```
 
-### 临时试用
+### 临时加载本地源码
 
-如果只想在一次 Pi 启动中测试，不修改 `settings.json`：
+如果只想在一次 Pi 启动中测试本地源码，不修改 `settings.json`，请在仓库根目录运行。禁用自动扩展发现可以避免与已经安装的 `pi-ui-extension` 重复加载：
 
 ```bash
-pi -e npm:pi-ui-extension
+pi --no-extensions -e builtin:mcp -e ./extensions/index.ts --tui-mode fullscreen
 ```
 
 ### 项目级安装
@@ -348,7 +348,7 @@ Pi 的扩展入口在 `package.json` 中显式声明：
 
 ## CI / Release
 
-提交到 `main` 或创建 PR 时，GitHub Actions 会自动执行：
+提交到 `main` 或创建 PR 时，GitHub Actions 会分别在 **Node.js 22.19.0 和 24** 上执行：
 
 ```text
 npm ci
@@ -368,6 +368,7 @@ git push --tags
 
 ```text
 Checkout
+→ 校验版本标签格式、确认提交位于 main 历史
 → Node.js 24
 → npm ci
 → npm run check
@@ -375,6 +376,7 @@ Checkout
 → npm pack --dry-run
 → npm Trusted Publishing (OIDC)
 → npm publish
+→ 重试检查 npm Registry 已可查询新版本
 → GitHub Release
 ```
 
@@ -393,7 +395,7 @@ npm 发布使用 GitHub Actions OIDC Trusted Publishing，不需要在 GitHub Re
 
 - Pi Coding Agent
 - Node.js `>= 22.19.0`（建议使用当前 Pi 支持的 Node 版本）
-- 开发与 CI 当前使用 Node.js 24
+- CI 覆盖 Node.js 22.19.0 和 24；发布工作流使用 Node.js 24
 
 ## License
 

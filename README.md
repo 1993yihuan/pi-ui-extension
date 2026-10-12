@@ -48,7 +48,7 @@ The bottom of the `SESSIONS` panel exposes four resource categories:
 - `Extensions`
 - `MCP`
 
-These shortcuts let you inspect the resources currently loaded by the project/Pi environment, making it easier to verify which agent instructions, skills, extensions, and MCP servers are actually available.
+These shortcuts let you inspect the resources discovered by the project/Pi environment. The MCP view distinguishes configured and registered servers from confirmed connections.
 
 #### MCP Status Center
 
@@ -59,7 +59,7 @@ Click **MCP** in the sidebar to open a read-only status picker covering global a
 - Commands, endpoints, headers, tokens, environment values, and raw errors are never displayed.
 - Tool usage now attributes native Pi `mcp__server__tool` calls to their MCP server, alongside existing gateway and `mcpScript` counts.
 
-Pi does not currently expose its complete native MCP connection state to ordinary UI extensions. For live connection diagnostics, reconnects, authentication, or configuration changes, use Pi's built-in `/mcp` manager.
+Pi does not currently expose its complete native MCP connection state to ordinary UI extensions. For live connection diagnostics, reconnects, authentication, or configuration changes, use the active `/mcp` manager (built-in or provided by your MCP adapter).
 
 ### 4. CTX context inspection
 
@@ -165,7 +165,7 @@ Example configuration:
 To pin a specific version:
 
 ```bash
-pi install npm:pi-ui-extension@1.1.1
+pi install npm:pi-ui-extension@1.1.10
 ```
 
 or:
@@ -173,7 +173,7 @@ or:
 ```json
 {
   "packages": [
-    "npm:pi-ui-extension@1.1.1"
+    "npm:pi-ui-extension@1.1.10"
   ]
 }
 ```
@@ -201,15 +201,15 @@ Configuration form:
 Pin to a Git tag:
 
 ```bash
-pi install git:github.com/1993yihuan/pi-ui-extension@v1.1.1
+pi install git:github.com/1993yihuan/pi-ui-extension@v1.1.10
 ```
 
-### Temporary usage
+### Temporary local-source testing
 
-To load the package for a single Pi launch without modifying `settings.json`:
+To try a local checkout without changing `settings.json`, run from the repository root. Disable automatic extension discovery to avoid loading a previously installed copy of `pi-ui-extension` twice:
 
 ```bash
-pi -e npm:pi-ui-extension
+pi --no-extensions -e builtin:mcp -e ./extensions/index.ts --tui-mode fullscreen
 ```
 
 ### Project-local installation
@@ -348,7 +348,7 @@ Pi's extension entry point is declared explicitly in `package.json`:
 
 ## CI / Release
 
-Every push to `main` and every pull request runs:
+Every push to `main` and every pull request runs on **both Node.js 22.19.0 and 24**:
 
 ```text
 npm ci
@@ -368,6 +368,7 @@ A `v*` tag triggers the release workflow:
 
 ```text
 Checkout
+→ validate release tag format and main ancestry
 → Node.js 24
 → npm ci
 → npm run check
@@ -375,6 +376,7 @@ Checkout
 → npm pack --dry-run
 → npm Trusted Publishing (OIDC)
 → npm publish
+→ verify npm Registry visibility (with retries)
 → GitHub Release
 ```
 
@@ -393,7 +395,7 @@ npm publishing uses GitHub Actions OIDC Trusted Publishing, so no long-lived `NP
 
 - Pi Coding Agent
 - Node.js `>= 22.19.0` (use a Node version supported by your Pi installation)
-- Development and CI currently use Node.js 24
+- CI validates Node.js 22.19.0 and 24; releases use Node.js 24
 
 ## License
 
