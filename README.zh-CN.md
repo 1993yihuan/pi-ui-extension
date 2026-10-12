@@ -390,11 +390,13 @@ Checkout
 → npm pack --dry-run
 → npm Trusted Publishing (OIDC)
 → npm publish
-→ 重试检查 npm Registry 已可查询新版本
+→ 重试检查 npm Registry 已可查询新版本（最多约 10 分钟）
 → GitHub Release
 ```
 
 npm 发布使用 GitHub Actions OIDC Trusted Publishing，不需要在 GitHub Repository 中保存长期 `NPM_TOKEN`。
+
+npm 可能先接受发布请求，再经过一段时间才能查询到新版本。Release 工作流会等待最多约 10 分钟让 Registry 完成索引。如果检查超时，请先核对 npm 上的实际版本再决定如何处理，避免对已发布的同一个版本重复执行 `npm publish`。
 
 ## 兼容性与设计原则
 

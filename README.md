@@ -390,11 +390,13 @@ Checkout
 → npm pack --dry-run
 → npm Trusted Publishing (OIDC)
 → npm publish
-→ verify npm Registry visibility (with retries)
+→ verify npm Registry visibility (up to ~10 minutes of retries)
 → GitHub Release
 ```
 
 npm publishing uses GitHub Actions OIDC Trusted Publishing, so no long-lived `NPM_TOKEN` is required in the repository.
+
+Because npm can accept a publication before the new version becomes searchable, the release workflow waits up to approximately 10 minutes for registry indexing. If that verification times out, check the package on npm before retrying: a successful publish cannot be repeated for the same version.
 
 ## Compatibility and design principles
 

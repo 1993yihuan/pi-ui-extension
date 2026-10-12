@@ -75,15 +75,21 @@ jobs:
         shell: bash
         run: |
           VERSION="$(node -p 'require("./package.json").version')"
-          for attempt in {1..12}; do
+          # npm may accept an OIDC publish before the new version is searchable.
+          # Allow up to ~10 minutes for registry indexing (31 checks, 20s apart).
+          MAX_ATTEMPTS=31
+          RETRY_INTERVAL=20
+          for ((attempt = 1; attempt <= MAX_ATTEMPTS; attempt++)); do
             if npm view "pi-ui-extension@$VERSION" version --registry=https://registry.npmjs.org --prefer-online 2>/dev/null | grep -Fxq "$VERSION"; then
-              echo "Verified pi-ui-extension@$VERSION on npm registry."
+              echo "Verified pi-ui-extension@$VERSION on npm registry (attempt $attempt/$MAX_ATTEMPTS)."
               exit 0
             fi
-            echo "Registry not yet showing $VERSION (attempt $attempt/12)."
-            sleep 10
+            if (( attempt < MAX_ATTEMPTS )); then
+              echo "Registry not yet showing $VERSION (attempt $attempt/$MAX_ATTEMPTS). Retrying in ${RETRY_INTERVAL}s..."
+              sleep "$RETRY_INTERVAL"
+            fi
           done
-          echo "Published version $VERSION not visible in npm registry."
+          echo "::error::npm accepted the publish, but pi-ui-extension@$VERSION was not visible in the registry after ~10 minutes. Check npm package processing before attempting another publish."
           exit 1
 
       - name: Create GitHub Release
