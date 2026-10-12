@@ -8,6 +8,7 @@ import {
   SettingsManager,
   SessionManager,
   type ExtensionAPI,
+  type ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import { installContextEstimates } from "./ctx/data.ts";
 import { createActivityTracker, type ActivityTracker } from "./ctx/activity.ts";
@@ -20,6 +21,7 @@ import {
 import type { ResourceButtonId } from "./session/panel.ts";
 import { installSidebar, type SidebarController } from "./sidebar/index.ts";
 import { deleteSessionFile } from "./session/mutations.ts";
+import { openSessionManager, readSessionPins, sessionsEligibleForClear, sortedSessions, toggleSessionPin } from "./session/manager.ts";
 import type { SessionListItem } from "./session/panel.ts";
 import { installToolViewController } from "./tool-view/controller.ts";
 import type { ToolViewMode } from "./tool-view/types.ts";
@@ -32,6 +34,8 @@ const SESSION_SWITCH_COMMAND = "sidebar-session-switch";
 const SESSION_RENAME_COMMAND = "sidebar-session-rename";
 const SESSION_DELETE_COMMAND = "sidebar-session-delete";
 const SESSION_CLEAR_COMMAND = "sidebar-session-clear-others";
+const SESSION_MANAGER_COMMAND = "sessions-manager";
+const SESSION_PINS_FILE = join(getAgentDir(), "pi-ui-extension", "session-pins.json");
 
 export type ResourceEntry = { name: string; description: string; content?: string };
 
@@ -208,12 +212,8 @@ export async function loadResourceEntries(
  */
 async function clearOtherSessions(
   pi: ExtensionAPI,
-  cwd: string,
-  sessionDir: string,
-  keepId: string,
+  targets: readonly { readonly path: string }[],
 ): Promise<{ readonly deleted: number; readonly failed: number; readonly firstError?: string }> {
-  const sessions = await SessionManager.list(cwd, sessionDir);
-  const targets = sessions.filter((session) => session.id !== keepId);
   let deleted = 0;
   let firstError: string | undefined;
   for (const target of targets) {
@@ -264,6 +264,65 @@ export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
     }
   };
   let switchRequested = false;
+  let sessionManagerOpen = false;
+  const safeReadPins = (): ReadonlySet<string> => {
+    try { return readSessionPins(SESSION_PINS_FILE); }
+    catch { return new Set(); } // Broken preferences must not hide saved sessions.
+  };
+  const loadSessionRows = async (ctx: ExtensionContext): Promise<readonly SessionListItem[]> => {
+    const currentId = ctx.sessionManager.getSessionId();
+    const pinned = safeReadPins();
+    const sessions = await SessionManager.list(ctx.cwd, ctx.sessionManager.getSessionDir());
+    return sortedSessions(sessions.map((session) => ({
+      id: session.id,
+      title: session.name ?? session.firstMessage,
+      modified: session.modified,
+      messageCount: session.messageCount,
+      current: session.id === currentId,
+      pinned: pinned.has(session.id),
+    })), "recent");
+  };
+  const canManageSessions = (ctx: ExtensionContext): boolean => {
+    if (ctx.isIdle()) return true;
+    ctx.ui.notify("Wait for the current run to finish before managing sessions", "warning");
+    return false;
+  };
+  const selectSession = (ctx: ExtensionContext, session: SessionListItem): void => {
+    if (session.current || switchRequested || !canManageSessions(ctx)) return;
+    switchRequested = true;
+    pi.sendUserMessage(`/${SESSION_SWITCH_COMMAND} ${session.id}`, { expandPromptTemplates: true });
+  };
+  const renameSession = (ctx: ExtensionContext, session: SessionListItem): void => {
+    if (!canManageSessions(ctx)) return;
+    pi.sendUserMessage(`/${SESSION_RENAME_COMMAND} ${session.id}`, { expandPromptTemplates: true });
+  };
+  const deleteSession = (ctx: ExtensionContext, session: SessionListItem): void => {
+    if (session.current) {
+      ctx.ui.notify("Cannot delete the currently active session", "warning");
+      return;
+    }
+    if (!canManageSessions(ctx)) return;
+    pi.sendUserMessage(`/${SESSION_DELETE_COMMAND} ${session.id}`, { expandPromptTemplates: true });
+  };
+  const launchSessionManager = async (ctx: ExtensionContext): Promise<void> => {
+    if (sessionManagerOpen || !canManageSessions(ctx)) return;
+    sessionManagerOpen = true;
+    try {
+      await openSessionManager({
+        ui: ctx.ui,
+        loadSessions: () => loadSessionRows(ctx),
+        togglePin: (id) => toggleSessionPin(SESSION_PINS_FILE, id),
+        onPinChanged: () => refreshSessions(),
+        onSwitch: (session) => selectSession(ctx, session),
+        onRename: (session) => renameSession(ctx, session),
+        onDelete: (session) => deleteSession(ctx, session),
+      });
+    } catch (error) {
+      ctx.ui.notify(`Failed to open Sessions manager: ${error instanceof Error ? error.message : String(error)}`, "error");
+    } finally {
+      sessionManagerOpen = false;
+    }
+  };
   const getMcpServerNames = () => mcpResources.map((server) => server.name);
   const updateMcpStatus = (): void => {
     mcpStatus = buildMcpStatusSnapshot(getAgentDir(), mcpCwd, mcpTrusted, registeredServers, liveMcpServers);
@@ -283,6 +342,11 @@ export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
   pi.on("mcp_servers_change", (event) => {
     registeredServers = event.servers;
     updateMcpStatus();
+  });
+
+  pi.registerCommand(SESSION_MANAGER_COMMAND, {
+    description: "Search, sort, page, pin, switch, rename and delete saved sessions",
+    handler: async (_args, ctx) => launchSessionManager(ctx),
   });
 
   pi.registerCommand(SESSION_RENAME_COMMAND, {
@@ -357,23 +421,24 @@ export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
   });
 
   pi.registerCommand(SESSION_CLEAR_COMMAND, {
-    description: "Move every saved session except the active one to trash",
+    description: "Move unpinned saved sessions except the active one to trash",
     handler: async (_args, ctx) => {
       try {
         const currentSessionId = ctx.sessionManager.getSessionId();
+        const pinnedIds = readSessionPins(SESSION_PINS_FILE);
         const sessions = await SessionManager.list(ctx.cwd, ctx.sessionManager.getSessionDir());
-        const others = sessions.filter((session) => session.id !== currentSessionId);
+        const others = sessionsEligibleForClear(sessions, currentSessionId, pinnedIds);
         if (others.length === 0) {
-          ctx.ui.notify("No other sessions to clear", "info");
+          ctx.ui.notify("No unpinned sessions to clear", "info");
           return;
         }
         const confirmed = await ctx.ui.confirm(
           "Clear other sessions",
-          `Move ${others.length} other session(s) to trash? The active session is kept.`,
+          `Move ${others.length} unpinned session(s) to trash? The active and pinned sessions are kept.`,
         );
         if (!confirmed) return;
 
-        const result = await clearOtherSessions(pi, ctx.cwd, ctx.sessionManager.getSessionDir(), currentSessionId);
+        const result = await clearOtherSessions(pi, others);
         refreshSessions();
         if (result.failed > 0) {
           ctx.ui.notify(
@@ -541,44 +606,11 @@ export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
           onSelectToolViewMode: (mode): void => {
             void toolView.setMode(mode, ctx);
           },
-          loadSessions: async (): Promise<readonly SessionListItem[]> => {
-            const currentSessionId = ctx.sessionManager.getSessionId();
-            const sessions = await SessionManager.list(ctx.cwd, ctx.sessionManager.getSessionDir());
-            return sessions.map((session) => ({
-              id: session.id,
-              title: session.name ?? session.firstMessage,
-              modified: session.modified,
-              messageCount: session.messageCount,
-              current: session.id === currentSessionId,
-            }));
-          },
-          onSelectSession: (session): void => {
-            if (session.current || switchRequested) return;
-            if (!ctx.isIdle()) {
-              ctx.ui.notify("Wait for the current run to finish before switching sessions", "warning");
-              return;
-            }
-            switchRequested = true;
-            pi.sendUserMessage(`/${SESSION_SWITCH_COMMAND} ${session.id}`, { expandPromptTemplates: true });
-          },
-          onRenameSession: (session): void => {
-            if (!ctx.isIdle()) {
-              ctx.ui.notify("Wait for the current run to finish before renaming sessions", "warning");
-              return;
-            }
-            pi.sendUserMessage(`/${SESSION_RENAME_COMMAND} ${session.id}`, { expandPromptTemplates: true });
-          },
-          onDeleteSession: (session): void => {
-            if (session.current) {
-              ctx.ui.notify("Cannot delete the currently active session", "warning");
-              return;
-            }
-            if (!ctx.isIdle()) {
-              ctx.ui.notify("Wait for the current run to finish before deleting sessions", "warning");
-              return;
-            }
-            pi.sendUserMessage(`/${SESSION_DELETE_COMMAND} ${session.id}`, { expandPromptTemplates: true });
-          },
+          loadSessions: () => loadSessionRows(ctx),
+          onSelectSession: (session): void => selectSession(ctx, session),
+          onRenameSession: (session): void => renameSession(ctx, session),
+          onDeleteSession: (session): void => deleteSession(ctx, session),
+          onOpenSessionManager: (): void => { void launchSessionManager(ctx); },
           onDeleteOthers: (): void => {
             if (!ctx.isIdle()) {
               ctx.ui.notify("Wait for the current run to finish before clearing sessions", "warning");

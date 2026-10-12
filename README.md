@@ -34,8 +34,18 @@ The `SESSIONS` panel provides quick access to recent sessions:
 - Click a session to switch to it.
 - Rename a non-current session.
 - Delete a non-current session.
-- Use the `⊗` action to remove all other sessions.
+- Use `⊗` to move other unpinned sessions to trash while keeping the current and pinned sessions.
 - Click `SESSIONS ↻` to refresh the session list.
+
+**Advanced Sessions management (v1.2.0 development)**: click `≡` on the Sessions header or run `/sessions-manager`.
+
+- Browse all saved sessions for the current project in **8-item pages**, with previous/next navigation and refresh.
+- Search session titles or IDs case-insensitively, and sort by latest update, oldest update, message count, or title.
+- Switch, rename, pin/unpin, or move an individual session to trash. Deletions require confirmation and the active session cannot be deleted.
+- Pinned sessions (`★`) appear first, including in the five-session quick sidebar. Pins persist as IDs (no session content) in `pi-ui-extension/session-pins.json` under Pi's agent directory.
+- The `⊗` bulk cleanup now **protects both the active session and all pinned sessions**. Explicit single-session deletion still requires confirmation.
+
+The published npm version remains `1.1.11`; these improvements are currently available from the unreleased `1.2.0` source checkout.
 
 To avoid corrupting active agent state, switching, renaming, deleting, and bulk cleanup are only allowed while Pi is idle. The current session cannot be deleted.
 

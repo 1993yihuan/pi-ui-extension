@@ -14,6 +14,7 @@ const MAX_VISIBLE_SESSIONS = 5;
 const SESSION_ACTION_WIDTH = 4;
 const SESSION_TITLE_CELLS = " SESSIONS ↻ ".length;
 const CLEAR_OTHERS_CELL = " ⊗ ";
+const MANAGE_SESSIONS_CELL = " ≡ ";
 
 export type SessionListItem = {
   readonly id: string;
@@ -21,6 +22,7 @@ export type SessionListItem = {
   readonly modified: Date;
   readonly messageCount: number;
   readonly current: boolean;
+  readonly pinned?: boolean;
 };
 
 export type ResourceButtonId = "agents" | "skills" | "extensions" | "mcp";
@@ -33,6 +35,7 @@ export type SessionPanelOptions = {
   readonly onRename: (session: SessionListItem) => void;
   readonly onDelete: (session: SessionListItem) => void;
   readonly onDeleteOthers: () => void;
+  readonly onOpenManager?: () => void;
   readonly onOpenResources: (button: ResourceButtonId) => void;
   readonly now?: () => number;
 };
@@ -102,23 +105,32 @@ function clearOthersSpan(renderWidth: number): { readonly start: number; readonl
   return { start: glyphStart - 1, end: glyphStart + CLEAR_OTHERS_CELL.length - 2 };
 }
 
-/** Title row with a right-aligned ⊗ button that trashes every other session. */
-function renderSessionTitleRow(theme: Theme, title: string, renderWidth: number, clearPressed: boolean): string {
+function manageSessionsSpan(renderWidth: number): { readonly start: number; readonly end: number } | undefined {
+  const clear = clearOthersSpan(renderWidth);
+  const innerWidth = Math.max(1, renderWidth - 2);
+  if (!clear || innerWidth < SESSION_TITLE_CELLS + CLEAR_OTHERS_CELL.length + MANAGE_SESSIONS_CELL.length + 4) return undefined;
+  return { start: clear.start - MANAGE_SESSIONS_CELL.length, end: clear.start - 1 };
+}
+
+/** Title row with a right-aligned manager (≡) and clear-others (⊗) buttons. */
+function renderSessionTitleRow(theme: Theme, title: string, renderWidth: number, clearPressed: boolean, managePressed: boolean, showManager: boolean): string {
   const innerWidth = Math.max(1, renderWidth - 2);
   const span = clearOthersSpan(renderWidth);
-  const reserved = span ? CLEAR_OTHERS_CELL.length + 1 : 0;
+  const manager = showManager ? manageSessionsSpan(renderWidth) : undefined;
+  const reserved = span ? CLEAR_OTHERS_CELL.length + 1 + (manager ? MANAGE_SESSIONS_CELL.length : 0) : 0;
   const borderWidth = Math.max(0, innerWidth - SESSION_TITLE_CELLS - reserved);
   const left = Math.floor(borderWidth / 2);
   const right = borderWidth - left;
   const border = theme.fg("accent", `╭${"─".repeat(left)} ${title} ${"─".repeat(right)}`);
   if (!span) return `${border}${theme.fg("accent", "╮")}`;
   return border +
+    (manager ? theme.fg(managePressed ? "warning" : "accent", MANAGE_SESSIONS_CELL) : "") +
     theme.fg(clearPressed ? "warning" : "accent", CLEAR_OTHERS_CELL) +
     theme.fg("accent", "─╮");
 }
 
 function formatSessionSummary(session: SessionListItem, width: number, now: number): string {
-  const marker = session.current ? "● " : "○ ";
+  const marker = `${session.pinned ? "★" : ""}${session.current ? "● " : "○ "}`;
   const metadata = `${session.messageCount} · ${formatRelativeTime(session.modified, now)}`;
   const fixedWidth = visibleWidth(marker) + visibleWidth(metadata) + 1;
   if (fixedWidth >= width) {
@@ -147,6 +159,7 @@ function sameTarget(left: SessionActionTarget | undefined, right: SessionActionT
 export class SessionPanel implements Component {
   private pressedResource: ResourceButtonId | undefined;
   private clearPressed = false;
+  private managePressed = false;
 
   private sessions: readonly SessionListItem[] = [];
   private loading = true;
@@ -221,7 +234,8 @@ export class SessionPanel implements Component {
       contains(box.clip, x, y) &&
       contains(box.rect, x, y) &&
       y === box.rect.y &&
-      !this.isClearOthersTarget(x, y),
+      !this.isClearOthersTarget(x, y) &&
+      !this.isManageSessionsTarget(x, y),
     );
   }
 
@@ -234,6 +248,15 @@ export class SessionPanel implements Component {
     if (!span) return false;
     const contentColumn = x - box.rect.x - 2;
     return contentColumn >= span.start && contentColumn <= span.end;
+  }
+
+  private isManageSessionsTarget(x: number, y: number): boolean {
+    if (!this.options.onOpenManager) return false;
+    const box = this.getLayoutBox();
+    if (!box || !contains(box.clip, x, y) || !contains(box.rect, x, y) || y !== box.rect.y) return false;
+    const span = manageSessionsSpan(Math.max(1, Math.min(box.rect.width, this.options.getDesiredWidth())));
+    const column = x - box.rect.x - 2;
+    return Boolean(span && column >= span.start && column <= span.end);
   }
 
   private invoke(target: SessionActionTarget): void {
@@ -261,6 +284,14 @@ export class SessionPanel implements Component {
     const isLeft = (mouse.button & 3) === 0;
 
     if (mouse.release) {
+      if (this.managePressed) {
+        this.managePressed = false;
+        if (this.isManageSessionsTarget(x, y)) {
+          queueMicrotask(() => { if (!this.disposed) this.options.onOpenManager?.(); });
+        }
+        this.options.tui.requestRender();
+        return { consume: true };
+      }
       if (this.pressedResource) {
         const pressed = this.pressedResource;
         this.pressedResource = undefined;
@@ -309,6 +340,13 @@ export class SessionPanel implements Component {
     }
 
     if (mouse.motion) {
+      if (this.managePressed) {
+        if (!this.isManageSessionsTarget(x, y)) {
+          this.managePressed = false;
+          this.options.tui.requestRender();
+        }
+        return { consume: true };
+      }
       if (this.refreshPressed) {
         if (!this.isRefreshTarget(x, y)) {
           this.refreshPressed = false;
@@ -343,6 +381,12 @@ export class SessionPanel implements Component {
     // Do not let wheel events over the fixed session panel scroll the main transcript.
     if (isWheel) return { consume: true };
     if (!isLeft) return undefined;
+
+    if (this.isManageSessionsTarget(x, y)) {
+      this.managePressed = true;
+      this.options.tui.requestRender();
+      return { consume: true };
+    }
 
     if (this.isClearOthersTarget(x, y)) {
       this.clearPressed = true;
@@ -439,7 +483,7 @@ export class SessionPanel implements Component {
 
     const divider = this.theme.fg("dim", `├${"─".repeat(Math.max(1, renderWidth - 2))}┤`);
     return [
-      renderSessionTitleRow(this.theme, this.loading || this.loadInFlight ? "SESSIONS …" : "SESSIONS ↻", renderWidth, this.clearPressed),
+      renderSessionTitleRow(this.theme, this.loading || this.loadInFlight ? "SESSIONS …" : "SESSIONS ↻", renderWidth, this.clearPressed, this.managePressed, Boolean(this.options.onOpenManager)),
       ...body,
       divider,
       resourceRow,
@@ -454,6 +498,7 @@ export class SessionPanel implements Component {
     this.disposed = true;
     this.refreshPressed = false;
     this.clearPressed = false;
+    this.managePressed = false;
     this.pressedResource = undefined;
     this.pressedTarget = undefined;
     this.uninstallInput();

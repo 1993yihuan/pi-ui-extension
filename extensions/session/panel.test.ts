@@ -236,3 +236,61 @@ test("hides ⊗ on narrow panels", async () => {
   assert.doesNotMatch(panel.render(16)[0]!, /⊗/);
   panel.dispose();
 });
+
+test("opens advanced manager from ≡ without triggering refresh or bulk trash", async () => {
+  let listener: TuiInputListener | undefined;
+  let opened = 0;
+  let cleared = 0;
+  let loads = 0;
+  const tui = {
+    addInputListener(next: TuiInputListener) { listener = next; return () => {}; },
+    requestRender() {},
+    currentLayout: undefined as any,
+  } as any;
+  const panel = new SessionPanel(theme, {
+    tui,
+    getDesiredWidth: () => 40,
+    loadSessions: async () => { loads++; return [session("one", "One session")]; },
+    onSelect() {}, onRename() {}, onDelete() {},
+    onDeleteOthers() { cleared++; },
+    onOpenResources() {},
+    onOpenManager() { opened++; },
+  });
+  tui.currentLayout = {
+    root: { component: panel, rect: { x: 10, y: 5, width: 40, height: 5 },
+      clip: { x: 10, y: 5, width: 40, height: 5 }, children: [] },
+  };
+  panel.refresh();
+  await flushAsync();
+  const header = panel.render(40)[0]!;
+  const managerColumn = header.indexOf("≡");
+  assert.ok(managerColumn > 0, "≡ must be present in the session header");
+  const x = 10 + managerColumn + 1;
+  assert.deepEqual(listener?.(`\u001b[<0;${x};6M`), { consume: true });
+  assert.deepEqual(listener?.(`\u001b[<0;${x};6m`), { consume: true });
+  await flushAsync();
+  assert.equal(opened, 1);
+  assert.equal(cleared, 0);
+  assert.equal(loads, 1);
+  panel.dispose();
+});
+
+test("pinned session remains visible ahead of the five-item sidebar limit", async () => {
+  const tui = { addInputListener: () => () => {}, requestRender() {} } as any;
+  const panel = new SessionPanel(theme, {
+    tui, getDesiredWidth: () => 42,
+    loadSessions: async () => [
+      { ...session("starred", "Important"), pinned: true },
+      ...Array.from({ length: 15 }, (_, index) => session(`other-${index}`, `Recent ${index}`)),
+    ],
+    onSelect() {}, onRename() {}, onDelete() {},
+    onDeleteOthers() {}, onOpenResources() {},
+  });
+  panel.refresh();
+  await flushAsync();
+  const output = panel.render(42).join("\n");
+  assert.match(output, /★○ Important/);
+  assert.match(output, /Recent 3/);
+  assert.doesNotMatch(output, /Recent 4/);
+  panel.dispose();
+});
