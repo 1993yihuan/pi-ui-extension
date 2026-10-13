@@ -130,10 +130,11 @@ Compact 效果示例：
 
 ### 6. Tool / MCP 调用统计
 
-Tool View 会将调用拆成两类展示：
+Tool View 根据调用来源拆分展示：
 
-- `TOOLS`
-- `MCP`
+- `DIRECT TOOLS`：模型直接发起的顶层工具调用，包括 Codemode 父调用。
+- `NESTED TOOLS`：工具内部通过 Pi `executeTool()` 执行的调用，例如 Codemode 内部的 `bash`、`read`。
+- `MCP`：归属到 MCP Server 的调用，合并不同调用来源。
 
 每一项使用：
 
@@ -141,13 +142,22 @@ Tool View 会将调用拆成两类展示：
 当前提问调用数 / 当前 Session 累计调用数
 ```
 
-例如：
+示例（右侧累计数以当前选中会话的 active branch 为准）：
 
 ```text
-task_todos                         1/5
+DIRECT TOOLS
+codemode                         16/32
+NESTED TOOLS
+bash                             15/30
+task_todos                        6/15
+read                              4/8
+MCP
+my-mcp-server                     1/3
 ```
 
-统计会跟随当前 active branch 重建，切换分支或恢复 Session 时不会简单沿用旧分支的累计结果。
+`codemode` 的父调用只在 `DIRECT TOOLS` 中计一次；Codemode 内部实际执行完成的工具分别计入 `NESTED TOOLS`。同名工具如果既有直接调用又有内嵌调用，会出现在不同分组并分别计数。`MCP` 表示对 MCP Server 的调用归属，不是额外的工具执行，因此**不能与 Direct / Nested 数量相加**。左侧表示当前运行次数，在新一轮运行、会话重载或分支切换后重置；右侧表示当前 active branch 的整个会话累计次数。
+
+实时计数来自 `tool_execution_end` 事件，并根据 `parentToolCallId` 区分内嵌调用；重载或切换分支时，同时恢复顶层工具结果和 Pi 持久化的 `nestedCalls.calls`，通过 tool-call ID 去重。MCP 状态变化重新归属调用，但不会重复累计历史结果。右边是当前 active branch 累计数，左边会在新运行、重载或切换分支时重置。
 
 对于通过 MCP gateway、`mcpScript` 等路径发起的调用，扩展会尽量归属到实际 MCP Server，而不是只统计为一个模糊的外层工具调用。
 
@@ -191,7 +201,7 @@ Pi 会安装 package，并将声明写入个人配置：
 如果希望固定版本：
 
 ```bash
-pi install npm:pi-ui-extension@1.2.2
+pi install npm:pi-ui-extension@1.2.3
 ```
 
 或者：
@@ -199,7 +209,7 @@ pi install npm:pi-ui-extension@1.2.2
 ```json
 {
   "packages": [
-    "npm:pi-ui-extension@1.2.2"
+    "npm:pi-ui-extension@1.2.3"
   ]
 }
 ```
@@ -227,7 +237,7 @@ pi install git:github.com/1993yihuan/pi-ui-extension
 固定到 Git tag：
 
 ```bash
-pi install git:github.com/1993yihuan/pi-ui-extension@v1.2.2
+pi install git:github.com/1993yihuan/pi-ui-extension@v1.2.3
 ```
 
 ### 临时加载本地源码

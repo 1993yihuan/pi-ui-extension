@@ -1,10 +1,13 @@
 import type { ToolExecutionEndEvent } from "@earendil-works/pi-coding-agent";
 
 export type ToolUsageKind = "tool" | "mcp";
+export type ToolUsageScope = "direct" | "nested";
 
 export type ToolUsageCount = {
   readonly name: string;
   readonly kind: ToolUsageKind;
+  /** Omitted for direct tools and MCP aggregates; nested tool calls are explicit. */
+  readonly scope?: "nested";
   /** Calls made while answering the current user question. */
   readonly exchange: number;
   readonly session: number;
@@ -25,9 +28,14 @@ export type ToolUsageTracker = {
   getSnapshot(): ToolUsageSnapshot;
 };
 
-type MutableUsageCount = { readonly name: string; readonly kind: ToolUsageKind; count: number };
+type MutableUsageCount = { readonly name: string; readonly kind: ToolUsageKind; readonly scope?: "nested"; count: number };
 type MutableCounts = Map<string, MutableUsageCount>;
-type RecordedExecution = { readonly toolName: string; readonly result: unknown };
+type RecordedExecution = {
+  readonly toolName: string;
+  readonly result: unknown;
+  readonly id?: string;
+  readonly scope: ToolUsageScope;
+};
 type McpScriptCall = {
   readonly operation?: unknown;
   readonly path?: unknown;
@@ -64,16 +72,16 @@ function nonEmptyString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
 }
 
-function countKey(name: string, kind: ToolUsageKind): string {
-  return `${kind}\0${name}`;
+function countKey(name: string, kind: ToolUsageKind, scope: ToolUsageScope = "direct"): string {
+  // MCP groups aggregate both direct and nested invocations by server.
+  return `${kind}\0${kind === "mcp" ? "" : scope}\0${name}`;
 }
 
-function increment(counts: MutableCounts, name: string, kind: ToolUsageKind, amount = 1): void {
-  if (amount <= 0) return;
-  const key = countKey(name, kind);
+function increment(counts: MutableCounts, name: string, kind: ToolUsageKind, scope: ToolUsageScope = "direct"): void {
+  const key = countKey(name, kind, scope);
   const current = counts.get(key);
-  if (current) current.count += amount;
-  else counts.set(key, { name, kind, count: amount });
+  if (current) current.count++;
+  else counts.set(key, { name, kind, ...(kind === "tool" && scope === "nested" ? { scope: "nested" as const } : {}), count: 1 });
 }
 
 function contextModeServer(toolName: string): string | undefined {
@@ -158,19 +166,64 @@ function parseUsage(toolName: string, result: unknown, knownServers: readonly st
 }
 
 function snapshotCounts(exchangeCounts: MutableCounts, sessionCounts: MutableCounts): ToolUsageSnapshot {
-  const kindOrder: Record<ToolUsageKind, number> = { tool: 0, mcp: 1 };
+  const groupOrder = (count: Pick<ToolUsageCount, "kind" | "scope">): number =>
+    count.kind === "mcp" ? 2 : count.scope === "nested" ? 1 : 0;
+  // A finished event may precede its parent result being persisted. Always
+  // include live-only rows even when session counts were just rebuilt.
+  const keys = new Set([...sessionCounts.keys(), ...exchangeCounts.keys()]);
   return Object.freeze({
     counts: Object.freeze(
-      [...sessionCounts.values()]
-        .map(({ name, kind, count: session }) => Object.freeze({
-          name,
-          kind,
-          exchange: exchangeCounts.get(countKey(name, kind))?.count ?? 0,
-          session,
-        }))
-        .sort((left, right) => kindOrder[left.kind] - kindOrder[right.kind] || right.exchange - left.exchange || right.session - left.session || left.name.localeCompare(right.name)),
+      [...keys].map((key) => {
+        const entry = sessionCounts.get(key) ?? exchangeCounts.get(key)!;
+        return Object.freeze({
+          name: entry.name,
+          kind: entry.kind,
+          ...(entry.scope ? { scope: entry.scope } : {}),
+          exchange: exchangeCounts.get(key)?.count ?? 0,
+          session: sessionCounts.get(key)?.count ?? 0,
+        });
+      }).sort((left, right) =>
+        groupOrder(left) - groupOrder(right) ||
+        right.exchange - left.exchange ||
+        right.session - left.session ||
+        left.name.localeCompare(right.name)),
     ),
   });
+}
+
+/** Rehydrate only bounded, persisted call metadata; never read arguments or output. */
+function nestedExecutions(raw: unknown): RecordedExecution[] {
+  const calls = asRecord(raw)?.calls;
+  if (!Array.isArray(calls)) return [];
+  const executions: RecordedExecution[] = [];
+  for (const rawCall of calls) {
+    const call = asRecord(rawCall);
+    const toolName = nonEmptyString(call?.name);
+    if (!toolName) continue;
+    executions.push({
+      toolName, result: undefined, scope: "nested",
+      ...(nonEmptyString(call?.id) ? { id: nonEmptyString(call?.id) } : {}),
+    });
+  }
+  return executions;
+}
+
+function branchExecutions(entries: readonly unknown[]): RecordedExecution[] {
+  const executions: RecordedExecution[] = [];
+  for (const value of entries) {
+    const entry = asRecord(value);
+    if (entry?.type !== "message") continue;
+    const message = asRecord(entry.message);
+    if (message?.role !== "toolResult") continue;
+    const toolName = nonEmptyString(message.toolName);
+    if (!toolName) continue;
+    executions.push({
+      toolName, scope: "direct", result: { details: message.details },
+      ...(nonEmptyString(message.toolCallId) ? { id: nonEmptyString(message.toolCallId) } : {}),
+    });
+    executions.push(...nestedExecutions(message.nestedCalls));
+  }
+  return executions;
 }
 
 export function createToolUsageTracker(
@@ -180,15 +233,22 @@ export function createToolUsageTracker(
   let exchangeCounts: MutableCounts = new Map();
   let sessionCounts: MutableCounts = new Map();
   let exchangeExecutions: RecordedExecution[] = [];
+  let recordedIds = new Set<string>();
   for (const name of initialToolNames) increment(sessionCounts, name, "tool");
 
-  const recordParsed = (counts: MutableCounts, usage: ParsedUsage): void => {
-    if (usage.topLevelName) increment(counts, usage.topLevelName, "tool");
+  const recordExecution = (counts: MutableCounts, execution: RecordedExecution, knownServers: readonly string[]): void => {
+    const usage = parseUsage(execution.toolName, execution.result, knownServers);
+    if (usage.topLevelName) increment(counts, usage.topLevelName, "tool", execution.scope);
     for (const server of usage.mcpServers) increment(counts, server, "mcp");
   };
-
-  const recordExecution = (counts: MutableCounts, execution: RecordedExecution, knownServers: readonly string[]): void => {
-    recordParsed(counts, parseUsage(execution.toolName, execution.result, knownServers));
+  const unique = (executions: readonly RecordedExecution[]): RecordedExecution[] => {
+    const seen = new Set<string>();
+    return executions.filter((execution) => {
+      if (!execution.id) return true;
+      if (seen.has(execution.id)) return false;
+      seen.add(execution.id);
+      return true;
+    });
   };
 
   return {
@@ -198,26 +258,42 @@ export function createToolUsageTracker(
     },
     resetSession(entries, mcpServerNames = getMcpServerNames(), options = {}): void {
       const knownServers = [...mcpServerNames];
+      const fromBranch = unique(branchExecutions(entries));
+      const branchIds = new Set(fromBranch.flatMap((execution) => execution.id ? [execution.id] : []));
       sessionCounts = new Map();
-      for (const count of usageCountsFromBranch(entries, knownServers)) {
-        increment(sessionCounts, count.name, count.kind);
-      }
+      for (const execution of fromBranch) recordExecution(sessionCounts, execution, knownServers);
       if (options.preserveExchange === true) {
         exchangeCounts = new Map();
-        for (const execution of exchangeExecutions) {
+        for (const execution of unique(exchangeExecutions)) {
           recordExecution(exchangeCounts, execution, knownServers);
+          if (!execution.id || !branchIds.has(execution.id)) recordExecution(sessionCounts, execution, knownServers);
+          if (execution.id) branchIds.add(execution.id);
         }
       } else {
         exchangeCounts = new Map();
         exchangeExecutions = [];
       }
+      recordedIds = branchIds;
     },
     record(event): void {
-      const execution = { toolName: event.toolName, result: event.result };
-      exchangeExecutions.push(execution);
       const knownServers = [...getMcpServerNames()];
-      recordExecution(exchangeCounts, execution, knownServers);
-      recordExecution(sessionCounts, execution, knownServers);
+      const executions: RecordedExecution[] = [{
+        toolName: event.toolName,
+        result: event.result,
+        scope: nonEmptyString(event.parentToolCallId) ? "nested" : "direct",
+        ...(nonEmptyString(event.toolCallId) ? { id: nonEmptyString(event.toolCallId) } : {}),
+      }];
+      // Some integrations attach nestedCalls directly to the end result.
+      // The normal Pi event path emits each nested call separately; IDs
+      // prevent re-counting the same call when its parent also reports it.
+      if (!event.parentToolCallId) executions.push(...nestedExecutions(asRecord(event.result)?.nestedCalls));
+      for (const execution of executions) {
+        if (execution.id && recordedIds.has(execution.id)) continue;
+        if (execution.id) recordedIds.add(execution.id);
+        exchangeExecutions.push(execution);
+        recordExecution(exchangeCounts, execution, knownServers);
+        recordExecution(sessionCounts, execution, knownServers);
+      }
     },
     getSnapshot(): ToolUsageSnapshot {
       return snapshotCounts(exchangeCounts, sessionCounts);
@@ -227,18 +303,15 @@ export function createToolUsageTracker(
 
 type UsageName = { readonly name: string; readonly kind: ToolUsageKind };
 
-/** Reconstruct completed tool and MCP-server totals from the active branch. */
+/** Reconstruct both direct results and persisted Pi nestedCalls from the active branch. */
 function usageCountsFromBranch(entries: readonly unknown[], mcpServerNames: Iterable<string> = []): UsageName[] {
   const counts: UsageName[] = [];
   const knownServers = [...mcpServerNames];
-  for (const value of entries) {
-    const entry = asRecord(value);
-    if (entry?.type !== "message") continue;
-    const message = asRecord(entry.message);
-    if (message?.role !== "toolResult") continue;
-    const toolName = nonEmptyString(message.toolName);
-    if (!toolName) continue;
-    const usage = parseUsage(toolName, { details: message.details }, knownServers);
+  const seen = new Set<string>();
+  for (const execution of branchExecutions(entries)) {
+    if (execution.id && seen.has(execution.id)) continue;
+    if (execution.id) seen.add(execution.id);
+    const usage = parseUsage(execution.toolName, execution.result, knownServers);
     if (usage.topLevelName) counts.push({ name: usage.topLevelName, kind: "tool" });
     counts.push(...usage.mcpServers.map((name) => ({ name, kind: "mcp" as const })));
   }

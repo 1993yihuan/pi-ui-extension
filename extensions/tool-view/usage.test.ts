@@ -3,15 +3,124 @@ import test from "node:test";
 import type { ToolExecutionEndEvent } from "@earendil-works/pi-coding-agent";
 import { createToolUsageTracker, toolNamesFromBranch } from "./usage.ts";
 
+let nextCallId = 0;
 function ended(toolName: string, details: unknown = {}): ToolExecutionEndEvent {
   return {
     type: "tool_execution_end",
-    toolCallId: `${toolName}-call`,
+    toolCallId: `${toolName}-call-${++nextCallId}`,
     toolName,
     result: { content: [], details },
     isError: false,
   };
 }
+
+test("direct, nested, parent snapshot and restored branch share one call identity", () => {
+  const tracker = createToolUsageTracker([], () => ["docs"]);
+  const nestedCall = { id: "outer/1", name: "mcp__docs__search", status: "ok" };
+  const directRead = { type: "message", message: {
+    role: "toolResult", toolCallId: "read-1", toolName: "read",
+  } };
+  const parent = { type: "message", message: {
+    role: "toolResult", toolCallId: "outer", toolName: "codemode",
+    nestedCalls: { calls: [nestedCall] },
+  } };
+  tracker.startExchange();
+  tracker.record({ ...ended("read"), toolCallId: "read-1" });
+  tracker.record({ ...ended("mcp__docs__search"), toolCallId: "outer/1", parentToolCallId: "outer" });
+  tracker.record({ ...ended("codemode"), toolCallId: "outer", result: {
+    content: [], details: {}, nestedCalls: { calls: [nestedCall] },
+  } });
+  tracker.record({ ...ended("codemode"), toolCallId: "outer" }); // replay of the same event
+
+  const before = tracker.getSnapshot().counts;
+  assert.deepEqual(before, [
+    { name: "codemode", kind: "tool", exchange: 1, session: 1 },
+    { name: "read", kind: "tool", exchange: 1, session: 1 },
+    { name: "mcp__docs__search", kind: "tool", scope: "nested", exchange: 1, session: 1 },
+    { name: "docs", kind: "mcp", exchange: 1, session: 1 },
+  ]);
+  tracker.resetSession([directRead, parent], ["docs"], { preserveExchange: true });
+  assert.deepEqual(tracker.getSnapshot().counts, before, "MCP refresh must not double-count events already in the branch");
+  tracker.resetSession([directRead, parent], ["docs"], { preserveExchange: true });
+  assert.deepEqual(tracker.getSnapshot().counts, before);
+  tracker.resetSession([directRead, parent], ["docs"]);
+  assert.deepEqual(tracker.getSnapshot().counts, before.map((count) => ({ ...count, exchange: 0 })));
+  tracker.resetSession([directRead], ["docs"]);
+  assert.deepEqual(tracker.getSnapshot().counts, [
+    { name: "read", kind: "tool", exchange: 0, session: 1 },
+  ], "switching branches must drop the old nested tool results");
+});
+
+test("anonymized Pi 1.2.0 session reconstructs 32 parent results and 61 nested calls", () => {
+  // Derived from the user's real session tool NAMES and counts only.
+  // No prompts, args, file paths, model responses or original identifiers.
+  const previous = [
+    ...Array(15).fill("bash"), ...Array(9).fill("task_todos"),
+    ...Array(4).fill("read"), "write", "web_search", "fetch_content", "get_search_content",
+  ];
+  const current = [
+    ...Array(15).fill("bash"), ...Array(6).fill("task_todos"),
+    ...Array(4).fill("read"), ...Array(4).fill("write"),
+  ];
+  const toBranch = (names: string[], prefix: string) => {
+    const batches = Array.from({ length: 16 }, () => [] as string[]);
+    names.forEach((name, i) => batches[i % 16]!.push(name));
+    return batches.map((calls, index) => {
+      const id = `${prefix}-${index}`;
+      return { type: "message", message: {
+        role: "toolResult" as const, toolName: "codemode", toolCallId: id,
+        nestedCalls: { calls: calls.map((name, child) => ({ id: `${id}/${child}`, name, status: "ok" })) },
+      } };
+    });
+  };
+  const oldBranch = toBranch(previous, "old");
+  const newBranch = toBranch(current, "new");
+  const tracker = createToolUsageTracker();
+  tracker.resetSession(oldBranch);
+  tracker.startExchange();
+  for (const entry of newBranch) {
+    const parent = entry.message;
+    for (const child of parent.nestedCalls.calls) {
+      tracker.record({
+        ...ended(child.name), toolCallId: child.id, parentToolCallId: parent.toolCallId,
+      });
+    }
+    tracker.record({
+      ...ended("codemode"), toolCallId: parent.toolCallId,
+      result: { content: [], details: {}, nestedCalls: parent.nestedCalls },
+    });
+  }
+  const expected = [
+    ["codemode", "direct", 16, 32],
+    ["bash", "nested", 15, 30],
+    ["task_todos", "nested", 6, 15],
+    ["read", "nested", 4, 8],
+    ["write", "nested", 4, 5],
+    ["fetch_content", "nested", 0, 1],
+    ["get_search_content", "nested", 0, 1],
+    ["web_search", "nested", 0, 1],
+  ] as const;
+  const summary = () => Object.fromEntries(tracker.getSnapshot().counts.map((row) =>
+    [`${row.scope ?? "direct"}:${row.name}`, [row.exchange, row.session]]));
+  const check = () => {
+    const actual = summary();
+    assert.equal(Object.keys(actual).length, expected.length);
+    for (const [name, scope, exchange, session] of expected) {
+      assert.deepEqual(actual[`${scope}:${name}`], [exchange, session], `${scope} ${name}`);
+    }
+  };
+  check();
+  // MCP discovery rebuilds the current branch while preserving live exchange.
+  tracker.resetSession([...oldBranch, ...newBranch], [], { preserveExchange: true });
+  check();
+  tracker.resetSession([...oldBranch, ...newBranch], [], { preserveExchange: true });
+  check();
+  // On /reload all historical results remain, but current-question counters reset.
+  tracker.resetSession([...oldBranch, ...newBranch]);
+  for (const [name, scope, , session] of expected) {
+    assert.deepEqual(summary()[`${scope}:${name}`], [0, session]);
+  }
+});
 
 test("tracks top-level tools for the current question and session", () => {
   const tracker = createToolUsageTracker(["read", "read", "bash"]);
@@ -165,11 +274,11 @@ test("rebuilds current-question MCP counts when server discovery arrives late", 
   };
   const entries = [{
     type: "message",
-    message: { role: "toolResult", toolName: "mcpScript", details },
+    message: { role: "toolResult", toolName: "mcpScript", toolCallId: "script-live", details },
   }];
   const tracker = createToolUsageTracker([], () => servers);
   tracker.startExchange();
-  tracker.record(ended("mcpScript", details));
+  tracker.record({ ...ended("mcpScript", details), toolCallId: "script-live" });
   servers = ["team_core"];
   tracker.resetSession(entries, servers, { preserveExchange: true });
 

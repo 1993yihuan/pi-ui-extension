@@ -31,6 +31,32 @@ function renderPanel(): string[] {
   }).render(60);
 }
 
+test("renders separate Direct and Nested groups for same-named tool calls", () => {
+  const tui = { addInputListener: () => () => {}, requestRender() {} } as any;
+  const theme = { fg: (_color: string, text: string) => text } as any;
+  const panel = new ToolViewPanel(theme, {
+    tui,
+    getDesiredWidth: () => 54,
+    getMode: () => "compact",
+    getUsage: () => ({ counts: [
+      { name: "codemode", kind: "tool", exchange: 1, session: 2 },
+      { name: "read", kind: "tool", exchange: 1, session: 2 },
+      { name: "read", kind: "tool", scope: "nested", exchange: 3, session: 8 },
+      { name: "bash", kind: "tool", scope: "nested", exchange: 5, session: 30 },
+      { name: "docs", kind: "mcp", exchange: 1, session: 2 },
+    ] }),
+    onSelect() {},
+  });
+  const rendered = panel.render(54).join("\n");
+  assert.match(rendered, /DIRECT TOOLS[\s\S]*codemode\s+1\/2[\s\S]*read\s+1\/2/);
+  assert.match(rendered, /NESTED TOOLS[\s\S]*read\s+3\/8/);
+  assert.match(rendered, /NESTED TOOLS[\s\S]*bash\s+5\/30/);
+  assert.match(rendered, /MCP[\s\S]*docs\s+1\/2/);
+  assert.ok(rendered.indexOf("DIRECT TOOLS") < rendered.indexOf("NESTED TOOLS"));
+  assert.ok(rendered.indexOf("NESTED TOOLS") < rendered.indexOf("MCP"));
+  panel.dispose();
+});
+
 test("keeps the mode selector visible alongside Tool and MCP usage", () => {
   const lines = renderPanel();
   const output = lines.join("\n");

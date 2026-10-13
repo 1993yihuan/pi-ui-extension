@@ -129,10 +129,11 @@ Changing the Tool View mode also updates previously rendered tool rows in the cu
 
 ### 6. Tool / MCP usage statistics
 
-Tool View groups usage into:
+Tool View groups usage by execution source:
 
-- `TOOLS`
-- `MCP`
+- `DIRECT TOOLS`: top-level model-issued tool calls, including the Codemode parent.
+- `NESTED TOOLS`: tools invoked by other tools via Pi `executeTool()` (for example, `bash` or `read` inside Codemode).
+- `MCP`: calls attributed to each known MCP server, aggregated across execution sources.
 
 Each entry is shown as:
 
@@ -140,13 +141,22 @@ Each entry is shown as:
 current-question calls / current-session calls
 ```
 
-Example:
+Example (the right column counts the currently selected session branch):
 
 ```text
-task_todos                         1/5
+DIRECT TOOLS
+codemode                         16/32
+NESTED TOOLS
+bash                             15/30
+task_todos                        6/15
+read                              4/8
+MCP
+my-mcp-server                     1/3
 ```
 
-Usage state is rebuilt when the active branch changes, so restored sessions and branch switches do not blindly reuse counts from another branch.
+A top-level `codemode` invocation is counted once in `DIRECT TOOLS`; each completed tool it invokes is counted in `NESTED TOOLS`. If the same tool name is used directly and within Codemode, it appears in both sections with separate counts. `MCP` is a server attribution of tool activity (not an additional tool invocation), so don't add MCP totals to Direct + Nested totals. The left column is the current run; it resets at the next run, after a session reload, or on a branch switch. The right column is the cumulative total of the active session branch.
+
+Live usage is counted from `tool_execution_end` events and distinguishes nested calls with `parentToolCallId`. On reload or branch changes, the extension restores both top-level tool results and Pi's persisted `nestedCalls.calls`, de-duplicated by tool-call ID. MCP status changes reattribute live calls without doubling historical results. The right-hand number is the current active-branch total; the left-hand number resets for a new run, reload, or branch switch.
 
 For calls made through MCP gateways, `mcpScript`, and similar wrappers, the extension attempts to attribute activity to the actual MCP server instead of counting only the outer wrapper tool.
 
@@ -190,7 +200,7 @@ Example configuration:
 To pin a specific version:
 
 ```bash
-pi install npm:pi-ui-extension@1.2.2
+pi install npm:pi-ui-extension@1.2.3
 ```
 
 or:
@@ -198,7 +208,7 @@ or:
 ```json
 {
   "packages": [
-    "npm:pi-ui-extension@1.2.2"
+    "npm:pi-ui-extension@1.2.3"
   ]
 }
 ```
@@ -226,7 +236,7 @@ Configuration form:
 Pin to a Git tag:
 
 ```bash
-pi install git:github.com/1993yihuan/pi-ui-extension@v1.2.2
+pi install git:github.com/1993yihuan/pi-ui-extension@v1.2.3
 ```
 
 ### Temporary local-source testing

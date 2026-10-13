@@ -36,7 +36,7 @@ test("entry wires early/late MCP status into restored and live usage without dou
   const emit = async (name: string, event: any = {}) => { for (const fn of handlers.get(name) ?? []) await fn(event, ctx); };
   const status = (names: string[]) => bus.get("pi-mcp-adapter/status/v1")({ version: 1, servers: names.map(name => ({ name })) });
   const details = (server: string) => ({ mode: "script", calls: [{ operation: "call", path: `${server}_ping`, ok: true }] });
-  const saved = (server: string) => ({ type: "message", message: { role: "toolResult", toolName: "mcpScript", details: details(server) } });
+  const saved = (server: string, id = `saved-${server}`) => ({ type: "message", message: { role: "toolResult", toolCallId: id, toolName: "mcpScript", details: details(server) } });
   const output = () => renderLayoutFrame(tui.layoutRoot, 240, 100, () => {}).lines.join("\n");
   try {
     await piUiExtension(pi);
@@ -45,7 +45,7 @@ test("entry wires early/late MCP status into restored and live usage without dou
     await emit("session_start");
     assert.match(output(), /early\s+0\/1/);
     await emit("before_agent_start", { messageType: "user", prompt: "first", systemPromptOptions: {} });
-    branch.push({ type: "message", message: { role: "toolResult", toolName: "mcp__native_mcp__ping", details: {} } });
+    branch.push({ type: "message", message: { role: "toolResult", toolCallId: "native-1", toolName: "mcp__native_mcp__ping", details: {} } });
     await emit("tool_execution_end", { toolCallId: "native-1", toolName: "mcp__native_mcp__ping", isError: false, result: { details: {} } });
     assert.match(output(), /native_mcp\s+1\/1/);
     // Pi 1.2 also sends before_agent_start for custom-triggered runs.
@@ -65,14 +65,14 @@ test("entry wires early/late MCP status into restored and live usage without dou
     registrations = [];
     await emit("mcp_servers_change", { servers: [] });
     assert.doesNotMatch(output(), /native_mcp\s+1\/1/);
-    branch.push(saved("late"));
+    branch.push(saved("late", "call-1"));
     await emit("tool_execution_end", { toolCallId: "call-1", toolName: "mcpScript", isError: false, result: { details: details("late") } });
     assert.doesNotMatch(output(), /late\s+1\/1/);
     status(["early", "late"]);
     assert.match(output(), /late\s+1\/1/);
     status(["early", "late"]);
     assert.match(output(), /late\s+1\/1/);
-    branch.push(saved("late"));
+    branch.push(saved("late", "call-2"));
     await emit("tool_execution_end", { toolCallId: "call-2", toolName: "mcpScript", isError: false, result: { details: details("late") } });
     assert.match(output(), /late\s+2\/2/);
     branch = [saved("early")];

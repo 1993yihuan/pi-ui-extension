@@ -180,7 +180,7 @@ export class ToolViewPanel implements Component {
     const usage = this.options.getUsage();
     const grouped = groupUsageCounts(usage?.counts ?? []);
     const usageRows: string[] = [];
-    const appendGroup = (label: "TOOLS" | "MCP", counts: readonly ToolUsageCount[]): void => {
+    const appendGroup = (label: string, counts: readonly ToolUsageCount[]): void => {
       if (counts.length === 0) return;
       usageRows.push(panelContent(this.theme, label, "accent", contentWidth));
       for (const count of counts) {
@@ -192,7 +192,8 @@ export class ToolViewPanel implements Component {
         ));
       }
     };
-    appendGroup("TOOLS", grouped.tool);
+    appendGroup("DIRECT TOOLS", grouped.tool.filter((count) => count.scope !== "nested"));
+    appendGroup("NESTED TOOLS", grouped.tool.filter((count) => count.scope === "nested"));
     appendGroup("MCP", grouped.mcp);
 
     const lines = [
