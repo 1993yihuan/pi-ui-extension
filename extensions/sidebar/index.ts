@@ -21,7 +21,13 @@ const MIN_SIDEBAR_WIDTH = 18;
 const MAX_SIDEBAR_WIDTH = 72;
 const MIN_MAIN_WIDTH = 64;
 
-type LayoutTui = ViewportTUI & { layoutRoot?: Component };
+type LayoutTui = ViewportTUI & { layoutRoot?: unknown };
+
+function isComponent(value: unknown): value is Component {
+  return value !== null && typeof value === "object" &&
+    typeof (value as Component).render === "function" &&
+    typeof (value as Component).invalidate === "function";
+}
 type MutableHStack = HStack & { entries: Array<{ basis?: number | "auto" }> };
 type MutableVStack = VStack & { entries: Array<{ maxSize?: number }> };
 const RESET_STYLE = "\x1b[0m";
@@ -84,7 +90,9 @@ export function installSidebar(
   // fail closed if that implementation detail changes in a future Pi release.
   const layoutTui = tui as LayoutTui;
   const previousRoot = layoutTui.layoutRoot;
-  if (!previousRoot) return noopController();
+  // layoutRoot is an internal TUI field. If Pi changes its shape, do not mount
+  // a split layout over an unknown root or disrupt the normal transcript.
+  if (!isComponent(previousRoot)) return noopController();
 
   let sidebarWidth = Math.max(MIN_SIDEBAR_WIDTH, Math.round(tui.terminal.columns * SIDEBAR_RATIO));
   const clampSidebarWidth = (width: number): number => Math.min(
@@ -123,9 +131,13 @@ export function installSidebar(
     { gap: 0, align: "stretch" },
   );
   const sidebarScroll = createSidebarScrollView(sidebar, theme, () => tui.terminal.rows);
-  const sidebarEntries = (sidebar as MutableVStack).entries;
+  const sidebarEntries = (sidebar as unknown as { entries?: MutableVStack["entries"] }).entries;
   layoutEntries.forEach(({ definition, instance }, index) => {
-    mountedPanels.set(definition.id, { definition, instance, entry: sidebarEntries[index * 2] });
+    const entry = Array.isArray(sidebarEntries) ? sidebarEntries[index * 2] : undefined;
+    mountedPanels.set(definition.id, {
+      definition, instance,
+      entry: entry?.component === instance.component ? entry : undefined,
+    });
   });
   function syncPanelLayout(): void {
     for (const panel of mountedPanels.values()) {
@@ -157,7 +169,9 @@ export function installSidebar(
       visible: ({ width }) => width >= MIN_SPLIT_WIDTH,
     },
   ]);
-  const sidebarEntry = (splitRoot as MutableHStack).entries[2];
+  const splitEntries = (splitRoot as unknown as { entries?: MutableHStack["entries"] }).entries;
+  const sidebarEntry = Array.isArray(splitEntries) && splitEntries[2]?.component === sidebarScroll
+    ? splitEntries[2] : undefined;
   const applySidebarWidth = (width: number): void => {
     const next = clampSidebarWidth(width);
     if (next === sidebarWidth || !sidebarEntry) return;
@@ -165,19 +179,35 @@ export function installSidebar(
     sidebarEntry.basis = next;
     tui.requestRender();
   };
-  layoutTui.setLayoutRoot(splitRoot);
-  const previewDivider = new SidebarDivider(
-    (line) => theme.fg("accent", line),
-    () => tui.terminal.rows,
-  );
-  const uninstallMouseResize = installMouseResize({
-    tui,
-    preview: previewDivider,
-    isVisible: () => tui.terminal.columns >= MIN_SPLIT_WIDTH,
-    getDividerX: () => tui.terminal.columns - sidebarWidth,
-    clampSidebarWidth,
-    commitSidebarWidth: applySidebarWidth,
-  });
+  let uninstallMouseResize: () => void = () => {};
+  try {
+    layoutTui.setLayoutRoot(splitRoot);
+    // Resize uses Pi's internal Stack.entries. If unavailable, retain the
+    // sidebar with its initial width instead of mutating an unknown API.
+    if (sidebarEntry) {
+      const previewDivider = new SidebarDivider(
+        (line) => theme.fg("accent", line),
+        () => tui.terminal.rows,
+      );
+      uninstallMouseResize = installMouseResize({
+        tui,
+        preview: previewDivider,
+        isVisible: () => tui.terminal.columns >= MIN_SPLIT_WIDTH,
+        getDividerX: () => tui.terminal.columns - sidebarWidth,
+        clampSidebarWidth,
+        commitSidebarWidth: applySidebarWidth,
+      });
+    }
+  } catch {
+    // An incompatible TUI must not leave the transcript wrapped in our root.
+    try {
+      if (layoutTui.layoutRoot === splitRoot) layoutTui.setLayoutRoot(previousRoot);
+    } catch { /* Host layout setter failed during cleanup. */ }
+    for (const instance of createdInstances.reverse()) {
+      try { instance.dispose?.(); } catch { /* Continue cleaning up. */ }
+    }
+    return noopController();
+  }
 
   let disposed = false;
   return {

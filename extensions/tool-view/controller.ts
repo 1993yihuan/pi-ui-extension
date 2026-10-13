@@ -27,6 +27,9 @@ type RendererState = {
   nativeCallComponent?: ReturnType<NonNullable<ToolRenderers["renderCall"]>>;
   nativeResultComponent?: ReturnType<NonNullable<ToolRenderers["renderResult"]>>;
   nativeBox?: Box;
+  compactStartedAt?: number;
+  compactTicker?: ReturnType<typeof setInterval>;
+  compactInvalidate?: () => void;
 };
 
 interface StoredMode {
@@ -178,6 +181,32 @@ export async function installToolViewController(
   let sessionGeneration = 0;
   let modeChangeQueue = Promise.resolve();
   const modeListeners = new Set<(mode: ToolViewMode) => void>();
+  const tickingRows = new Set<RendererState>();
+  const stopTicker = (state: RendererState): void => {
+    if (state.compactTicker) clearInterval(state.compactTicker);
+    state.compactTicker = undefined;
+    state.compactStartedAt = undefined;
+    state.compactInvalidate = undefined;
+    tickingRows.delete(state);
+  };
+  const stopAllTickers = (): void => {
+    for (const state of tickingRows) stopTicker(state);
+  };
+  const syncTicker = (context: AnyRenderContext, isPartial: boolean): number | undefined => {
+    const state = context.state as RendererState;
+    if (!isPartial || mode !== "compact") {
+      stopTicker(state);
+      return undefined;
+    }
+    state.compactStartedAt ??= Date.now();
+    state.compactInvalidate = context.invalidate;
+    if (!state.compactTicker && typeof context.invalidate === "function") {
+      state.compactTicker = setInterval(() => state.compactInvalidate?.(), 1_000);
+      state.compactTicker.unref?.();
+      tickingRows.add(state);
+    }
+    return state.compactStartedAt;
+  };
 
   async function loadMode(): Promise<ToolViewMode> {
     try {
@@ -219,6 +248,7 @@ export async function installToolViewController(
     const sessionId = ctx.sessionManager.getSessionId();
     modeChangeQueue = modeChangeQueue.then(async () => {
       mode = nextMode;
+      if (mode !== "compact") stopAllTickers();
       let persistError: unknown;
       try {
         await persistMode(mode);
@@ -337,7 +367,7 @@ export async function installToolViewController(
     context: AnyRenderContext,
     options: ToolRenderResultOptions,
   ) {
-    if (toolName === "codemode") return renderCodemodeCompactResult(result, theme, context, options);
+    if (toolName === "codemode") return renderCodemodeCompactResult(result, theme, context, options, syncTicker(context, options.isPartial));
     const summary = COMPACT_SPECS[toolName]!.result(result, context, options);
     const statusColor = context.isError ? "error" : options.isPartial ? "warning" : "success";
     const icon = context.isError ? "✗ " : options.isPartial ? "… " : "✓ ";
@@ -389,6 +419,7 @@ export async function installToolViewController(
 
       renderResult(result, options, theme, context) {
         if (useNativeResult(context, options) && nativeDefinition) {
+          if (isCodemode) stopTicker(context.state as RendererState);
           const component = resultNativeRenderer(nativeDefinition, result, options, theme, context);
           if (nativeDefinition.renderShell === "self") return component;
           const state = context.state as RendererState;
@@ -399,6 +430,7 @@ export async function installToolViewController(
         }
         if (mode === "hidden") {
           const state = context.state as RendererState;
+          if (isCodemode) stopTicker(state);
           // If this row previously used a native streaming renderer (notably
           // bash), let its final render run once so timers/resources settle,
           // then discard the visual component.
@@ -457,6 +489,7 @@ export async function installToolViewController(
   });
 
   pi.on("session_start", (_event, ctx) => {
+    stopAllTickers();
     sessionGeneration++;
     activeSessionId = ctx.sessionManager.getSessionId();
     updateSkillRootsFromPromptOptions(
@@ -469,6 +502,7 @@ export async function installToolViewController(
   });
 
   pi.on("session_shutdown", (_event, ctx) => {
+    stopAllTickers();
     sessionGeneration++;
     activeSessionId = undefined;
     if (ctx.mode === "tui") ctx.ui.setStatus(MODE_STATUS_ID, undefined);

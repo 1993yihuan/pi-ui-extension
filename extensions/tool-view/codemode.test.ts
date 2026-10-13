@@ -140,6 +140,47 @@ test("Codemode uses the official native renderer in Normal, summary in Compact, 
   }
 });
 
+test("Codemode Compact estimates live elapsed time and stops ticking after completion", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "codemode-ticking-"));
+  let resolver: ToolRendererResolver | undefined;
+  const pi = {
+    registerToolRenderer(callback: ToolRendererResolver) { resolver = callback; },
+    registerCommand() {}, registerShortcut() {}, on() {},
+  } as any;
+  try {
+    await installToolViewController(pi, { modeFile: join(directory, "mode.json") });
+    const renderer = resolver!("codemode", () => ({}))!;
+    const theme = { fg: (_: string, value: string) => value, bold: (value: string) => value } as any;
+    let invalidations = 0;
+    const context = {
+      args: { code: "text('x')" }, state: {}, isError: false,
+      durationMs: undefined, invalidate: () => { invalidations++; },
+    } as any;
+
+    const partial = renderer.renderResult!(
+      { content: [], details: { calls: [{ status: "running" }] } },
+      { isPartial: true, expanded: false }, theme, context,
+    );
+    assert.match(partial.render(100).join(""), /~\d+ms/);
+    await new Promise<void>((resolve) => setTimeout(resolve, 1_100));
+    assert.ok(invalidations >= 1, "live row must request a redraw");
+    assert.match(partial.render(100).join(""), /~1\.\ds/);
+
+    context.durationMs = 1_500;
+    const done = renderer.renderResult!(
+      { content: [], details: { calls: [{ status: "ok" }] } },
+      { isPartial: false, expanded: false }, theme, context,
+    );
+    assert.match(done.render(100).join(""), /1\.5s/);
+    assert.doesNotMatch(done.render(100).join(""), /~1\.5s/);
+    const ticks = invalidations;
+    await new Promise<void>((resolve) => setTimeout(resolve, 1_100));
+    assert.equal(invalidations, ticks, "timer must stop after final result");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("Codemode Compact handles missing, malformed, or very large metadata without throwing", async () => {
   const directory = await mkdtemp(join(tmpdir(), "codemode-empty-"));
   let resolver: ToolRendererResolver | undefined;

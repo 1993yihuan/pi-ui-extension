@@ -61,15 +61,15 @@ function activityRows(
     : formatDuration(Math.max(0, at - (activity.startedAt ?? at)));
   const status = activity.phase === "idle"
     ? "Ready"
-    : `${activity.turns.length} turn${activity.turns.length === 1 ? "" : "s"} · ${activity.phase === "running" ? duration : `done ${duration}`}`;
+    : `${activity.turns.length} turn${activity.turns.length === 1 ? "" : "s"} · ${activity.phase === "running" ? duration : `${activity.aborted ? "aborted" : "done"} ${duration}`}`;
   const plain = (value: string): string => value.replace(/\[[^\]]+\]/g, "");
   const average = `AVG TTFT ${plain(formatTtft(activity.averagePerformance?.ttftMs))} · AVG TPS ${plain(formatTps(activity.averagePerformance?.tokensPerSecond))}`;
-  const compact = `${activity.turns.length}T ${activity.phase === "settled" ? "done " : ""}${duration}`;
+  const compact = `${activity.turns.length}T ${activity.phase === "settled" ? (activity.aborted ? "aborted " : "done ") : ""}${duration}`;
   const header = [`${status} · ${average}`, status, compact, average]
     .find((candidate) => visibleWidth(candidate) <= contentWidth) ?? compact;
   const statusColor: PanelColor = activity.phase === "running"
     ? "warning"
-    : activity.failedCount > 0 ? "error" : "success";
+    : activity.aborted ? "warning" : activity.failedCount > 0 ? "error" : "success";
   const performances = activity.turns.map((turn) => turn.durationMs === undefined ? activity.performance : turn.performance);
   let ttft: number | undefined;
   for (let index = performances.length - 1; index >= 0; index--) {

@@ -115,7 +115,7 @@ Tool View uses Pi's official `pi.registerToolRenderer()` hook for the built-in t
 For **Codemode** specifically:
 
 - **Normal** retains Pi's native script, nested-call, and output rendering (including its own expand/collapse behavior).
-- **Compact** uses a two-line, status-colored summary with Chinese labels: a highlighted Codemode title and script line count, followed by grouped execution status, nested-call counts, output size, and duration. It omits script source, nested-call arguments, and actual output, even if the row is expanded or execution fails. On narrow terminals it keeps each part to one row and prioritizes status and failures over less important metrics.
+- **Compact** uses a two-line, status-colored summary with Chinese labels: a highlighted Codemode title and script line count, followed by grouped execution status, nested-call counts, output size, and duration. While running, elapsed time is estimated from the first observed partial result (prefixed with `~`, updated every second); when complete, the exact duration reported by Pi replaces the estimate. It omits script source, nested-call arguments, and actual output, even if expanded or failed. On narrow terminals it keeps each part to one row and prioritizes status and failures.
 - **Hidden** removes the Codemode transcript row, including expanded and failed results, without stopping execution or removing Tool/MCP usage accounting.
 
 Example Compact output:
@@ -190,7 +190,7 @@ Example configuration:
 To pin a specific version:
 
 ```bash
-pi install npm:pi-ui-extension@1.2.1
+pi install npm:pi-ui-extension@1.2.2
 ```
 
 or:
@@ -198,7 +198,7 @@ or:
 ```json
 {
   "packages": [
-    "npm:pi-ui-extension@1.2.1"
+    "npm:pi-ui-extension@1.2.2"
   ]
 }
 ```
@@ -226,7 +226,7 @@ Configuration form:
 Pin to a Git tag:
 
 ```bash
-pi install git:github.com/1993yihuan/pi-ui-extension@v1.2.1
+pi install git:github.com/1993yihuan/pi-ui-extension@v1.2.2
 ```
 
 ### Temporary local-source testing
@@ -372,10 +372,12 @@ Pi's extension entry point is declared explicitly in `package.json`:
 
 ## CI / Release
 
-Every push to `main` and every pull request runs on **both Node.js 22.19.0 and 24**:
+Every push to `main` and every pull request checks **Node.js 22.19.0 / 24 × Pi SDK 1.1.0 / 1.2.0** (4 combinations):
 
 ```text
 npm ci
+→ pin the selected Pi SDK family (older SDK leg only)
+→ verify installed Pi SDK versions
 → npm run typecheck
 → npm test
 ```
@@ -419,9 +421,25 @@ Because npm can accept a publication before the new version becomes searchable, 
 
 ## Requirements
 
-- Pi Coding Agent with the official `registerToolRenderer()` API (tested with `@earendil-works/pi-coding-agent@1.1.0`)
+- Pi Coding Agent with the official `registerToolRenderer()` API (CI tests SDK 1.1.0 and 1.2.0; development targets 1.2.0)
 - Node.js `>= 22.19.0` (use a Node version supported by your Pi installation)
-- CI validates Node.js 22.19.0 and 24; releases use Node.js 24
+- CI validates Node.js 22.19.0 and 24 × Pi SDK 1.1.0 and 1.2.0; releases use Node.js 24
+
+## Multiple Pi installations
+
+Pi may be installed through Bun and npm at the same time. The current plugin uses the `pi` executable resolved by your shell, not necessarily the newest global package. Check before troubleshooting version-specific behavior:
+
+```bash
+command -v pi
+pi --version
+bun pm ls -g
+npm ls -g @earendil-works/pi-coding-agent --depth=0
+pi list
+```
+
+If multiple installations are present, standardize on one package manager **after** confirming that other shells and projects do not rely on the older installation. For example, an obsolete npm-global install can be removed with `npm uninstall -g @earendil-works/pi-coding-agent` once no longer needed; this repository never performs global uninstallation automatically. Use `pi -e ./extensions/index.ts` from this repository to test the local changes; an installed npm package stays unchanged until deliberately updated.
+
+Pi 1.2.0 emits `before_agent_start` for both user prompts and idle custom-triggered runs. Tool/MCP exchange counters and CTX deltas therefore reset per **run**, not only per user prompt. Aborted runs are shown separately from actual tool failures. MCP connectivity is only marked connected when explicitly observed by a supported runtime adapter; configuration and extension registration alone are not proof of an active connection. Connection health from a previous session is discarded on reload.
 
 ## License
 

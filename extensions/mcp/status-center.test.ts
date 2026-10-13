@@ -115,6 +115,28 @@ test("malformed adapter snapshots and invalid config files fail safely", () => {
   });
 });
 
+test("MCP connection lifecycle replaces observations instead of keeping stale states", () => {
+  withConfigs((agent, project) => {
+    writeFileSync(join(agent, "mcp.json"), JSON.stringify({
+      mcpServers: { remote: { command: "server" }, disabled: { enabled: false, command: "server" } },
+    }));
+    const registered = [{ name: "extension", config: { command: "server" } }];
+    const observe = (servers: unknown[]) => buildMcpStatusSnapshot(
+      agent, project, true, registered, adapterMcpServers({ version: 1, servers }) ?? [],
+    );
+    const state = (snapshot: ReturnType<typeof observe>, name: string) =>
+      snapshot.servers.find((server) => server.name === name)!.connection;
+    assert.equal(state(observe([]), "extension"), "unknown");
+    assert.equal(state(observe([{ name: "remote", state: "connecting" }]), "remote"), "connecting");
+    assert.equal(state(observe([{ name: "remote", state: "connected" }]), "remote"), "connected");
+    assert.equal(state(observe([{ name: "remote", state: "needs-auth" }]), "remote"), "needs-auth");
+    assert.equal(state(observe([{ name: "remote", state: "failed" }]), "remote"), "failed");
+    assert.equal(state(observe([{ name: "remote", state: "disconnected" }]), "remote"), "disconnected");
+    assert.equal(state(observe([]), "remote"), "unknown");
+    assert.equal(state(observe([{ name: "disabled", state: "connected" }]), "disabled"), "unknown");
+  });
+});
+
 test("MCP status center opens a safe read-only detail without leaking secrets", async () => {
   const snapshot = withConfigs((agent, project) => {
     writeFileSync(join(agent, "mcp.json"), JSON.stringify({ mcpServers: {

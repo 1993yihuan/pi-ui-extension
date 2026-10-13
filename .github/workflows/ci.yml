@@ -20,6 +20,7 @@ jobs:
       fail-fast: false
       matrix:
         node-version: ['22.19.0', '24']
+        pi-version: ['1.1.0', '1.2.0']
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -32,6 +33,26 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      # Pi packages depend on each other with ^ version ranges, so pin the
+      # entire SDK family in the older leg to prevent mixed 1.1/1.2 imports.
+      - name: Install Pi SDK under test
+        if: matrix.pi-version != '1.2.0'
+        run: |
+          npm install --no-save --package-lock=false --no-audit --no-fund \
+            @earendil-works/pi-coding-agent@${{ matrix.pi-version }} \
+            @earendil-works/pi-tui@${{ matrix.pi-version }} \
+            @earendil-works/pi-agent-core@${{ matrix.pi-version }} \
+            @earendil-works/pi-ai@${{ matrix.pi-version }} \
+            @earendil-works/pi-codemode@${{ matrix.pi-version }} \
+            @earendil-works/pi-mcp@${{ matrix.pi-version }} \
+            @earendil-works/pi-telemetry@${{ matrix.pi-version }}
+
+      - name: Verify Pi SDK versions
+        env:
+          PI_SDK_VERSION: ${{ matrix.pi-version }}
+        run: |
+          node -e 'for (const name of ["pi-coding-agent", "pi-tui", "pi-agent-core", "pi-ai", "pi-codemode", "pi-mcp", "pi-telemetry"]) { const actual = require("./node_modules/@earendil-works/" + name + "/package.json").version; if (actual !== process.env.PI_SDK_VERSION) throw new Error(name + ": expected " + process.env.PI_SDK_VERSION + ", got " + actual); }'
 
       - name: Validate
         run: npm run check

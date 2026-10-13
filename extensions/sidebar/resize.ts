@@ -36,15 +36,38 @@ export class SidebarDivider implements Component {
   invalidate(): void {}
 }
 
-/** Install ahead of Pi's built-in fullscreen mouse handler so sidebar gestures can consume events first. */
-export function installPriorityInputListener(tui: TUI, listener: TuiInputListener): () => void {
+/**
+ * Pi has no public input-listener priority API. Prefer its normal public
+ * registration when internals differ, but disable gestures that strictly
+ * require priority (divider dragging) to avoid conflicting with Pi.
+ */
+export function installPriorityInputListener(
+  tui: TUI,
+  listener: TuiInputListener,
+  options: { requirePriority?: boolean } = {},
+): () => void {
+  const listeners = (tui as unknown as { inputListeners?: unknown }).inputListeners;
+  if (!(listeners instanceof Set)) {
+    return options.requirePriority ? () => {} : tui.addInputListener(listener);
+  }
   const unsubscribe = tui.addInputListener(listener);
-  const listeners = (tui as unknown as { inputListeners?: Set<TuiInputListener> }).inputListeners;
-  if (listeners instanceof Set && listeners.delete(listener)) {
-    const existing = [...listeners];
+  if (!listeners.has(listener)) {
+    if (options.requirePriority) {
+      unsubscribe();
+      return () => {};
+    }
+    return unsubscribe;
+  }
+  try {
+    const existing = [...listeners].filter((item) => item !== listener);
     listeners.clear();
     listeners.add(listener);
     for (const item of existing) listeners.add(item);
+  } catch {
+    if (options.requirePriority) {
+      unsubscribe();
+      return () => {};
+    }
   }
   return unsubscribe;
 }
@@ -134,7 +157,12 @@ export function installMouseResize(options: MouseResizeOptions): () => void {
       geometryTimer = setInterval(() => { if (!geometryValid()) cancelDrag(); }, PREVIEW_FRAME_INTERVAL_MS);
       geometryTimer.unref?.();
       previewOptions.col = Math.max(0, options.getDividerX() - 1);
-      previewHandle = options.tui.showOverlay(options.preview, previewOptions);
+      try {
+        previewHandle = options.tui.showOverlay(options.preview, previewOptions);
+      } catch {
+        cancelDrag();
+        return undefined;
+      }
       return { consume: true };
     }
     if (mouse.motion && dragging) {
@@ -144,7 +172,7 @@ export function installMouseResize(options: MouseResizeOptions): () => void {
     return dragging ? { consume: true } : undefined;
   };
 
-  const unsubscribe = installPriorityInputListener(options.tui, listener);
+  const unsubscribe = installPriorityInputListener(options.tui, listener, { requirePriority: true });
 
   return () => {
     disposed = true;

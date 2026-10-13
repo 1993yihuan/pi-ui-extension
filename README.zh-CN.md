@@ -116,7 +116,7 @@ Tool View 使用 Pi 官方的 `pi.registerToolRenderer()` 接口管理内置工�
 对于 **Codemode**：
 
 - **Normal**：保留 Pi 原生的脚本、子工具调用、输出详情，以及原生展开 / 收起行为。
-- **Compact**：采用带有状态颜色的双行摘要。第一行突出 Codemode 和代码行数；第二行将状态、子调用统计、输出规模与耗时分组展示，并统一使用中文单位。即使展开或执行失败，也不会展示完整代码、子调用参数或真实输出；终端宽度不足时优先保留状态、失败信息和调用次数，避免摘要自动换成多行。
+- **Compact**：采用带有状态颜色的双行摘要。第一行突出 Codemode 和代码行数；第二行将状态、子调用统计、输出规模与耗时分组展示。运行期间从首次可观察到的部分结果开始估算耗时，以 `~` 标记并每秒刷新；结束后采用 Pi 上报的准确耗时。即使展开或执行失败，也不会展示完整代码、子调用参数或真实输出；终端宽度不足时优先保留状态、失败信息和调用次数。
 - **Hidden**：隐藏 Codemode 工具记录（包括展开和失败结果），但不影响实际执行或 Tool / MCP 调用统计。
 
 Compact 效果示例：
@@ -191,7 +191,7 @@ Pi 会安装 package，并将声明写入个人配置：
 如果希望固定版本：
 
 ```bash
-pi install npm:pi-ui-extension@1.2.1
+pi install npm:pi-ui-extension@1.2.2
 ```
 
 或者：
@@ -199,7 +199,7 @@ pi install npm:pi-ui-extension@1.2.1
 ```json
 {
   "packages": [
-    "npm:pi-ui-extension@1.2.1"
+    "npm:pi-ui-extension@1.2.2"
   ]
 }
 ```
@@ -227,7 +227,7 @@ pi install git:github.com/1993yihuan/pi-ui-extension
 固定到 Git tag：
 
 ```bash
-pi install git:github.com/1993yihuan/pi-ui-extension@v1.2.1
+pi install git:github.com/1993yihuan/pi-ui-extension@v1.2.2
 ```
 
 ### 临时加载本地源码
@@ -373,10 +373,12 @@ Pi 的扩展入口在 `package.json` 中显式声明：
 
 ## CI / Release
 
-提交到 `main` 或创建 PR 时，GitHub Actions 会分别在 **Node.js 22.19.0 和 24** 上执行：
+提交到 `main` 或创建 PR 时，GitHub Actions 会验证 **Node.js 22.19.0 / 24 × Pi SDK 1.1.0 / 1.2.0** 的四种组合：
 
 ```text
 npm ci
+→ 固定目标 Pi SDK 家族版本（仅旧版组合）
+→ 验证实际安装的 Pi SDK 版本
 → npm run typecheck
 → npm test
 ```
@@ -420,9 +422,25 @@ npm 可能先接受发布请求，再经过一段时间才能查询到新版本�
 
 ## Requirements
 
-- 支持官方 `registerToolRenderer()` API 的 Pi Coding Agent（已使用 `@earendil-works/pi-coding-agent@1.1.0` 验证）
+- 支持官方 `registerToolRenderer()` API 的 Pi Coding Agent（CI 覆盖 SDK 1.1.0 与 1.2.0；开发环境使用 1.2.0）
 - Node.js `>= 22.19.0`（建议使用当前 Pi 支持的 Node 版本）
-- CI 覆盖 Node.js 22.19.0 和 24；发布工作流使用 Node.js 24
+- CI 覆盖 Node.js 22.19.0、24 × Pi SDK 1.1.0、1.2.0；发布工作流使用 Node.js 24
+
+## 多套 Pi 安装的检查与兼容说明
+
+同一台机器可能通过 Bun、npm 分别安装 Pi。插件运行时实际使用哪个版本，取决于 Shell 对 `pi` 命令的解析结果，而不一定是全局安装列表中的最新版本。可通过以下命令检查：
+
+```bash
+command -v pi
+pi --version
+bun pm ls -g
+npm ls -g @earendil-works/pi-coding-agent --depth=0
+pi list
+```
+
+如果存在多套安装，建议先确定其他终端或项目不再依赖旧版本，再统一安装来源。比如旧版 npm 全局 Pi 确认不再使用后，才执行 `npm uninstall -g @earendil-works/pi-coding-agent`；本插件不会自动卸载全局包。在仓库内运行 `pi -e ./extensions/index.ts` 可验证本地改动，已安装的 npm 插件不会因此自动升级。
+
+Pi 1.2.0 的 `before_agent_start` 同时覆盖用户输入与扩展发起的 custom 运行，因此 Tool/MCP 本次统计和 CTX 增量均按**每次运行**重置，而不只按用户提问重置。取消运行与工具失败分开显示。MCP 只有在运行时适配器明确上报已连接时才显示 Connected，配置和扩展注册不代表连接健康；会话重载时丢弃上个会话的连接状态。
 
 ## License
 

@@ -1,6 +1,6 @@
 import nodePath from "node:path";
 
-export type ToolActivityStatus = "running" | "done" | "failed";
+export type ToolActivityStatus = "running" | "done" | "failed" | "cancelled";
 export type ToolActivity = {
   readonly id: string;
   readonly name: string;
@@ -23,6 +23,8 @@ export type TurnActivity = {
 };
 export type RunActivitySnapshot = {
   readonly phase: "idle" | "running" | "settled";
+  /** An interrupted run is distinct from a completed or failed tool. */
+  readonly aborted?: boolean;
   readonly turnNumber?: number;
   readonly startedAt?: number;
   readonly durationMs?: number;
@@ -33,6 +35,7 @@ export type RunActivitySnapshot = {
   readonly recentTools: readonly ToolActivity[];
   readonly completedCount: number;
   readonly failedCount: number;
+  readonly cancelledCount: number;
 };
 export type ToolStart = { readonly toolCallId: string; readonly toolName: string; readonly args: unknown };
 export type ToolEnd = { readonly toolCallId: string; readonly isError: boolean };
@@ -45,14 +48,14 @@ export type ActivityTracker = {
   finishResponse(outputTokens: number, now?: number): void;
   startTool(event: ToolStart, now?: number): void;
   finishTool(event: ToolEnd, now?: number): void;
-  settle(now?: number): void;
+  settle(now?: number, aborted?: boolean): void;
   reset(): void;
   getSnapshot(): RunActivitySnapshot;
 };
 
 const MAX_SUMMARY_LENGTH = 80;
 export const EMPTY_ACTIVITY: RunActivitySnapshot = Object.freeze({
-  phase: "idle", turns: Object.freeze([]), activeTools: Object.freeze([]), recentTools: Object.freeze([]), completedCount: 0, failedCount: 0,
+  phase: "idle", turns: Object.freeze([]), activeTools: Object.freeze([]), recentTools: Object.freeze([]), completedCount: 0, failedCount: 0, cancelledCount: 0,
 });
 type SpeedLabel = "fast" | "normal" | "slow";
 function ttftSpeed(ms: number): SpeedLabel { return ms < 2_000 ? "fast" : ms < 5_000 ? "normal" : "slow"; }
@@ -122,7 +125,7 @@ export function createActivityTracker(cwd: string, onChange: () => void): Activi
   let turns: TurnActivity[] = [];
   let activeTools = new Map<string, ToolActivity>();
   let recentTools: ToolActivity[] = [];
-  let completedCount = 0, failedCount = 0;
+  let completedCount = 0, failedCount = 0, cancelledCount = 0, aborted = false;
   const notify = (): void => onChange();
   const at = (now?: number): number => Math.max(0, Number.isFinite(now) ? Math.trunc(now as number) : Date.now());
   const turnNo = (index: number): number => Math.max(0, Number.isFinite(index) ? Math.trunc(index) : 0) + 1;
@@ -145,7 +148,7 @@ export function createActivityTracker(cwd: string, onChange: () => void): Activi
     startRun(now): void {
       phase = "running"; turnNumber = undefined; startedAt = at(now); durationMs = undefined;
       requestStartedAt = undefined; firstTokenAt = undefined; performance = undefined; turns = [];
-      activeTools = new Map(); recentTools = []; completedCount = 0; failedCount = 0; notify();
+      activeTools = new Map(); recentTools = []; completedCount = 0; failedCount = 0; cancelledCount = 0; aborted = false; notify();
     },
     startTurn(index, now): void {
       const number = turnNo(index);
@@ -195,13 +198,15 @@ export function createActivityTracker(cwd: string, onChange: () => void): Activi
       updateCurrentTurn((turn) => ({ ...turn, tools: Object.freeze([...turn.tools, completed]) }));
       recentTools = [completed, ...recentTools].slice(0, 3); notify();
     },
-    settle(now): void {
+    settle(now, wasAborted = false): void {
       if ((phase === "idle" || phase === "settled") && activeTools.size === 0) return;
+      aborted = wasAborted;
       const endedAt = at(now);
       for (const active of activeTools.values()) {
-        const failed = Object.freeze({ ...active, status: "failed" as const, durationMs: Math.max(0, endedAt - active.startedAt) });
-        updateCurrentTurn((turn) => ({ ...turn, tools: Object.freeze([...turn.tools, failed]) }));
-        recentTools.unshift(failed); failedCount += 1;
+        const interrupted = Object.freeze({ ...active, status: (wasAborted ? "cancelled" : "failed") as ToolActivityStatus, durationMs: Math.max(0, endedAt - active.startedAt) });
+        updateCurrentTurn((turn) => ({ ...turn, tools: Object.freeze([...turn.tools, interrupted]) }));
+        recentTools.unshift(interrupted);
+        if (wasAborted) cancelledCount += 1; else failedCount += 1;
       }
       activeTools = new Map(); recentTools = recentTools.slice(0, 3);
       if (turnNumber !== undefined) {
@@ -213,14 +218,14 @@ export function createActivityTracker(cwd: string, onChange: () => void): Activi
     reset(): void {
       phase = "idle"; turnNumber = undefined; startedAt = undefined; durationMs = undefined;
       requestStartedAt = undefined; firstTokenAt = undefined; performance = undefined; turns = [];
-      activeTools = new Map(); recentTools = []; completedCount = 0; failedCount = 0; notify();
+      activeTools = new Map(); recentTools = []; completedCount = 0; failedCount = 0; cancelledCount = 0; aborted = false; notify();
     },
     getSnapshot(): RunActivitySnapshot {
-      return Object.freeze({ phase, ...(turnNumber === undefined ? {} : { turnNumber }), ...(startedAt === undefined ? {} : { startedAt }),
+      return Object.freeze({ phase, ...(aborted ? { aborted: true } : {}), ...(turnNumber === undefined ? {} : { turnNumber }), ...(startedAt === undefined ? {} : { startedAt }),
         ...(durationMs === undefined ? {} : { durationMs }), ...(performance ? { performance: snapshotPerformance() } : {}),
         ...(averagePerformance() ? { averagePerformance: averagePerformance() } : {}),
         turns: Object.freeze(turns.map((turn) => Object.freeze({ ...turn, tools: Object.freeze([...turn.tools]) }))),
-        activeTools: Object.freeze([...activeTools.values()]), recentTools: Object.freeze([...recentTools]), completedCount, failedCount });
+        activeTools: Object.freeze([...activeTools.values()]), recentTools: Object.freeze([...recentTools]), completedCount, failedCount, cancelledCount });
     },
   };
 }

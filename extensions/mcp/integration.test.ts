@@ -11,6 +11,8 @@ test("entry wires early/late MCP status into restored and live usage without dou
   const handlers = new Map<string, any[]>(), bus = new Map<string, any>();
   const listeners = new Set<any>();
   let branch: any[] = [], footer: any;
+  let idle = true;
+  const commands = new Map<string, any>(), notices: string[] = [];
   let registrations: any[] = [{ name: "native_mcp", config: { command: "not-executed" }, extensionPath: "/extension.ts" }];
   const tui: any = {
     [Symbol.for("@earendil-works/pi-tui/viewport")]: true,
@@ -20,16 +22,16 @@ test("entry wires early/late MCP status into restored and live usage without dou
   };
   const theme: any = { fg: (_: string, text: string) => text, bold: (text: string) => text };
   const pi: any = {
-    registerTool() { throw new Error("Tool View must not register tools"); }, registerToolRenderer() {}, registerCommand() {}, registerShortcut() {},
+    registerTool() { throw new Error("Tool View must not register tools"); }, registerToolRenderer() {}, registerCommand(name: string, options: any) { commands.set(name, options); }, registerShortcut() {},
     getCommands: () => [], getActiveTools: () => [], getAllTools: () => [], getThinkingLevel: () => "off",
     getMcpServers: () => registrations,
     on(name: string, fn: any) { handlers.set(name, [...(handlers.get(name) ?? []), fn]); },
     events: { on(name: string, fn: any) { bus.set(name, fn); return () => bus.delete(name); } },
   };
   const ctx: any = {
-    mode: "tui", cwd: directory, isProjectTrusted: () => true, getSystemPrompt: () => "", getContextUsage: () => undefined,
+    mode: "tui", cwd: directory, isIdle: () => idle, isProjectTrusted: () => true, getSystemPrompt: () => "", getContextUsage: () => undefined,
     sessionManager: { getBranch: () => branch, buildContextEntries: () => [], getSessionId: () => "test", getSessionDir: () => directory },
-    ui: { setStatus() {}, setFooter(factory: any) { footer?.dispose(); footer = factory?.(tui, theme, { onBranchChange: () => () => {}, getGitBranch: () => null }); } },
+    ui: { setStatus() {}, notify(message: string) { notices.push(message); }, setFooter(factory: any) { footer?.dispose(); footer = factory?.(tui, theme, { onBranchChange: () => () => {}, getGitBranch: () => null }); } },
   };
   const emit = async (name: string, event: any = {}) => { for (const fn of handlers.get(name) ?? []) await fn(event, ctx); };
   const status = (names: string[]) => bus.get("pi-mcp-adapter/status/v1")({ version: 1, servers: names.map(name => ({ name })) });
@@ -42,10 +44,24 @@ test("entry wires early/late MCP status into restored and live usage without dou
     branch = [saved("early")];
     await emit("session_start");
     assert.match(output(), /early\s+0\/1/);
-    await emit("before_agent_start", { systemPromptOptions: {} });
+    await emit("before_agent_start", { messageType: "user", prompt: "first", systemPromptOptions: {} });
     branch.push({ type: "message", message: { role: "toolResult", toolName: "mcp__native_mcp__ping", details: {} } });
     await emit("tool_execution_end", { toolCallId: "native-1", toolName: "mcp__native_mcp__ping", isError: false, result: { details: {} } });
     assert.match(output(), /native_mcp\s+1\/1/);
+    // Pi 1.2 also sends before_agent_start for custom-triggered runs.
+    // A new run resets exchange counts but preserves saved session totals.
+    idle = false; // Starting a run is already busy inside this event in Pi 1.2.
+    await emit("before_agent_start", {
+      messageType: "custom",
+      message: { customType: "automation", content: "continue", display: false },
+      systemPromptOptions: {},
+    });
+    assert.match(output(), /native_mcp\s+0\/1/);
+    await commands.get("sessions-manager").handler("", ctx);
+    assert.match(notices.join("\n"), /Wait for the current run to finish/);
+    await emit("before_agent_start", { messageType: "user", prompt: "next", systemPromptOptions: {} });
+    assert.match(output(), /native_mcp\s+0\/1/);
+    idle = true;
     registrations = [];
     await emit("mcp_servers_change", { servers: [] });
     assert.doesNotMatch(output(), /native_mcp\s+1\/1/);
@@ -63,6 +79,11 @@ test("entry wires early/late MCP status into restored and live usage without dou
     await emit("session_tree");
     assert.match(output(), /early\s+0\/1/);
     assert.doesNotMatch(output(), /late\s+2\/2/);
+    // A new session cannot inherit the previous session's adapter state.
+    await emit("session_start", { reason: "reload" });
+    assert.doesNotMatch(output(), /early\s+0\/1/);
+    status(["early"]);
+    assert.match(output(), /early\s+0\/1/);
   } finally {
     await emit("session_shutdown");
     await rm(directory, { recursive: true, force: true });

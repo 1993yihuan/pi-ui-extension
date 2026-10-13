@@ -14,9 +14,9 @@
 
 Composition 的 token 估算使用 `~` 前缀及 K/M 紧凑缩写（四舍五入），百分比保留一位小数。宽度不足时标签与数值拆行；支持的最小侧栏宽 18 可完整显示如 `~100K 100.0%`。
 
-## 本次提问增量
+## 本次运行增量
 
-以一次提问（`before_agent_start` 到 `agent_settled`）为单位：基线是上一次提问结束后的分类估算总量，`turn_end` 只重算快照、不推进基线，因此增量在提问进行中实时增长，`agent_settled` 后定格。数值是净增长，压缩造成的下降显示为负。`session_start`、`session_tree`、`session_compact` 会把基线重置为当前总量，此时不显示增量。
+以一次运行（`before_agent_start` 到 `agent_settled`，包括 Pi 1.2 自定义消息触发的运行）为单位：基线是上一次运行结束后的分类估算总量，`turn_end` 只重算快照、不推进基线，因此增量在运行过程中实时增长，`agent_settled` 后定格。数值是净增长，压缩造成的下降显示为负。`session_start`、`session_tree`、`session_compact` 会把基线重置为当前总量，此时不显示增量。
 
 进度条最右侧的 accent 段是增量在窗口中的份额，宽度为 `round(内容宽 × 增量 / contextWindow)`，向上至少 1 格，且不会超出已用段，所以条的总长度不变。增量文字显示在 `已用%/窗口` 之后：正增量用 accent，负增量用 warning。增量为 0、基准未建立或窗口未知时，既不留文字也不画段。增量与分类估算同源（本地启发式），不含 `~` 前缀。
 
@@ -24,7 +24,7 @@ Composition 的 token 估算使用 `~` 前缀及 K/M 紧凑缩写（四舍五入
 
 独立 ACTIVITY 面板已移除，其内容移到进度条下方，以横线与分类统计分隔：状态 + 平均性能、最新 TTFT。
 
-- 第一行：`N turns · 时长 · AVG TTFT · AVG TPS`。运行中时长按秒刷新（CTX 面板每秒 requestRender 一次），settled 后显示 `done 时长`，空闲显示 `Ready`。窄屏依次回退为 `状态`、`NT done 时长`、仅平均值，保证窗口内可见。
+- 第一行：`N turns · 时长 · AVG TTFT · AVG TPS`。运行中时长按秒刷新（CTX 面板每秒 requestRender 一次），settled 后显示 `done 时长`，主动取消则显示 `aborted 时长`（未完成工具计为 cancelled 而非 failed），空闲显示 `Ready`。窄屏依次回退为 `状态`、`NT done 时长`、仅平均值，保证窗口内可见。
 - 第二行：最新一次观测到的 TTFT（含 fast/normal/slow 标签），不是平均值——平均值只在第一行。进行中且尚无 TTFT 时显示 `pending`。
 - 追踪器（TTFT/TPS 采样、turn 与工具记录）位于 `ctx/activity.ts`，由 `ctx/panel.ts` 渲染时读取；活动快照只用于这两行，面板不再注册独立的 layout 条目。
 

@@ -98,6 +98,7 @@ export function renderCodemodeCompactResult(
   theme: Theme,
   context: RenderContext,
   options: ToolRenderResultOptions,
+  runningSince?: number,
 ): Component {
   const status = options.isPartial ? "… 运行中" : context.isError ? "✗ 失败" : "✓ 已完成";
   const stateColor = options.isPartial ? "warning" : context.isError ? "error" : "success";
@@ -122,13 +123,18 @@ export function renderCodemodeCompactResult(
     if (lines) metrics.push({ label: `${lines} 行输出`, color: "muted", group: "output", priority: 6 });
     if (images) metrics.push({ label: `${images} 张图片`, color: "muted", group: "output", priority: 7 });
   }
-  const duration = formatDuration(context.durationMs);
-  if (duration) metrics.push({ label: duration, color: "muted", group: "output", priority: 4 });
-
-  // All necessary data is captured by the component, with only width varying on render.
+  // Pi provides durationMs only after completion; partial rows show an
+  // estimated elapsed time since their first observed partial result.
   return {
     render(width: number): string[] {
-      return width > 0 ? [formatSummary(theme, status, stateColor, metrics, width)] : [];
+      if (width <= 0) return [];
+      const elapsed = options.isPartial && runningSince !== undefined
+        ? formatDuration(Math.max(0, Date.now() - runningSince))
+        : formatDuration(context.durationMs);
+      const visibleMetrics: Metric[] = elapsed
+        ? [...metrics, { label: (options.isPartial ? "~" : "") + elapsed, color: "muted", group: "output", priority: 4 }]
+        : metrics;
+      return [formatSummary(theme, status, stateColor, visibleMetrics, width)];
     },
     invalidate() {},
   };

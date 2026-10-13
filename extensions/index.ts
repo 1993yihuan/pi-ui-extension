@@ -228,6 +228,7 @@ export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
   const toolView = await installToolViewController(pi);
   let mcpResources: readonly ResourceEntry[] = [];
   let liveMcpServers: NonNullable<ReturnType<typeof adapterMcpServers>> = [];
+  let hasStartedSession = false;
   let registeredServers: unknown = [];
   let mcpCwd = process.cwd();
   let mcpTrusted = false;
@@ -509,7 +510,9 @@ export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
   const refreshSessions = () => {
     sidebar?.updatePanel(SESSION_PANEL_ID, undefined);
   };
-  pi.on("before_agent_start", () => {
+  pi.on("before_agent_start", (_event) => {
+    // Pi 1.2 also emits this for idle custom triggerTurn runs. Both user and
+    // custom runs start a new usage exchange; never assume a prompt exists.
     contextEstimates.resetDelta();
     toolUsage?.startExchange();
     sidebar?.refresh();
@@ -543,8 +546,8 @@ export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
     toolUsage?.record(event);
     sidebar?.refresh();
   });
-  pi.on("agent_settled", () => {
-    activity?.settle();
+  pi.on("agent_settled", (event) => {
+    activity?.settle(undefined, event.aborted === true);
     refreshSessions();
   });
   pi.on("agent_end", refreshContextUi);
@@ -574,9 +577,17 @@ export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
   };
 
   pi.on("session_start", (_event, ctx) => {
-    // Pi resets extension UI before starting/reloading a session. Do not call
-    // stale controllers from the previous runtime after that reset.
+    // A reload may start without session_shutdown. Release the old layout and
+    // mouse listeners while their original context is still valid; otherwise
+    // a second sidebar can wrap the first and leave priority listeners behind.
+    activity?.reset();
+    sidebar?.dispose();
+    footer?.dispose();
     clearControllers();
+    // Keep an early first-start snapshot, but never carry another session's
+    // adapter health over a reload.
+    if (hasStartedSession) liveMcpServers = [];
+    hasStartedSession = true;
     mcpCwd = ctx.cwd;
     mcpTrusted = ctx.isProjectTrusted();
     registeredServers = typeof pi.getMcpServers === "function" ? pi.getMcpServers() : [];
