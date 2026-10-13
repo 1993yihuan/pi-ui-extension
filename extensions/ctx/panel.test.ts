@@ -15,7 +15,7 @@ for (const width of [18, 30, 50]) test(`composition is always visible below a se
  const lines=panel.render(width);
  assert.ok(lines.every(line=>visibleWidth(line)<=width));
  assert.ok(lines[2].includes("25%/100K"));
- if (width >= 30) assert.ok(lines[2].includes("Catch:42%"));
+ if (width >= 30) assert.ok(lines[2].includes("Cache:42%"));
  const separator=lines.findIndex(line=>line===`│ ${"─".repeat(width-4)} │`);
  if (width >= 30) assert.ok(separator>0);
  for(const label of ["System", "Tools", "Messages", "Tool Results", "Summary", "Other", "Images"])
@@ -40,7 +40,8 @@ test("run delta renders on the bar and after the window value", () => {
  });
  const lines=build(12000).render(50);
  assert.ok(lines[2].includes("25%/200K +12K"));
- assert.ok(lines[2].includes("Catch:42%"));
+ assert.ok(lines[2].includes("Cache:42%"));
+ assert.doesNotMatch(lines[2], /Catch/);
  // The accent segment is the last slice of the already-filled bar, so the bar length never grows.
  assert.equal(lines[3],`│ ${"█".repeat(12)}${"░".repeat(34)} │`);
  assert.equal(build(undefined).render(50)[3],lines[3]);
@@ -65,6 +66,7 @@ test("missing snapshot is visible without interaction",()=>{
  });
  assert.match(panel.render(50).join("\n"),/No snapshot available/);
  assert.match(panel.render(50).join("\n"),/not observed/);
+ assert.match(panel.render(50).join("\n"),/Cache:\?/);
 });
 
 test("activity rows render below the composition and bar", () => {

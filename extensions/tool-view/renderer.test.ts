@@ -90,6 +90,9 @@ test("uses one official renderer resolver without replacing or executing Pi tool
     const state = {};
     assert.match(render(read, state, args), /read example.ts/);
     assert.match(render(read, state, args), /2 lines/);
+    assert.match(render(resolver("bash", () => native)!, {}, { command: "echo ok" }), /Done · 2 lines/);
+    assert.match(render(resolver("write", () => native)!, {}, { path: "file.ts", content: "ok" }), /Saved/);
+    assert.match(render(resolver("edit", () => native)!, {}, { path: "file.ts" }), /Applied/);
     assert.equal(counters.nativeCall, 0, "compact must not run native renderer unnecessarily");
 
     await controller.setMode("normal", ctx);

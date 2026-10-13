@@ -49,8 +49,8 @@ test("applies a mode change from another context wrapper in the active session",
 
     assert.equal(controller.getMode(), "normal");
     assert.deepEqual(JSON.parse(await readFile(modeFile, "utf8")), { mode: "normal" });
-    assert.equal(statuses.at(-1), "工具：完整");
-    assert.equal(notices.at(-1), "工具显示模式：完整（normal）");
+    assert.equal(statuses.at(-1), "Tool View: Normal");
+    assert.equal(notices.at(-1), "Tool View: Normal");
     assert.deepEqual(expandedValues.slice(-2), [true, false]);
   } finally {
     await rm(directory, { recursive: true, force: true });

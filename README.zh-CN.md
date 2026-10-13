@@ -119,17 +119,19 @@ Tool View 使用 Pi 官方的 `pi.registerToolRenderer()` 接口管理内置工�
 对于 **Codemode**：
 
 - **Normal**：保留 Pi 原生的脚本、子工具调用、输出详情，以及原生展开 / 收起行为。
-- **Compact**：采用带有状态颜色的双行摘要。第一行突出 Codemode 和代码行数；第二行将状态、子调用统计、输出规模与耗时分组展示。运行期间从首次可观察到的部分结果开始估算耗时，以 `~` 标记并每秒刷新；结束后采用 Pi 上报的准确耗时。即使展开或执行失败，也不会展示完整代码、子调用参数或真实输出；终端宽度不足时优先保留状态、失败信息和调用次数。
+- **Compact**：采用带有状态颜色、简短英文文案的双行摘要。第一行突出 Codemode 和代码行数；第二行将状态、子调用统计、输出规模与耗时分组展示。运行期间从首次可观察到的部分结果开始估算耗时，以 `~` 标记并每秒刷新；结束后采用 Pi 上报的准确耗时。即使展开或执行失败，也不会展示完整代码、子调用参数或真实输出；终端宽度不足时优先保留状态、失败信息和调用次数。
 - **Hidden**：隐藏 Codemode 工具记录（包括展开和失败结果），但不影响实际执行或 Tool / MCP 调用统计。
 
 Compact 效果示例：
 
 ```text
-▸ codemode  8 行代码
-✓ 已完成  │  1 次调用 · 1 成功  │  59 行输出 · 85ms
+▸ codemode  8 code lines
+✓ Done  │  1 call · 1 ok  │  59 lines · 85ms
 ```
 
 切换 Tool View 模式也会更新当前会话中已经展示的历史工具记录；其他第三方工具保持原有渲染方式。
+
+内置工具与 Codemode 的 Compact 摘要、模式通知和 Tool View 状态统一使用英文；CTX 缓存命中率标签由 `Catch` 更正为 `Cache`。
 
 ### 6. Tool / MCP 调用统计
 
@@ -207,7 +209,7 @@ Pi 会安装 package，并将声明写入个人配置：
 如果希望固定版本：
 
 ```bash
-pi install npm:pi-ui-extension@1.2.4
+pi install npm:pi-ui-extension@1.2.6
 ```
 
 或者：
@@ -215,7 +217,7 @@ pi install npm:pi-ui-extension@1.2.4
 ```json
 {
   "packages": [
-    "npm:pi-ui-extension@1.2.4"
+    "npm:pi-ui-extension@1.2.6"
   ]
 }
 ```
@@ -243,7 +245,7 @@ pi install git:github.com/1993yihuan/pi-ui-extension
 固定到 Git tag：
 
 ```bash
-pi install git:github.com/1993yihuan/pi-ui-extension@v1.2.4
+pi install git:github.com/1993yihuan/pi-ui-extension@v1.2.6
 ```
 
 ### 临时加载本地源码
@@ -397,7 +399,10 @@ npm ci
 → 验证实际安装的 Pi SDK 版本
 → npm run typecheck
 → npm test
+→ npm run check:package
 ```
+
+npm 发布包排除所有 `*.test.ts` 文件；`npm run check:package` 会核验发布清单中没有测试文件，且包含全部运行时 TypeScript 源码。测试文件仍保留在 Git 仓库中，并在 CI 中正常执行。
 
 发布版本时使用 Git tag，例如：
 

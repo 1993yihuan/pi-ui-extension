@@ -118,17 +118,19 @@ Tool View uses Pi's official `pi.registerToolRenderer()` hook for the built-in t
 For **Codemode** specifically:
 
 - **Normal** retains Pi's native script, nested-call, and output rendering (including its own expand/collapse behavior).
-- **Compact** uses a two-line, status-colored summary with Chinese labels: a highlighted Codemode title and script line count, followed by grouped execution status, nested-call counts, output size, and duration. While running, elapsed time is estimated from the first observed partial result (prefixed with `~`, updated every second); when complete, the exact duration reported by Pi replaces the estimate. It omits script source, nested-call arguments, and actual output, even if expanded or failed. On narrow terminals it keeps each part to one row and prioritizes status and failures.
+- **Compact** uses a two-line, status-colored summary with concise English labels: a highlighted Codemode title and script line count, followed by grouped execution status, nested-call counts, output size, and duration. While running, elapsed time is estimated from the first observed partial result (prefixed with `~`, updated every second); when complete, the exact duration reported by Pi replaces the estimate. It omits script source, nested-call arguments, and actual output, even if expanded or failed. On narrow terminals it keeps each part to one row and prioritizes status and failures.
 - **Hidden** removes the Codemode transcript row, including expanded and failed results, without stopping execution or removing Tool/MCP usage accounting.
 
 Example Compact output:
 
 ```text
-▸ codemode  8 行代码
-✓ 已完成  │  1 次调用 · 1 成功  │  59 行输出 · 85ms
+▸ codemode  8 code lines
+✓ Done  │  1 call · 1 ok  │  59 lines · 85ms
 ```
 
 Changing the Tool View mode also updates previously rendered tool rows in the current session. Other third-party tools are unaffected.
+
+Compact summaries for built-in tools and Codemode, mode notifications, and the Tool View status are in English. The CTX cache-hit label is `Cache` (not `Catch`).
 
 ### 6. Tool / MCP usage statistics
 
@@ -206,7 +208,7 @@ Example configuration:
 To pin a specific version:
 
 ```bash
-pi install npm:pi-ui-extension@1.2.4
+pi install npm:pi-ui-extension@1.2.6
 ```
 
 or:
@@ -214,7 +216,7 @@ or:
 ```json
 {
   "packages": [
-    "npm:pi-ui-extension@1.2.4"
+    "npm:pi-ui-extension@1.2.6"
   ]
 }
 ```
@@ -242,7 +244,7 @@ Configuration form:
 Pin to a Git tag:
 
 ```bash
-pi install git:github.com/1993yihuan/pi-ui-extension@v1.2.4
+pi install git:github.com/1993yihuan/pi-ui-extension@v1.2.6
 ```
 
 ### Temporary local-source testing
@@ -396,7 +398,10 @@ npm ci
 → verify installed Pi SDK versions
 → npm run typecheck
 → npm test
+→ npm run check:package
 ```
+
+The npm tarball excludes all `*.test.ts` files; `npm run check:package` verifies that no tests are packed and that every runtime TypeScript source is included. Tests remain in the repository and run during CI.
 
 To publish a release, create a version tag, for example:
 

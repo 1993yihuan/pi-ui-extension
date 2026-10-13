@@ -50,8 +50,8 @@ function countContent(result: AgentToolResult<any>): { lines: number; images: nu
 function codeLineCount(args: unknown): string {
   const code = args !== null && typeof args === "object" && "code" in args
     ? (args as { code?: unknown }).code : undefined;
-  if (typeof code !== "string") return "代码行数未知";
-  return `${code ? code.split("\n").length : 0} 行代码`;
+  if (typeof code !== "string") return "Code: ?";
+  return `${code ? code.split("\n").length : 0} code lines`;
 }
 
 export function renderCodemodeCompactCall(args: unknown, theme: Theme): Component {
@@ -100,7 +100,7 @@ export function renderCodemodeCompactResult(
   options: ToolRenderResultOptions,
   runningSince?: number,
 ): Component {
-  const status = options.isPartial ? "… 运行中" : context.isError ? "✗ 失败" : "✓ 已完成";
+  const status = options.isPartial ? "… Running" : context.isError ? "✗ Failed" : "✓ Done";
   const stateColor = options.isPartial ? "warning" : context.isError ? "error" : "success";
   const rawCalls: unknown = result.details?.calls;
   const calls: readonly unknown[] = Array.isArray(rawCalls) ? rawCalls : [];
@@ -113,15 +113,16 @@ export function renderCodemodeCompactResult(
     }
   }
   const metrics: Metric[] = [];
-  if (calls.length > 0) metrics.push({ label: `${calls.length} 次调用`, color: "text", group: "calls", priority: 1 });
-  if (statuses.ok) metrics.push({ label: `${statuses.ok} 成功`, color: "success", group: "calls", priority: 5 });
-  if (statuses.error) metrics.push({ label: `${statuses.error} 失败`, color: "error", group: "calls", priority: 2 });
-  if (statuses.cancelled) metrics.push({ label: `${statuses.cancelled} 取消`, color: "muted", group: "calls", priority: 3 });
-  if (statuses.running) metrics.push({ label: `${statuses.running} 进行中`, color: "warning", group: "calls", priority: 3 });
+  const countLabel = (count: number, singular: string): string => `${count} ${singular}${count === 1 ? "" : "s"}`;
+  if (calls.length > 0) metrics.push({ label: countLabel(calls.length, "call"), color: "text", group: "calls", priority: 1 });
+  if (statuses.ok) metrics.push({ label: `${statuses.ok} ok`, color: "success", group: "calls", priority: 5 });
+  if (statuses.error) metrics.push({ label: `${statuses.error} failed`, color: "error", group: "calls", priority: 2 });
+  if (statuses.cancelled) metrics.push({ label: `${statuses.cancelled} cancelled`, color: "muted", group: "calls", priority: 3 });
+  if (statuses.running) metrics.push({ label: `${statuses.running} running`, color: "warning", group: "calls", priority: 3 });
   if (!options.isPartial) {
     const { lines, images } = countContent(result);
-    if (lines) metrics.push({ label: `${lines} 行输出`, color: "muted", group: "output", priority: 6 });
-    if (images) metrics.push({ label: `${images} 张图片`, color: "muted", group: "output", priority: 7 });
+    if (lines) metrics.push({ label: countLabel(lines, "line"), color: "muted", group: "output", priority: 6 });
+    if (images) metrics.push({ label: countLabel(images, "image"), color: "muted", group: "output", priority: 7 });
   }
   // Pi provides durationMs only after completion; partial rows show an
   // estimated elapsed time since their first observed partial result.

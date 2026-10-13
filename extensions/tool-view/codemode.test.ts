@@ -81,14 +81,15 @@ test("Codemode uses the official native renderer in Normal, summary in Compact, 
     const visible = () => stripAnsi(transcript.render(110).join("\n"));
 
     // Default compact mode summarizes metadata, never executable code or nested arguments.
-    assert.match(visible(), /▸ codemode.*2 行代码/);
-    assert.match(visible(), /3 次调用/);
-    assert.match(visible(), /1 成功/);
-    assert.match(visible(), /1 失败/);
-    assert.match(visible(), /1 取消/);
-    assert.match(visible(), /2 行输出/);
-    assert.match(visible(), /1 张图片/);
+    assert.match(visible(), /▸ codemode.*2 code lines/);
+    assert.match(visible(), /3 calls/);
+    assert.match(visible(), /1 ok/);
+    assert.match(visible(), /1 failed/);
+    assert.match(visible(), /1 cancelled/);
+    assert.match(visible(), /2 lines/);
+    assert.match(visible(), /1 image/);
     assert.match(visible(), /1.3s/);
+    assert.doesNotMatch(visible(), /[\u3400-\u9fff]/, "Compact labels must be English-only");
     assert.doesNotMatch(visible(), /DO_NOT_DISPLAY|PRIVATE_OUTPUT_TEXT|PRIVATE_NESTED_ARGS/);
     transcript.setExpanded(true);
     assert.doesNotMatch(visible(), /DO_NOT_DISPLAY|PRIVATE_OUTPUT_TEXT|PRIVATE_NESTED_ARGS/);
@@ -107,7 +108,7 @@ test("Codemode uses the official native renderer in Normal, summary in Compact, 
 
     await controller.setMode("compact", ctx);
     transcript.setExpanded(false);
-    assert.match(visible(), /3 次调用/);
+    assert.match(visible(), /3 calls/);
 
     // The in-progress callback is a metadata-only summary as well.
     transcript.updateResult({
@@ -118,8 +119,8 @@ test("Codemode uses the official native renderer in Normal, summary in Compact, 
         ],
       }, isError: false,
     }, true);
-    assert.match(visible(), /运行中/);
-    assert.match(visible(), /1 进行中/);
+    assert.match(visible(), /Running/);
+    assert.match(visible(), /1 running/);
     assert.doesNotMatch(visible(), /DO_NOT_DISPLAY|PRIVATE_NESTED_ARGS/);
 
     transcript.updateResult({
@@ -129,8 +130,8 @@ test("Codemode uses the official native renderer in Normal, summary in Compact, 
       durationMs: 400,
     }, false);
     transcript.setExpanded(true);
-    assert.match(visible(), /✗ 失败/);
-    assert.match(visible(), /1 失败/);
+    assert.match(visible(), /✗ Failed/);
+    assert.match(visible(), /1 failed/);
     assert.match(visible(), /400ms/);
     assert.doesNotMatch(visible(), /DO_NOT_DISPLAY|PRIVATE_OUTPUT_TEXT|PRIVATE_NESTED_ARGS/);
     assert.equal(expansions.length, 6, "mode switching requests transcript refresh");
@@ -195,12 +196,13 @@ test("Codemode Compact handles missing, malformed, or very large metadata withou
     const context = { args: { code: 123 }, state: {}, durationMs: NaN, isError: false } as any;
     const call = renderer.renderCall!({ code: 123 }, theme, context);
     assert.match(call.render(100).join(""), /codemode/);
+    assert.match(call.render(100).join(""), /Code: \?/);
     const response = renderer.renderResult!(
       { content: [], details: { calls: [{ status: "unknown" }, null, { status: "ok" }] } },
       { isPartial: false, expanded: false }, theme, context,
     );
-    assert.match(response.render(100).join(""), /3 次调用/);
-    assert.match(response.render(100).join(""), /1 成功/);
+    assert.match(response.render(100).join(""), /3 calls/);
+    assert.match(response.render(100).join(""), /1 ok/);
     assert.doesNotMatch(response.render(100).join(""), /NaN/);
   } finally {
     await rm(directory, { recursive: true, force: true });
@@ -236,12 +238,12 @@ test("Codemode Compact keeps each styled row to one terminal line and prioritize
         assert.ok(visibleWidth(lines[0]!) <= width, `width ${width} overflow: ${lines[0]}`);
       }
     }
-    assert.match(result.render(28).join(""), /失败/);
-    assert.match(result.render(28).join(""), /4 次调用/);
-    assert.doesNotMatch(result.render(28).join(""), /2 行输出/);
-    assert.match(result.render(95).join(""), /2 行输出/);
+    assert.match(result.render(28).join(""), /Failed/);
+    assert.match(result.render(28).join(""), /4 calls/);
+    assert.doesNotMatch(result.render(28).join(""), /2 lines/);
+    assert.match(result.render(95).join(""), /2 lines/);
     assert.match(result.render(95).join(""), /1\.5s/);
-    assert.match(call.render(95).join(""), /3 行代码/);
+    assert.match(call.render(95).join(""), /3 code lines/);
     assert.deepEqual(call.render(0), []);
     assert.deepEqual(result.render(0), []);
   } finally {

@@ -119,8 +119,8 @@ export class ContextPanel implements Component {
     const summary = `${baseSummary}${deltaSuffix}`;
     const cacheHitRate = this.options.getCacheHitRate?.();
     const cacheSummary = cacheHitRate === undefined
-      ? "Catch:?"
-      : `Catch:${Math.round(Math.max(0, Math.min(100, cacheHitRate)))}%`;
+      ? "Cache:?"
+      : `Cache:${Math.round(Math.max(0, Math.min(100, cacheHitRate)))}%`;
     const summaryText = `${this.theme.fg(color, baseSummary)}${deltaSuffix ? this.theme.fg(deltaColor, deltaSuffix) : ""}`;
     const summaryRow = visibleWidth(summary) + visibleWidth(cacheSummary) + 1 <= contentWidth
       ? `${summaryText}${" ".repeat(contentWidth - visibleWidth(summary) - visibleWidth(cacheSummary))}${this.theme.fg(color, cacheSummary)}`

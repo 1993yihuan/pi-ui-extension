@@ -43,9 +43,9 @@ interface CompactToolSpec {
 
 function modeLabel(mode: ToolViewMode): string {
   switch (mode) {
-    case "normal": return "完整";
-    case "compact": return "紧凑";
-    case "hidden": return "隐藏";
+    case "normal": return "Normal";
+    case "compact": return "Compact";
+    case "hidden": return "Hidden";
   }
 }
 
@@ -80,7 +80,7 @@ function formatCount(count: number, singular: string, plural = `${singular}s`): 
 }
 
 function diffStats(diff: string | undefined): string {
-  if (!diff) return "已应用";
+  if (!diff) return "Applied";
   let additions = 0;
   let removals = 0;
   for (const line of diff.split("\n")) {
@@ -123,7 +123,7 @@ const COMPACT_SPECS: Record<string, CompactToolSpec> = {
     call: (args) => ({ title: "$", detail: compactText(args.command) || "…" }),
     result: (result) => {
       const lines = nonEmptyLineCount(textOutput(result));
-      return lines > 0 ? `完成 · ${formatCount(lines, "line")}` : "完成";
+      return lines > 0 ? `Done · ${formatCount(lines, "line")}` : "Done";
     },
   },
   edit: {
@@ -138,7 +138,7 @@ const COMPACT_SPECS: Record<string, CompactToolSpec> = {
         detail: `${compactText(args.path) || "…"}${lines > 0 ? ` · ${formatCount(lines, "line")}` : ""}`,
       };
     },
-    result: () => "已写入",
+    result: () => "Saved",
   },
   grep: {
     call: (args) => ({
@@ -230,7 +230,7 @@ export async function installToolViewController(
 
   function updateStatus(ctx: ExtensionContext): void {
     if (ctx.mode !== "tui") return;
-    ctx.ui.setStatus(MODE_STATUS_ID, `工具：${modeLabel(mode)}`);
+    ctx.ui.setStatus(MODE_STATUS_ID, `Tool View: ${modeLabel(mode)}`);
   }
 
   function requestTranscriptRerender(ctx: ExtensionContext): void {
@@ -262,12 +262,12 @@ export async function installToolViewController(
       // session replacement or reload during the disk write.
       if (generation !== sessionGeneration || activeSessionId !== sessionId) return;
       if (persistError) {
-        ctx.ui.notify(`工具显示模式已切换，但保存失败：${errorMessage(persistError)}`, "warning");
+        ctx.ui.notify(`Tool View mode changed, but saving failed: ${errorMessage(persistError)}`, "warning");
       }
       updateStatus(ctx);
       notifyModeChange();
       requestTranscriptRerender(ctx);
-      if (notify) ctx.ui.notify(`工具显示模式：${modeLabel(mode)}（${mode}）`, "info");
+      if (notify) ctx.ui.notify(`Tool View: ${modeLabel(mode)}`, "info");
     });
     return modeChangeQueue;
   }
@@ -439,7 +439,7 @@ export async function installToolViewController(
           }
           return new Container();
         }
-        if (options.isPartial && !isCodemode) return new Text(theme.fg("warning", "运行中…"), 0, 0);
+        if (options.isPartial && !isCodemode) return new Text(theme.fg("warning", "Running…"), 0, 0);
         const state = context.state as RendererState;
         if (state.nativeResultComponent && nativeDefinition) {
           resultNativeRenderer(nativeDefinition, result, options, theme, context);
@@ -450,7 +450,7 @@ export async function installToolViewController(
   });
 
   pi.registerCommand(MODE_COMMAND, {
-    description: "切换工具显示模式：normal、compact、hidden、status",
+    description: "Change Tool View mode: normal, compact, hidden, or status",
     getArgumentCompletions: (prefix) => {
       const values = [...MODE_ORDER, "status"];
       const matches = values.filter((value) => value.startsWith(prefix.trim()));
@@ -461,18 +461,18 @@ export async function installToolViewController(
       if (!requested || requested === "status") {
         if (!requested && ctx.mode === "tui") {
           const choices = MODE_ORDER.map(
-            (value) => `${modeLabel(value)}（${value}）${value === mode ? " · 当前" : ""}`,
+            (value) => `${modeLabel(value)}${value === mode ? " · Current" : ""}`,
           );
-          const selected = await ctx.ui.select("选择工具显示模式", choices);
+          const selected = await ctx.ui.select("Tool View mode", choices);
           const selectedIndex = selected ? choices.indexOf(selected) : -1;
           if (selectedIndex >= 0) await setMode(MODE_ORDER[selectedIndex]!, ctx);
           return;
         }
-        ctx.ui.notify(`当前工具显示模式：${modeLabel(mode)}（${mode}）`, "info");
+        ctx.ui.notify(`Tool View: ${modeLabel(mode)}`, "info");
         return;
       }
       if (!isToolViewMode(requested)) {
-        ctx.ui.notify("用法：/tool-view normal|compact|hidden|status", "warning");
+        ctx.ui.notify("Usage: /tool-view normal|compact|hidden|status", "warning");
         return;
       }
       await setMode(requested, ctx);
@@ -480,7 +480,7 @@ export async function installToolViewController(
   });
 
   pi.registerShortcut(MODE_SHORTCUT, {
-    description: "循环切换工具显示模式",
+    description: "Cycle Tool View modes",
     handler: cycleMode,
   });
 
