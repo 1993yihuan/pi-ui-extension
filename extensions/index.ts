@@ -11,7 +11,7 @@ import {
   type ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import { installContextEstimates } from "./ctx/data.ts";
-import { createActivityTracker, type ActivityTracker } from "./ctx/activity.ts";
+import { createActivityTracker, createStreamingTokenSampler, type ActivityTracker } from "./ctx/activity.ts";
 import { installFooter, type FooterController } from "./footer/index.ts";
 import { adapterMcpServers, buildMcpStatusSnapshot, describeMcpStatus, type McpStatusSnapshot } from "./mcp/status-center.ts";
 import {
@@ -21,6 +21,13 @@ import {
 import type { ResourceButtonId } from "./session/panel.ts";
 import { installSidebar, type SidebarController } from "./sidebar/index.ts";
 import { deleteSessionFile } from "./session/mutations.ts";
+import {
+  createActiveSessionLease,
+  readActiveSessionPaths,
+  sessionFileUnchanged,
+  snapshotInactiveSession,
+  type SessionFileSnapshot,
+} from "./session/safety.ts";
 import { createUserPromptCounter } from "./session/user-prompts.ts";
 import { openSessionManager, readSessionPins, sessionsEligibleForClear, sortedSessions, toggleSessionPin } from "./session/manager.ts";
 import type { SessionListItem } from "./session/panel.ts";
@@ -37,6 +44,7 @@ const SESSION_DELETE_COMMAND = "sidebar-session-delete";
 const SESSION_CLEAR_COMMAND = "sidebar-session-clear-others";
 const SESSION_MANAGER_COMMAND = "sessions-manager";
 const SESSION_PINS_FILE = join(getAgentDir(), "pi-ui-extension", "session-pins.json");
+const ACTIVE_SESSIONS_DIR = join(getAgentDir(), "pi-ui-extension", "active-sessions");
 
 export type ResourceEntry = { name: string; description: string; content?: string };
 
@@ -208,25 +216,42 @@ export async function loadResourceEntries(
 }
 
 /**
- * Move every saved session except `keepId` to trash. Recoverable deletion only,
- * and one failure never stops the remaining sessions from being cleared.
+ * Move only still-safe, previously approved session files to trash.
+ * Recheck protections before every deletion; one trash failure never stops others.
  */
 async function clearOtherSessions(
   pi: ExtensionAPI,
-  targets: readonly { readonly path: string }[],
-): Promise<{ readonly deleted: number; readonly failed: number; readonly firstError?: string }> {
+  targets: readonly { readonly id: string; readonly path: string; readonly snapshot: SessionFileSnapshot }[],
+  canDelete: (target: { readonly id: string; readonly path: string; readonly snapshot: SessionFileSnapshot }) => Promise<boolean>,
+): Promise<{ readonly deleted: number; readonly failed: number; readonly skipped: number; readonly firstError?: string }> {
   let deleted = 0;
+  let skipped = 0;
   let firstError: string | undefined;
   for (const target of targets) {
+    if (!(await canDelete(target))) {
+      skipped++;
+      continue;
+    }
     const result = await deleteSessionFile(pi, target.path);
     if (result.ok) deleted++;
     else firstError ??= result.error;
   }
-  return { deleted, failed: targets.length - deleted, ...(firstError === undefined ? {} : { firstError }) };
+  return { deleted, skipped, failed: targets.length - deleted - skipped, ...(firstError === undefined ? {} : { firstError }) };
 }
 
 export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
   const toolView = await installToolViewController(pi);
+  const activeLease = createActiveSessionLease(ACTIVE_SESSIONS_DIR);
+  let activeLeaseHealthy = true;
+  const updateActiveLease = (ctx: ExtensionContext): void => {
+    try {
+      activeLease.update(ctx.sessionManager.getSessionId(), ctx.sessionManager.getSessionFile?.());
+      activeLeaseHealthy = true;
+    } catch (error) {
+      activeLeaseHealthy = false;
+      ctx.ui.notify(`Active session protection unavailable: ${error instanceof Error ? error.message : String(error)}`, "warning");
+    }
+  };
   let mcpResources: readonly ResourceEntry[] = [];
   let liveMcpServers: NonNullable<ReturnType<typeof adapterMcpServers>> = [];
   let hasStartedSession = false;
@@ -425,33 +450,59 @@ export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
   });
 
   pi.registerCommand(SESSION_CLEAR_COMMAND, {
-    description: "Move unpinned saved sessions except the active one to trash",
+    description: "Move inactive, unpinned and unchanged saved sessions to trash",
     handler: async (_args, ctx) => {
       try {
+        if (!canManageSessions(ctx)) return;
+        if (!activeLeaseHealthy) {
+          ctx.ui.notify("Bulk cleanup is disabled: active session protection is unavailable", "error");
+          return;
+        }
         const currentSessionId = ctx.sessionManager.getSessionId();
         const pinnedIds = readSessionPins(SESSION_PINS_FILE);
+        const activePaths = readActiveSessionPaths(ACTIVE_SESSIONS_DIR);
         const sessions = await SessionManager.list(ctx.cwd, ctx.sessionManager.getSessionDir());
-        const others = sessionsEligibleForClear(sessions, currentSessionId, pinnedIds);
-        if (others.length === 0) {
-          ctx.ui.notify("No unpinned sessions to clear", "info");
+        const others = sessionsEligibleForClear(sessions, currentSessionId, pinnedIds)
+          .filter((session) => !activePaths.has(resolve(session.path)));
+        const candidates: Array<{ id: string; path: string; snapshot: SessionFileSnapshot }> = [];
+        for (let start = 0; start < others.length; start += 8) {
+          const batch = await Promise.all(others.slice(start, start + 8).map(async (session) => ({
+            id: session.id, path: session.path, snapshot: await snapshotInactiveSession(session.path),
+          })));
+          for (const candidate of batch) if (candidate.snapshot) {
+            candidates.push({ ...candidate, snapshot: candidate.snapshot });
+          }
+        }
+        if (candidates.length === 0) {
+          ctx.ui.notify("No inactive, unpinned sessions eligible for cleanup (recent/active sessions are protected)", "info");
           return;
         }
         const confirmed = await ctx.ui.confirm(
           "Clear other sessions",
-          `Move ${others.length} unpinned session(s) to trash? The active and pinned sessions are kept.`,
+          `Move ${candidates.length} inactive session(s) to trash? Active, pinned and recently modified (5m) sessions are protected.`,
         );
         if (!confirmed) return;
 
-        const result = await clearOtherSessions(pi, others);
+        // Confirmed IDs are an upper bound: never include sessions created or
+        // replaced while the dialog was open.
+        const stillListed = new Map((await SessionManager.list(ctx.cwd, ctx.sessionManager.getSessionDir()))
+          .map((session) => [session.id, session.path]));
+        const result = await clearOtherSessions(pi, candidates, async (target) => {
+          if (!ctx.isIdle() || target.id === ctx.sessionManager.getSessionId() ||
+              stillListed.get(target.id) !== target.path) return false;
+          if (readSessionPins(SESSION_PINS_FILE).has(target.id) ||
+              readActiveSessionPaths(ACTIVE_SESSIONS_DIR).has(resolve(target.path))) return false;
+          return sessionFileUnchanged(target.path, target.snapshot);
+        });
         refreshSessions();
         if (result.failed > 0) {
           ctx.ui.notify(
-            `Cleared ${result.deleted} session(s); ${result.failed} failed: ${result.firstError ?? "unknown error"}`,
+            `Cleared ${result.deleted}; ${result.skipped} protected/changed; ${result.failed} failed: ${result.firstError ?? "unknown error"}`,
             "error",
           );
           return;
         }
-        ctx.ui.notify(`Cleared ${result.deleted} session(s) to trash`, "info");
+        ctx.ui.notify(`Cleared ${result.deleted} session(s) to trash; ${result.skipped} protected/changed`, "info");
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         ctx.ui.notify(`Failed to clear sessions: ${message}`, "error");
@@ -509,6 +560,9 @@ export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
     // updatePanel — the snapshot is not a panel state payload anymore.
     sidebar?.refresh();
   };
+  const streamingTokens = createStreamingTokenSampler(estimateTokens, (tokens, observedAt) => {
+    activity?.updateResponseEstimate(tokens, observedAt);
+  });
   const contextEstimates = installContextEstimates(pi, refreshContextUi);
   const refreshSessions = () => {
     sidebar?.updatePanel(SESSION_PANEL_ID, undefined);
@@ -520,7 +574,9 @@ export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
     toolUsage?.startExchange();
     sidebar?.refresh();
   });
-  pi.on("agent_start", () => {
+  pi.on("agent_start", (_event, ctx) => {
+    // A fresh Pi session creates its JSONL file only after its first user message.
+    updateActiveLease(ctx);
     activity?.startRun();
     refreshContextUi();
   });
@@ -528,10 +584,12 @@ export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
     activity?.startTurn(event.turnIndex);
     sidebar?.refresh();
   });
-  pi.on("before_provider_request", () => activity?.startResponse());
+  pi.on("before_provider_request", () => {
+    streamingTokens.reset();
+    activity?.startResponse();
+  });
   pi.on("message_update", (event) => {
-    const estimatedOutputTokens = estimateTokens(event.message);
-    if (estimatedOutputTokens > 0) activity?.updateResponseEstimate(estimatedOutputTokens);
+    if (activity) streamingTokens.observe(event.message);
   });
   pi.on("message_end", (event) => {
     if (event.message.role === "assistant") {
@@ -591,6 +649,7 @@ export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
     // adapter health over a reload.
     if (hasStartedSession) liveMcpServers = [];
     hasStartedSession = true;
+    updateActiveLease(ctx);
     mcpCwd = ctx.cwd;
     mcpTrusted = ctx.isProjectTrusted();
     registeredServers = typeof pi.getMcpServers === "function" ? pi.getMcpServers() : [];
@@ -683,6 +742,7 @@ export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
   });
 
   pi.on("session_shutdown", () => {
+    activeLease.dispose();
     unsubscribeToolViewMode();
     unsubscribeMcpStatus();
     liveMcpServers = [];

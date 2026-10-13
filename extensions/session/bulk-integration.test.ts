@@ -1,0 +1,77 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { appendFileSync, mkdtempSync, rmSync, utimesSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { getAgentDir, SessionManager } from "@earendil-works/pi-coding-agent";
+import piUiExtension from "../index.ts";
+import { createActiveSessionLease, SESSION_QUIET_PERIOD_MS } from "./safety.ts";
+
+test("bulk cleanup rechecks active leases and files changed during confirmation", async () => {
+  const root = mkdtempSync(join(tmpdir(), "pi-ui-bulk-cleanup-"));
+  const directory = join(root, "sessions");
+  const activeLeaseDir = join(getAgentDir(), "pi-ui-extension", "active-sessions");
+  const otherInstance = createActiveSessionLease(activeLeaseDir);
+  const makeSession = (title: string) => {
+    const manager = SessionManager.create(root, directory);
+    manager.appendMessage({ role: "user", timestamp: Date.now(), content: [{ type: "text", text: title }] });
+    return manager;
+  };
+  const active = makeSession("current");
+  const changed = makeSession("changed while confirming");
+  const otherActive = makeSession("other Pi instance");
+  const unchanged = makeSession("safe to trash");
+  const recentlyModified = makeSession("recent activity");
+  const old = new Date(Date.now() - SESSION_QUIET_PERIOD_MS - 60_000);
+  for (const manager of [changed, otherActive, unchanged]) {
+    utimesSync(manager.getSessionFile()!, old, old);
+  }
+
+  const events = new Map<string, Array<(event: any, ctx: any) => unknown>>();
+  const commands = new Map<string, { handler: (args: string, ctx: any) => Promise<void> }>();
+  const moves: string[] = [];
+  const notices: string[] = [];
+  const pi: any = {
+    registerToolRenderer() {}, registerShortcut() {},
+    registerCommand(name: string, command: any) { commands.set(name, command); },
+    getCommands: () => [], getActiveTools: () => [], getAllTools: () => [],
+    getMcpServers: () => [], getThinkingLevel: () => "off",
+    events: { on: () => () => {} },
+    on(name: string, callback: (event: any, ctx: any) => unknown) {
+      events.set(name, [...(events.get(name) ?? []), callback]);
+    },
+    async exec(_command: string, args: string[]) { moves.push(args[0]!); return { code: 0, stderr: "" }; },
+  };
+  const ctx: any = {
+    mode: "rpc", cwd: root, isIdle: () => true, isProjectTrusted: () => true,
+    getSystemPrompt: () => "", getContextUsage: () => undefined,
+    sessionManager: active,
+    ui: {
+      notify(message: string) { notices.push(message); },
+      setStatus() {},
+      async confirm() {
+        // A running second Pi becomes active, and another historical session
+        // changes while this confirmation modal is still open.
+        otherInstance.update(otherActive.getSessionId(), otherActive.getSessionFile());
+        appendFileSync(changed.getSessionFile()!, JSON.stringify({ type: "message", message: { role: "user" } }) + "\n");
+        return true;
+      },
+    },
+  };
+  const emit = async (name: string) => {
+    for (const callback of events.get(name) ?? []) await callback({}, ctx);
+  };
+  try {
+    await piUiExtension(pi);
+    await emit("session_start");
+    await commands.get("sidebar-session-clear-others")!.handler("", ctx);
+    assert.deepEqual(moves, [unchanged.getSessionFile()]);
+    assert.match(notices.join("\n"), /2 protected\/changed/);
+    assert.ok(!moves.includes(active.getSessionFile()!));
+    assert.ok(!moves.includes(recentlyModified.getSessionFile()!));
+  } finally {
+    await emit("session_shutdown");
+    otherInstance.dispose();
+    rmSync(root, { recursive: true, force: true });
+  }
+});

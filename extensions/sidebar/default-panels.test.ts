@@ -40,6 +40,50 @@ test("always registers Tool View", () => {
   assert.ok(ids.includes(TOOL_VIEW_PANEL_ID));
 });
 
+test("CTX refresh timer runs only during a live run and is cleared on dispose", (t) => {
+  let phase: "idle" | "running" | "settled" = "idle";
+  let renderRequests = 0;
+  const timers: Array<{ callback: () => void; delay: number; unref(): void }> = [];
+  const cleared: unknown[] = [];
+  t.mock.method(globalThis, "setInterval", (callback: () => void, delay: number) => {
+    const timer = { callback, delay, unref() {} };
+    timers.push(timer);
+    return timer as unknown as ReturnType<typeof setInterval>;
+  });
+  t.mock.method(globalThis, "clearInterval", (timer: unknown) => { cleared.push(timer); });
+
+  const context = createDefaultSidebarPanels({
+    ...options(),
+    getActivity: () => ({ phase }) as any,
+  }).find((panel) => panel.id === "context")!;
+  const instance = context.create({
+    tui: { requestRender() { renderRequests++; } } as any,
+    theme: { fg: (_color: string, value: string) => value } as any,
+    getDesiredWidth: () => 50,
+  });
+  try {
+    assert.equal(timers.length, 0, "idle TUI must not run the timer");
+    phase = "running";
+    instance.refresh?.();
+    assert.equal(timers.length, 1);
+    assert.equal(timers[0]!.delay, 1_000);
+    instance.refresh?.();
+    assert.equal(timers.length, 1, "repeat refresh must not start duplicate intervals");
+    timers[0]!.callback();
+    assert.equal(renderRequests, 1);
+
+    phase = "settled";
+    instance.refresh?.();
+    assert.deepEqual(cleared, [timers[0]], "settling a run stops periodic renders");
+    phase = "running";
+    instance.refresh?.();
+    assert.equal(timers.length, 2, "subsequent runs restart the timer");
+  } finally {
+    instance.dispose?.();
+  }
+  assert.deepEqual(cleared, timers, "disposing the panel clears any active timer");
+});
+
 
 test("keeps Tool View anchored at the top when usage rows overflow", () => {
   const tui = { addInputListener: () => () => {}, requestRender() {} } as any;

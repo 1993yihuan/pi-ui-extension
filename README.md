@@ -34,9 +34,9 @@ The `SESSIONS` panel provides quick access to recent sessions:
 - Click a session to switch to it.
 - Rename a non-current session.
 - Delete a non-current session.
-- Use `⊗` to move other unpinned sessions to trash while keeping the current and pinned sessions.
+- Use `⊗` to move eligible inactive, unpinned sessions to trash, keeping the current, pinned, recently modified, and known active sessions safe.
 - Click `SESSIONS ↻` to refresh the session list.
-- The number beside a session is its **user question count**, not Pi's total message count. Only top-level `user` messages in that session's JSONL history are counted; assistant replies, tool results, and nested calls are excluded. The format remains `questions · last updated` (for example, `3 · 55m`). A missing/unreadable session shows `?`, not a misleading zero. Counting is streamed and cached by file size/mtime.
+- The number beside a session is its **user question count**, not Pi's total message count. Only top-level `user` messages in that session's JSONL history are counted; assistant replies, tool results, and nested calls are excluded. The format remains `questions · last updated` (for example, `3 · 55m`). A missing/unreadable session shows `?`, not a misleading zero. Counting incrementally reads appended JSONL bytes, buffers incomplete lines, and rebuilds on truncation/replacement.
 
 **Advanced Sessions management (v1.2.0+)**: click `≡` on the Sessions header or run `/sessions-manager`.
 
@@ -46,7 +46,7 @@ The `SESSIONS` panel provides quick access to recent sessions:
 - Pinned sessions (`★`) appear first, including in the five-session quick sidebar. Pins persist as IDs (no session content) in `pi-ui-extension/session-pins.json` under Pi's agent directory.
 - The quick sidebar shows the current-session indicator first, then the pin marker before the title: `○ ★hello` (pinned) or `● ★hello` (active and pinned).
 - Each session row has a quick pin button: `☆` means unpinned and `★` means pinned; clicking it toggles pinning without opening the manager. The existing `✎` rename and `×` delete controls are unchanged. On narrow sidebars, the pin action hides to preserve the existing controls.
-- The `⊗` bulk cleanup now **protects both the active session and all pinned sessions**. Explicit single-session deletion still requires confirmation.
+- The `⊗` bulk cleanup protects the current session, pinned sessions, sessions modified within the past **5 minutes**, and other active sessions advertised by Pi instances running this extension. Active-session records are private metadata stored under `pi-ui-extension/active-sessions/` in Pi's agent directory and are removed on normal shutdown. Before each move to trash, the extension rechecks the current session, pins, active-session records, and file identity/mtime; sessions that changed during confirmation are skipped. **Other Pi instances without this extension cannot be reliably detected**, so avoid bulk cleanup while older Pi processes may still be using historical sessions. Explicit single-session deletion still requires confirmation and does not apply the bulk-cleanup grace period.
 
 To avoid corrupting active agent state, switching, renaming, deleting, and bulk cleanup are only allowed while Pi is idle. The current session cannot be deleted.
 
@@ -100,6 +100,8 @@ Context composition is grouped into:
 Token counts are local heuristic estimates intended for composition and trend visibility. They are **not** provider-accurate tokenizer results and are not billing-token counts.
 
 For tool definitions, the extension prefers the observable provider-request tool payload when available. Before a provider request exists, it falls back to estimating the schemas of Pi's currently enabled tools.
+
+**TUI performance (v1.2.5+)**: Streaming token estimates are sampled at most once every 150 ms, with the first valid token update shown immediately. Unchanged token counts do not trigger extra CTX redraws. The one-second elapsed-time ticker runs only while an agent run is active and is cleared when the run settles or the panel is disposed.
 
 ### 5. Tool View modes
 

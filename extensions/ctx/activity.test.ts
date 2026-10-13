@@ -1,9 +1,39 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createActivityTracker } from "./activity.ts";
+import { createActivityTracker, createStreamingTokenSampler } from "./activity.ts";
 import { ContextPanel } from "./panel.ts";
 
 const theme = { fg: (_color: string, value: string) => value } as any;
+
+test("streaming token sampling throttles expensive estimates without delaying first output", () => {
+  let now = 1_000;
+  let estimates = 0;
+  const samples: Array<[number, number]> = [];
+  const sampler = createStreamingTokenSampler(
+    (message: { tokens: number }) => { estimates++; return message.tokens; },
+    (tokens, observedAt) => samples.push([tokens, observedAt]),
+    150,
+    () => now,
+  );
+
+  sampler.observe({ tokens: 0 });
+  sampler.observe({ tokens: 1 });
+  assert.deepEqual(samples, [[1, 1_000]], "first real output is sampled immediately");
+  now = 1_050;
+  sampler.observe({ tokens: 2 });
+  assert.equal(estimates, 2, "throttled updates do not run the estimator");
+  now = 1_150;
+  sampler.observe({ tokens: 1 });
+  assert.equal(samples.length, 1, "unchanged token counts do not trigger refreshes");
+  now = 1_200;
+  sampler.observe({ tokens: 2 });
+  assert.deepEqual(samples, [[1, 1_000], [2, 1_200]]);
+
+  now = 1_250;
+  sampler.reset();
+  sampler.observe({ tokens: 1 });
+  assert.deepEqual(samples.at(-1), [1, 1_250], "new provider request is sampled immediately");
+});
 
 test("aborted run keeps completed tools but marks interrupted tools as cancelled", () => {
   const tracker = createActivityTracker(process.cwd(), () => {});

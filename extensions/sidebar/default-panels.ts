@@ -123,13 +123,28 @@ export function createDefaultSidebarPanels(
           getThinkingLevel: options.getThinkingLevel,
           getDesiredWidth,
       });
-      // A one-second tick keeps the running duration fresh; CTX now owns the
-      // activity rows that used to live in their own panel.
-      const renderTimer = setInterval(() => tui.requestRender(), 1_000);
-      renderTimer.unref?.();
+      // Keep elapsed time current during a run, but avoid waking an idle TUI.
+      // Activity transitions call sidebar.refresh(), which starts/stops this ticker.
+      let renderTimer: ReturnType<typeof setInterval> | undefined;
+      const syncTicker = (): void => {
+        if (options.getActivity?.()?.phase === "running") {
+          if (!renderTimer) {
+            renderTimer = setInterval(() => tui.requestRender(), 1_000);
+            renderTimer.unref?.();
+          }
+        } else if (renderTimer) {
+          clearInterval(renderTimer);
+          renderTimer = undefined;
+        }
+      };
+      syncTicker();
       return {
         component: new AdaptiveScrollView(panel, { follow: "none", overscroll: "chain", scrollbar: "hidden" }),
-        dispose(): void { clearInterval(renderTimer); },
+        refresh(): void { syncTicker(); },
+        dispose(): void {
+          if (renderTimer) clearInterval(renderTimer);
+          renderTimer = undefined;
+        },
       };
     },
   }, {

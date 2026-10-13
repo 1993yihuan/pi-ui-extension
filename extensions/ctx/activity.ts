@@ -82,6 +82,32 @@ export function formatDuration(ms: number): string {
   if (minutes < 60) return `${minutes}m ${String(seconds % 60).padStart(2, "0")}s`;
   return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, "0")}m`;
 }
+
+/** Sample streaming token estimates at a bounded rate without delaying the first token. */
+export function createStreamingTokenSampler<T>(
+  estimate: (message: T) => number,
+  onTokens: (tokens: number, observedAt: number) => void,
+  intervalMs = 150,
+  now: () => number = Date.now,
+): { observe(message: T): void; reset(): void } {
+  let lastSampleAt: number | undefined;
+  let lastTokens: number | undefined;
+  return {
+    observe(message): void {
+      const observedAt = now();
+      if (lastSampleAt !== undefined && observedAt >= lastSampleAt && observedAt - lastSampleAt < intervalMs) return;
+      const tokens = estimate(message);
+      if (!Number.isFinite(tokens) || tokens <= 0 || tokens === lastTokens) return;
+      lastSampleAt = observedAt;
+      lastTokens = tokens;
+      onTokens(tokens, observedAt);
+    },
+    reset(): void {
+      lastSampleAt = undefined;
+      lastTokens = undefined;
+    },
+  };
+}
 function clean(value: unknown): string {
   return typeof value === "string" ? value.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, "")
     .replace(/[\u0000-\u001f\u007f-\u009f]/g, " ").replace(/\s+/g, " ").trim() : "";
