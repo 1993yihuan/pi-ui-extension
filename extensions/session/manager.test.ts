@@ -9,8 +9,8 @@ import {
 } from "./manager.ts";
 import type { SessionListItem } from "./panel.ts";
 
-function session(id: string, modified: number, title = `Session ${id}`, messages = 1): SessionListItem {
-  return { id, title, modified: new Date(modified), messageCount: messages, current: id === "id-0" };
+function session(id: string, modified: number, title = `Session ${id}`, prompts = 1): SessionListItem {
+  return { id, title, modified: new Date(modified), userPromptCount: prompts, current: id === "id-0" };
 }
 
 test("sorting, searching and pagination scale to hundreds of sessions with pinned first", () => {
@@ -25,7 +25,8 @@ test("sorting, searching and pagination scale to hundreds of sessions with pinne
   assert.equal(getSessionPage(many, "BRANCH 1", "recent", 0).total, 16);
   assert.equal(getSessionPage(many, "id-60", "recent", 0).items[0]!.id, "id-60");
   assert.equal(getSessionPage(many, "not found", "title", 0).total, 0);
-  assert.equal(sortedSessions(many, "messages")[1]!.id, "id-104");
+  assert.equal(sortedSessions(many, "prompts")[1]!.id, "id-104");
+  assert.equal(sortedSessions([session("a", 0, "a", 0), { ...session("unknown", 0), userPromptCount: undefined }], "prompts")[0]!.id, "a");
   assert.equal(sortedSessions(many, "oldest")[1]!.id, "id-1");
   assert.equal(sortedSessions(many, "title")[1]!.id, "id-1");
   assert.deepEqual(sortedSessions([session("b", 0), session("a", 0)], "recent").map((s) => s.id), ["a", "b"]);
@@ -109,6 +110,8 @@ test("manager can navigate pages, pin and unpin, and switch using the selected s
     assert.deepEqual([...readSessionPins(path)], []);
     assert.match(viewed[2]!.title, /3\/3/);
     assert.match(viewed[4]!.choices[0]!, /★/);
+    assert.match(viewed[4]!.choices[0]!, /次提问/);
+    assert.doesNotMatch(viewed[4]!.choices[0]!, /条消息/);
     assert.deepEqual(notices, ["会话已置顶", "已取消置顶"]);
   } finally {
     rmSync(root, { recursive: true, force: true });

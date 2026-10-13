@@ -36,11 +36,12 @@ The `SESSIONS` panel provides quick access to recent sessions:
 - Delete a non-current session.
 - Use `⊗` to move other unpinned sessions to trash while keeping the current and pinned sessions.
 - Click `SESSIONS ↻` to refresh the session list.
+- The number beside a session is its **user question count**, not Pi's total message count. Only top-level `user` messages in that session's JSONL history are counted; assistant replies, tool results, and nested calls are excluded. The format remains `questions · last updated` (for example, `3 · 55m`). A missing/unreadable session shows `?`, not a misleading zero. Counting is streamed and cached by file size/mtime.
 
 **Advanced Sessions management (v1.2.0+)**: click `≡` on the Sessions header or run `/sessions-manager`.
 
 - Browse all saved sessions for the current project in **8-item pages**, with previous/next navigation and refresh.
-- Search session titles or IDs case-insensitively, and sort by latest update, oldest update, message count, or title.
+- Search session titles or IDs case-insensitively, and sort by latest update, oldest update, **user question count**, or title. The advanced manager uses the same question count as the sidebar.
 - Switch, rename, pin/unpin, or move an individual session to trash. Deletions require confirmation and the active session cannot be deleted.
 - Pinned sessions (`★`) appear first, including in the five-session quick sidebar. Pins persist as IDs (no session content) in `pi-ui-extension/session-pins.json` under Pi's agent directory.
 - The quick sidebar shows the current-session indicator first, then the pin marker before the title: `○ ★hello` (pinned) or `● ★hello` (active and pinned).
@@ -135,23 +136,26 @@ Tool View groups usage by execution source:
 - `NESTED TOOLS`: tools invoked by other tools via Pi `executeTool()` (for example, `bash` or `read` inside Codemode).
 - `MCP`: calls attributed to each known MCP server, aggregated across execution sources.
 
-Each entry is shown as:
+The panel displays two aligned summary values: **RUN** (current run) and **TOTAL** (calls in the active session branch). Only Direct and Nested tool calls contribute to the overall summary; MCP is an attribution of those calls, not additional executions.
+
+An edge-to-edge divider joins both panel borders directly beneath the mode selector, with no horizontal padding. Each group header shows its tool/server count on the left without a redundant subtotal. Only individual tool rows show `Run/Total`; Direct and Nested names align at the same left column without prefix icons. Labels are English-only and shorten on narrow terminals. Run counts with activity are highlighted; zero counts are dimmed. Lists stay fully expanded and scroll when necessary.
+
+Example:
 
 ```text
-current-question calls / current-session calls
-```
-
-Example (the right column counts the currently selected session branch):
-
-```text
-DIRECT TOOLS
-codemode                         16/32
-NESTED TOOLS
-bash                             15/30
-task_todos                        6/15
-read                              4/8
-MCP
-my-mcp-server                     1/3
+○ Normal      ● Compact      ○ Hidden
+├─────────────────────────────────────┤
+RUN                                 TOTAL
+16                                     93
+───────────────────────────────────────
+DIRECT TOOLS · 1
+codemode                            16/32
+───────────────────────────────────────
+NESTED TOOLS · 7
+bash                                 0/30
+task_todos                           0/15
+read                                  0/8
+...
 ```
 
 A top-level `codemode` invocation is counted once in `DIRECT TOOLS`; each completed tool it invokes is counted in `NESTED TOOLS`. If the same tool name is used directly and within Codemode, it appears in both sections with separate counts. `MCP` is a server attribution of tool activity (not an additional tool invocation), so don't add MCP totals to Direct + Nested totals. The left column is the current run; it resets at the next run, after a session reload, or on a branch switch. The right column is the cumulative total of the active session branch.
@@ -200,7 +204,7 @@ Example configuration:
 To pin a specific version:
 
 ```bash
-pi install npm:pi-ui-extension@1.2.3
+pi install npm:pi-ui-extension@1.2.4
 ```
 
 or:
@@ -208,7 +212,7 @@ or:
 ```json
 {
   "packages": [
-    "npm:pi-ui-extension@1.2.3"
+    "npm:pi-ui-extension@1.2.4"
   ]
 }
 ```
@@ -236,7 +240,7 @@ Configuration form:
 Pin to a Git tag:
 
 ```bash
-pi install git:github.com/1993yihuan/pi-ui-extension@v1.2.3
+pi install git:github.com/1993yihuan/pi-ui-extension@v1.2.4
 ```
 
 ### Temporary local-source testing

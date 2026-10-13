@@ -21,6 +21,7 @@ import {
 import type { ResourceButtonId } from "./session/panel.ts";
 import { installSidebar, type SidebarController } from "./sidebar/index.ts";
 import { deleteSessionFile } from "./session/mutations.ts";
+import { createUserPromptCounter } from "./session/user-prompts.ts";
 import { openSessionManager, readSessionPins, sessionsEligibleForClear, sortedSessions, toggleSessionPin } from "./session/manager.ts";
 import type { SessionListItem } from "./session/panel.ts";
 import { installToolViewController } from "./tool-view/controller.ts";
@@ -270,15 +271,17 @@ export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
     try { return readSessionPins(SESSION_PINS_FILE); }
     catch { return new Set(); } // Broken preferences must not hide saved sessions.
   };
+  const countUserPrompts = createUserPromptCounter();
   const loadSessionRows = async (ctx: ExtensionContext): Promise<readonly SessionListItem[]> => {
     const currentId = ctx.sessionManager.getSessionId();
     const pinned = safeReadPins();
     const sessions = await SessionManager.list(ctx.cwd, ctx.sessionManager.getSessionDir());
-    return sortedSessions(sessions.map((session) => ({
+    const prompts = await countUserPrompts(sessions);
+    return sortedSessions(sessions.map((session, index) => ({
       id: session.id,
       title: session.name ?? session.firstMessage,
       modified: session.modified,
-      messageCount: session.messageCount,
+      userPromptCount: prompts[index],
       current: session.id === currentId,
       pinned: pinned.has(session.id),
     })), "recent");

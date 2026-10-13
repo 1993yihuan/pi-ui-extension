@@ -3,7 +3,7 @@ import { dirname } from "node:path";
 import { stripTerminalSequences, truncateToWidth } from "@earendil-works/pi-tui";
 import type { SessionListItem } from "./panel.ts";
 
-export type SessionSort = "recent" | "oldest" | "messages" | "title";
+export type SessionSort = "recent" | "oldest" | "prompts" | "title";
 export const SESSION_PAGE_SIZE = 8;
 
 /** Store only opaque session ids; session contents and titles never leave Pi. */
@@ -47,7 +47,7 @@ export function sortedSessions(sessions: readonly SessionListItem[], sort: Sessi
     if (Boolean(a.pinned) !== Boolean(b.pinned)) return a.pinned ? -1 : 1;
     const diff = sort === "recent" ? b.modified.getTime() - a.modified.getTime()
       : sort === "oldest" ? a.modified.getTime() - b.modified.getTime()
-        : sort === "messages" ? b.messageCount - a.messageCount
+        : sort === "prompts" ? (b.userPromptCount ?? -1) - (a.userPromptCount ?? -1)
           : a.title.localeCompare(b.title);
     return (Number.isFinite(diff) ? diff : 0) || a.id.localeCompare(b.id);
   });
@@ -96,7 +96,7 @@ export type SessionManagerOptions = {
 const SORT_CHOICES: ReadonlyArray<{ sort: SessionSort; label: string }> = [
   { sort: "recent", label: "最近更新" },
   { sort: "oldest", label: "最早更新" },
-  { sort: "messages", label: "消息数量" },
+  { sort: "prompts", label: "提问次数" },
   { sort: "title", label: "会话标题" },
 ];
 
@@ -117,7 +117,7 @@ export async function openSessionManager(options: SessionManagerOptions): Promis
     const current = getSessionPage(sessions, query, sort, page);
     page = current.page;
     const labels = current.items.map((session, index) =>
-      `${index + 1}. ${session.pinned ? "★ " : ""}${session.current ? "● " : ""}${safeLabel(session.title)} · ${session.messageCount} 条消息`,
+      `${index + 1}. ${session.pinned ? "★ " : ""}${session.current ? "● " : ""}${safeLabel(session.title)} · ${session.userPromptCount ?? "?"} 次提问`,
     );
     const actions = [
       "⌕ 搜索 / 清除搜索",

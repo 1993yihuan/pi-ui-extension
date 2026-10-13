@@ -36,11 +36,12 @@ Sidebar 支持鼠标交互、滚轮滚动和终端尺寸变化。终端高度不
 - 删除非当前 Session。
 - 使用右上角 `⊗` 清理其他未置顶会话（保留当前和置顶 Session）。
 - 点击 `SESSIONS ↻` 刷新会话列表。
+- 每条会话旁的数字现表示**用户提问次数**，不再表示 Pi 的消息总数。只统计会话 JSONL 历史中顶层 `user` 消息，不计入 AI 回复、工具结果或嵌套调用。显示格式仍为 `提问次数 · 最近更新`（例如 `3 · 55m`）；文件不存在或无法读取时显示 `?`，避免误报为 0。采用流式读取、文件大小及修改时间缓存，减少刷新历史 Session 时的开销。
 
 **Sessions 高级管理（v1.2.0 起）**：点击标题右侧的 `≡`，或输入 `/sessions-manager` 打开完整会话管理器。
 
 - 全量浏览当前项目的历史 Session，**每页 8 条**，可向前 / 向后翻页和手动刷新。
-- 按会话标题或 Session ID 搜索（不区分大小写），支持最近更新、最早更新、消息数量和标题排序。
+- 按会话标题或 Session ID 搜索（不区分大小写），支持最近更新、最早更新、**用户提问次数**和标题排序；高级管理器与右侧列表使用相同的提问计数。
 - 单独查看会话操作：切换、重命名、置顶 / 取消置顶、移到回收站。删除前有确认，当前 Session 不允许删除。
 - 置顶会话始终优先排序，并使用 `★` 标记，优先显示在 Sidebar 的最近 5 条会话中。
 - Sidebar 的左侧标记顺序为先显示会话状态，再在标题前显示置顶星标：`○ ★hello` 表示已置顶，`● ★hello` 表示当前且已置顶。
@@ -136,23 +137,26 @@ Tool View 根据调用来源拆分展示：
 - `NESTED TOOLS`：工具内部通过 Pi `executeTool()` 执行的调用，例如 Codemode 内部的 `bash`、`read`。
 - `MCP`：归属到 MCP Server 的调用，合并不同调用来源。
 
-每一项使用：
+面板顶部使用 **RUN**（本轮调用）和 **TOTAL**（当前 Session 的 active branch 累计调用）两个对齐指标。整体汇总只统计 Direct 与 Nested，MCP 是既有调用的归属信息，不额外累计。
+
+模式切换栏下方的分隔线直接连接面板左右边框，不保留水平内边距。分组标题左侧保留工具或服务器种数，右侧不重复展示小计；仅明细行保留 `Run/Total`。Direct 和 Nested 工具名称均不显示前缀图标或箭头，左侧统一对齐。UI 文案为简短英文，窄终端自动缩写。本轮调用为正数时高亮，为零时弱化；**不做默认折叠**，内容过多时保持原来的滚动方式。
+
+示例：
 
 ```text
-当前提问调用数 / 当前 Session 累计调用数
-```
-
-示例（右侧累计数以当前选中会话的 active branch 为准）：
-
-```text
-DIRECT TOOLS
-codemode                         16/32
-NESTED TOOLS
-bash                             15/30
-task_todos                        6/15
-read                              4/8
-MCP
-my-mcp-server                     1/3
+○ Normal      ● Compact      ○ Hidden
+├─────────────────────────────────────┤
+RUN                                 TOTAL
+0                                      93
+───────────────────────────────────────
+DIRECT TOOLS · 1
+codemode                             0/32
+───────────────────────────────────────
+NESTED TOOLS · 7
+bash                                 0/30
+task_todos                           0/15
+read                                  0/8
+...
 ```
 
 `codemode` 的父调用只在 `DIRECT TOOLS` 中计一次；Codemode 内部实际执行完成的工具分别计入 `NESTED TOOLS`。同名工具如果既有直接调用又有内嵌调用，会出现在不同分组并分别计数。`MCP` 表示对 MCP Server 的调用归属，不是额外的工具执行，因此**不能与 Direct / Nested 数量相加**。左侧表示当前运行次数，在新一轮运行、会话重载或分支切换后重置；右侧表示当前 active branch 的整个会话累计次数。
@@ -201,7 +205,7 @@ Pi 会安装 package，并将声明写入个人配置：
 如果希望固定版本：
 
 ```bash
-pi install npm:pi-ui-extension@1.2.3
+pi install npm:pi-ui-extension@1.2.4
 ```
 
 或者：
@@ -209,7 +213,7 @@ pi install npm:pi-ui-extension@1.2.3
 ```json
 {
   "packages": [
-    "npm:pi-ui-extension@1.2.3"
+    "npm:pi-ui-extension@1.2.4"
   ]
 }
 ```
@@ -237,7 +241,7 @@ pi install git:github.com/1993yihuan/pi-ui-extension
 固定到 Git tag：
 
 ```bash
-pi install git:github.com/1993yihuan/pi-ui-extension@v1.2.3
+pi install git:github.com/1993yihuan/pi-ui-extension@v1.2.4
 ```
 
 ### 临时加载本地源码

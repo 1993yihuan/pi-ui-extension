@@ -22,7 +22,8 @@ export type SessionListItem = {
   readonly id: string;
   readonly title: string;
   readonly modified: Date;
-  readonly messageCount: number;
+  /** Top-level user messages (questions), not assistant/tool results. */
+  readonly userPromptCount: number | undefined;
   readonly current: boolean;
   readonly pinned?: boolean;
 };
@@ -134,7 +135,7 @@ function renderSessionTitleRow(theme: Theme, title: string, renderWidth: number,
 
 function formatSessionSummary(session: SessionListItem, width: number, now: number): string {
   const marker = `${session.current ? "● " : "○ "}${session.pinned ? "★" : ""}`;
-  const metadata = `${session.messageCount} · ${formatRelativeTime(session.modified, now)}`;
+  const metadata = `${session.userPromptCount ?? "?"} · ${formatRelativeTime(session.modified, now)}`;
   const fixedWidth = visibleWidth(marker) + visibleWidth(metadata) + 1;
   if (fixedWidth >= width) {
     return truncateToWidth(`${marker}${normalizeTitle(session.title)}`, width, "");

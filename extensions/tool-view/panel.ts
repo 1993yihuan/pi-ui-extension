@@ -57,14 +57,51 @@ function centerText(text: string, width: number): string {
   return `${" ".repeat(left)}${clipped}${" ".repeat(padding - left)}`;
 }
 
-function usageText(name: string, exchange: number, session: number, width: number): string {
-  const value = `${exchange}/${session}`;
-  const nameWidth = Math.max(0, width - visibleWidth(value) - 1);
-  if (nameWidth === 0) return truncateToWidth(value, width, "");
-  const clippedName = truncateToWidth(name, nameWidth, "…");
-  const gap = " ".repeat(Math.max(1, width - visibleWidth(clippedName) - visibleWidth(value)));
-  return `${clippedName}${gap}${value}`;
+type UsageColor = "dim" | "muted" | "text" | "accent" | "success";
+
+function colored(theme: Theme, color: UsageColor, value: string): string {
+  return theme.fg(color, value);
 }
+
+/** Keep aligned counters readable without ever wrapping in narrow terminals. */
+function alignedRow(theme: Theme, left: string, right: string, width: number): string {
+  const rightWidth = visibleWidth(right);
+  if (rightWidth >= width) return panelContent(theme, truncateToWidth(right, width, ""), "dim", width);
+  const label = truncateToWidth(left, Math.max(0, width - rightWidth - 1), "…");
+  const gap = " ".repeat(Math.max(1, width - visibleWidth(label) - rightWidth));
+  return panelContent(theme, label + gap + right, "dim", width);
+}
+
+function usageCount(theme: Theme, exchange: number, session: number): string {
+  return colored(theme, exchange > 0 ? "success" : "dim", String(exchange)) +
+    colored(theme, "dim", "/") +
+    colored(theme, "text", String(session));
+}
+
+function sectionLabel(kind: "direct" | "nested" | "mcp", count: number, width: number): string {
+  const full = kind === "mcp" ? "MCP" : kind === "direct" ? "DIRECT TOOLS" : "NESTED TOOLS";
+  const short = kind === "mcp" ? "MCP" : kind === "direct" ? "DIRECT" : "NESTED";
+  const base = width >= 32 ? full : width >= 18 ? short : kind === "direct" ? "DIR" : kind === "nested" ? "NEST" : "MCP";
+  return width >= 15 ? `${base} · ${count}` : base;
+}
+
+function sectionTotal(counts: readonly ToolUsageCount[]): { run: number; total: number } {
+  return counts.reduce((sum, count) => ({
+    run: sum.run + count.exchange,
+    total: sum.total + count.session,
+  }), { run: 0, total: 0 });
+}
+
+function separator(theme: Theme, width: number): string {
+  return panelContent(theme, colored(theme, "dim", "─".repeat(width)), "dim", width);
+}
+
+/** Spans edge-to-edge, joining the side borders without any content padding. */
+function flushSeparator(theme: Theme, renderWidth: number): string {
+  if (renderWidth < 2) return theme.fg("dim", "─".repeat(renderWidth));
+  return theme.fg("dim", `├${"─".repeat(renderWidth - 2)}┤`);
+}
+
 
 export function groupUsageCounts(counts: readonly ToolUsageCount[]): Readonly<Record<ToolUsageKind, readonly ToolUsageCount[]>> {
   return Object.freeze({
@@ -179,26 +216,47 @@ export class ToolViewPanel implements Component {
     }).join("");
     const usage = this.options.getUsage();
     const grouped = groupUsageCounts(usage?.counts ?? []);
-    const usageRows: string[] = [];
-    const appendGroup = (label: string, counts: readonly ToolUsageCount[]): void => {
+    const direct = grouped.tool.filter((count) => count.scope !== "nested");
+    const nested = grouped.tool.filter((count) => count.scope === "nested");
+    const all = sectionTotal(grouped.tool); // MCP rows attribute existing calls, not extra executions.
+    const usageRows: string[] = [
+      alignedRow(this.theme, colored(this.theme, "dim", "RUN"), colored(this.theme, "dim", "TOTAL"), contentWidth),
+      alignedRow(
+        this.theme,
+        colored(this.theme, all.run > 0 ? "success" : "muted", String(all.run)),
+        colored(this.theme, "text", String(all.total)),
+        contentWidth,
+      ),
+    ];
+    const appendGroup = (kind: "direct" | "nested" | "mcp", counts: readonly ToolUsageCount[]): void => {
       if (counts.length === 0) return;
-      usageRows.push(panelContent(this.theme, label, "accent", contentWidth));
+      usageRows.push(separator(this.theme, contentWidth));
+      usageRows.push(panelContent(
+        this.theme,
+        colored(this.theme, "accent", sectionLabel(kind, counts.length, contentWidth)),
+        "dim",
+        contentWidth,
+      ));
       for (const count of counts) {
-        usageRows.push(panelContent(
+        const prefix = kind === "mcp" ? "  " : "";
+        const name = colored(this.theme, "dim", prefix) +
+          colored(this.theme, count.exchange > 0 ? "text" : "muted", count.name);
+        usageRows.push(alignedRow(
           this.theme,
-          usageText(count.name, count.exchange, count.session, contentWidth),
-          count.exchange > 0 ? "accent" : "dim",
+          name,
+          usageCount(this.theme, count.exchange, count.session),
           contentWidth,
         ));
       }
     };
-    appendGroup("DIRECT TOOLS", grouped.tool.filter((count) => count.scope !== "nested"));
-    appendGroup("NESTED TOOLS", grouped.tool.filter((count) => count.scope === "nested"));
-    appendGroup("MCP", grouped.mcp);
+    appendGroup("direct", direct);
+    appendGroup("nested", nested);
+    appendGroup("mcp", grouped.mcp);
 
     const lines = [
       panelTop(this.theme, "TOOL VIEW", renderWidth),
       panelContent(this.theme, body, "dim", contentWidth),
+      flushSeparator(this.theme, renderWidth),
       ...usageRows,
     ];
     if (this.options.showBottomBorder !== false) lines.push(panelBottom(this.theme, renderWidth));

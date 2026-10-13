@@ -10,7 +10,7 @@ function session(id: string, title: string): SessionListItem {
     id,
     title,
     modified: new Date(0),
-    messageCount: 1,
+    userPromptCount: 1,
     current: false,
   };
 }
@@ -57,6 +57,7 @@ test("clicking the Sessions title refreshes the saved session list", async () =>
   panel.refresh();
   await flushAsync();
   assert.match(panel.render(40).join("\n"), /Old session/);
+  assert.match(panel.render(40).join("\n"), /1 · now/, "Sessions rows show user questions only");
   assert.match(panel.render(40)[0]!, /SESSIONS ↻/);
 
   assert.deepEqual(listener?.("\u001b[<0;20;6M"), { consume: true });
