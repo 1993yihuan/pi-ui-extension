@@ -103,15 +103,23 @@ For tool definitions, the extension prefers the observable provider-request tool
 
 **TUI performance (v1.2.5+)**: Streaming token estimates are sampled at most once every 150 ms, with the first valid token update shown immediately. Unchanged token counts do not trigger extra CTX redraws. The one-second elapsed-time ticker runs only while an agent run is active and is cleared when the run settles or the panel is disposed.
 
-### 5. Tool View modes
+### 5. Tool View and Thinking display modes
 
-`TOOL VIEW` supports three transcript display modes:
+`TOOL VIEW` keeps its **single** Normal / Compact / Hidden selector. The selected mode controls both built-in tool transcripts and assistant Thinking display:
 
-- **Normal**: standard tool transcript rendering.
-- **Compact**: denser tool output rendering.
-- **Hidden**: hide tool transcripts.
+| Mode | Tools | Thinking |
+| --- | --- | --- |
+| **Normal** | Native tool transcript | Full thinking text |
+| **Compact** (default) | Condensed tool summary | Latest 3 terminal-wrapped lines while streaming; `Thinking · Done` after completion |
+| **Hidden** | Hide tool transcript | Only the `Thinking · Hidden` status; reasoning and session data are unchanged |
 
-Modes can be changed directly with mouse clicks.
+```text
+○ Normal      ● Compact      ○ Hidden
+```
+
+The selector, `/tool-view normal|compact|hidden|status` command, and existing `tool-view-mode.json` persistence are shared. A mode change refreshes both historical tool transcript rows and Pi's existing Thinking components. There is no separate Thinking selector, command or configuration file.
+
+**Compatibility:** Thinking display uses Pi's public `registerMarkdownTransformer()` and `setHiddenThinkingLabel()` UI APIs, not a patched transcript renderer. To see Thinking in Normal or Compact, ensure Pi's native `hideThinkingBlock` setting is `false` (or use Pi's Thinking visibility toggle); otherwise Pi hides the whole block before this extension can transform it. The public API does not support custom per-message click-to-expand or reliable Thinking durations. Select **Normal** or run `/tool-view normal` to view the full Thinking content.
 
 Tool View uses Pi's official `pi.registerToolRenderer()` hook for the built-in tools (`read`, `bash`, `edit`, `write`, `grep`, `find`, and `ls`) **and the built-in `codemode` tool**. It never replaces tool definitions or execution functions. Other tools retain their own renderers.
 
@@ -208,7 +216,7 @@ Example configuration:
 To pin a specific version:
 
 ```bash
-pi install npm:pi-ui-extension@1.2.6
+pi install npm:pi-ui-extension@1.2.7
 ```
 
 or:
@@ -216,7 +224,7 @@ or:
 ```json
 {
   "packages": [
-    "npm:pi-ui-extension@1.2.6"
+    "npm:pi-ui-extension@1.2.7"
   ]
 }
 ```
@@ -244,7 +252,7 @@ Configuration form:
 Pin to a Git tag:
 
 ```bash
-pi install git:github.com/1993yihuan/pi-ui-extension@v1.2.6
+pi install git:github.com/1993yihuan/pi-ui-extension@v1.2.7
 ```
 
 ### Temporary local-source testing

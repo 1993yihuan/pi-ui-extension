@@ -104,15 +104,23 @@ Composition 会将当前可观测上下文拆分为：
 
 **TUI 性能优化（v1.2.5 起）**：流式 Token 估算最多每 150ms 采样一次，首次有效输出立即展示，Token 数量未变化时不会因此重复刷新 CTX。每秒运行时长刷新仅在 Agent 运行期间启用，任务完成或面板销毁后自动停止，避免空闲时持续重绘。
 
-### 5. Tool View 模式切换
+### 5. Tool View 与 Thinking 显示模式
 
-`TOOL VIEW` 支持三种工具输出显示模式：
+`TOOL VIEW` 保留原来的**单行** Normal / Compact / Hidden 按钮，统一控制工具输出与 Thinking 正文：
 
-- **Normal**：正常显示工具 transcript。
-- **Compact**：使用更紧凑的工具输出展示。
-- **Hidden**：隐藏工具 transcript。
+| 模式 | Tools | Thinking |
+| --- | --- | --- |
+| **Normal** | 保留原生完整工具输出 | 完整显示 Thinking |
+| **Compact**（默认） | 紧凑工具摘要 | 流式显示最近 3 行（按终端宽度换行），完成后显示 `Thinking · Done` |
+| **Hidden** | 隐藏工具 transcript | 仅显示 `Thinking · Hidden` 状态，不影响模型推理和原始 Session |
 
-可以直接使用鼠标点击模式进行切换。
+```text
+○ Normal      ● Compact      ○ Hidden
+```
+
+直接点击按钮，或使用原有的 `/tool-view normal|compact|hidden|status` 命令切换。继续复用原来的 `tool-view-mode.json` 持久化配置，切换时同步刷新历史工具记录和 Thinking 消息。不新增 Thinking 独立按钮、命令或配置文件。
+
+**兼容说明：** Thinking 展示基于 Pi 官方 `registerMarkdownTransformer()` 与 `setHiddenThinkingLabel()` UI API，不修改内部消息渲染器。使用 Normal/Compact 时需要确保 Pi 原生 `hideThinkingBlock` 为 `false`（或通过 Pi 原生 Thinking 快捷键显示），否则原生隐藏会先于扩展生效。官方接口暂不支持自定义单条点击展开或准确的 Thinking 耗时；可切换 **Normal** 或执行 `/tool-view normal` 查看完整 Thinking。
 
 Tool View 使用 Pi 官方的 `pi.registerToolRenderer()` 接口管理内置工具（`read`、`bash`、`edit`、`write`、`grep`、`find` 和 `ls`）**以及内置 `codemode` 工具**的展示，不再重注册工具定义或接管工具执行逻辑。其他 Tool 保留其自身的渲染方式。
 
@@ -209,7 +217,7 @@ Pi 会安装 package，并将声明写入个人配置：
 如果希望固定版本：
 
 ```bash
-pi install npm:pi-ui-extension@1.2.6
+pi install npm:pi-ui-extension@1.2.7
 ```
 
 或者：
@@ -217,7 +225,7 @@ pi install npm:pi-ui-extension@1.2.6
 ```json
 {
   "packages": [
-    "npm:pi-ui-extension@1.2.6"
+    "npm:pi-ui-extension@1.2.7"
   ]
 }
 ```
@@ -245,7 +253,7 @@ pi install git:github.com/1993yihuan/pi-ui-extension
 固定到 Git tag：
 
 ```bash
-pi install git:github.com/1993yihuan/pi-ui-extension@v1.2.6
+pi install git:github.com/1993yihuan/pi-ui-extension@v1.2.7
 ```
 
 ### 临时加载本地源码

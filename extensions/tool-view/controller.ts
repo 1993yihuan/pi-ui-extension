@@ -12,6 +12,7 @@ import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { readFile, rename, writeFile } from "node:fs/promises";
 import { TOOL_VIEW_MODES, isToolViewMode, type ToolViewMode } from "./types.ts";
 import { renderCodemodeCompactCall, renderCodemodeCompactResult } from "./codemode-compact.ts";
+import { transformThinkingText } from "./thinking.ts";
 
 const DEFAULT_MODE_FILE = resolve(getAgentDir(), "tool-view-mode.json");
 const MODE_STATUS_ID = "pi-ui-extension:tool-view";
@@ -181,6 +182,20 @@ export async function installToolViewController(
   let sessionGeneration = 0;
   let modeChangeQueue = Promise.resolve();
   const modeListeners = new Set<(mode: ToolViewMode) => void>();
+  const supportsThinking = typeof pi.registerMarkdownTransformer === "function";
+  if (supportsThinking) {
+    pi.registerMarkdownTransformer((markdown, context) => transformThinkingText(markdown, context, mode));
+  }
+  let nativeThinkingWarningShown = false;
+  const warnNativeThinkingHidden = (ctx: ExtensionContext): void => {
+    if (ctx.mode !== "tui" || nativeThinkingWarningShown || mode === "hidden" ||
+        pi.getSettings?.().hideThinkingBlock !== true) return;
+    nativeThinkingWarningShown = true;
+    ctx.ui.notify(
+      "Pi is hiding Thinking natively. Set hideThinkingBlock: false (or use Ctrl+T) to apply Tool View to Thinking.",
+      "warning",
+    );
+  };
   const tickingRows = new Set<RendererState>();
   const stopTicker = (state: RendererState): void => {
     if (state.compactTicker) clearInterval(state.compactTicker);
@@ -267,6 +282,11 @@ export async function installToolViewController(
       updateStatus(ctx);
       notifyModeChange();
       requestTranscriptRerender(ctx);
+      // Refresh Pi's existing assistant-message Markdown components (including
+      // the active stream) through the official UI API, without patching internals.
+      ctx.ui.setHiddenThinkingLabel?.();
+      if (!supportsThinking) ctx.ui.notify("This Pi version cannot transform Thinking display.", "warning");
+      warnNativeThinkingHidden(ctx);
       if (notify) ctx.ui.notify(`Tool View: ${modeLabel(mode)}`, "info");
     });
     return modeChangeQueue;
@@ -499,6 +519,7 @@ export async function installToolViewController(
     );
     updateStatus(ctx);
     notifyModeChange();
+    warnNativeThinkingHidden(ctx);
   });
 
   pi.on("session_shutdown", (_event, ctx) => {
