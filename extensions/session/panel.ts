@@ -133,7 +133,7 @@ function renderSessionTitleRow(theme: Theme, title: string, renderWidth: number,
 }
 
 function formatSessionSummary(session: SessionListItem, width: number, now: number): string {
-  const marker = `${session.pinned ? "★" : ""}${session.current ? "● " : "○ "}`;
+  const marker = `${session.current ? "● " : "○ "}${session.pinned ? "★" : ""}`;
   const metadata = `${session.messageCount} · ${formatRelativeTime(session.modified, now)}`;
   const fixedWidth = visibleWidth(marker) + visibleWidth(metadata) + 1;
   if (fixedWidth >= width) {

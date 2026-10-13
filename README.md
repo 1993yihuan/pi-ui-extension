@@ -43,6 +43,7 @@ The `SESSIONS` panel provides quick access to recent sessions:
 - Search session titles or IDs case-insensitively, and sort by latest update, oldest update, message count, or title.
 - Switch, rename, pin/unpin, or move an individual session to trash. Deletions require confirmation and the active session cannot be deleted.
 - Pinned sessions (`★`) appear first, including in the five-session quick sidebar. Pins persist as IDs (no session content) in `pi-ui-extension/session-pins.json` under Pi's agent directory.
+- The quick sidebar shows the current-session indicator first, then the pin marker before the title: `○ ★hello` (pinned) or `● ★hello` (active and pinned).
 - Each session row has a quick pin button: `☆` means unpinned and `★` means pinned; clicking it toggles pinning without opening the manager. The existing `✎` rename and `×` delete controls are unchanged. On narrow sidebars, the pin action hides to preserve the existing controls.
 - The `⊗` bulk cleanup now **protects both the active session and all pinned sessions**. Explicit single-session deletion still requires confirmation.
 
@@ -189,7 +190,7 @@ Example configuration:
 To pin a specific version:
 
 ```bash
-pi install npm:pi-ui-extension@1.2.0
+pi install npm:pi-ui-extension@1.2.1
 ```
 
 or:
@@ -197,7 +198,7 @@ or:
 ```json
 {
   "packages": [
-    "npm:pi-ui-extension@1.2.0"
+    "npm:pi-ui-extension@1.2.1"
   ]
 }
 ```
@@ -225,7 +226,7 @@ Configuration form:
 Pin to a Git tag:
 
 ```bash
-pi install git:github.com/1993yihuan/pi-ui-extension@v1.2.0
+pi install git:github.com/1993yihuan/pi-ui-extension@v1.2.1
 ```
 
 ### Temporary local-source testing

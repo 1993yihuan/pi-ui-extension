@@ -43,6 +43,7 @@ Sidebar 支持鼠标交互、滚轮滚动和终端尺寸变化。终端高度不
 - 按会话标题或 Session ID 搜索（不区分大小写），支持最近更新、最早更新、消息数量和标题排序。
 - 单独查看会话操作：切换、重命名、置顶 / 取消置顶、移到回收站。删除前有确认，当前 Session 不允许删除。
 - 置顶会话始终优先排序，并使用 `★` 标记，优先显示在 Sidebar 的最近 5 条会话中。
+- Sidebar 的左侧标记顺序为先显示会话状态，再在标题前显示置顶星标：`○ ★hello` 表示已置顶，`● ★hello` 表示当前且已置顶。
 - Sidebar 每条会话右侧新增快捷置顶按钮：`☆` 表示未置顶，`★` 表示已置顶，点击立即切换；与 `✎` 重命名、`×` 删除互不影响。Sidebar 较窄时优先保留原有操作按钮。
 - 置顶 ID 持久保存在 Pi 的 agent 目录下 `pi-ui-extension/session-pins.json`，不保存会话内容。
 - 使用 `⊗` 批量清理时，**保留当前会话及所有置顶会话**；显式删除单条置顶会话仍需确认。
@@ -190,7 +191,7 @@ Pi 会安装 package，并将声明写入个人配置：
 如果希望固定版本：
 
 ```bash
-pi install npm:pi-ui-extension@1.2.0
+pi install npm:pi-ui-extension@1.2.1
 ```
 
 或者：
@@ -198,7 +199,7 @@ pi install npm:pi-ui-extension@1.2.0
 ```json
 {
   "packages": [
-    "npm:pi-ui-extension@1.2.0"
+    "npm:pi-ui-extension@1.2.1"
   ]
 }
 ```
@@ -226,7 +227,7 @@ pi install git:github.com/1993yihuan/pi-ui-extension
 固定到 Git tag：
 
 ```bash
-pi install git:github.com/1993yihuan/pi-ui-extension@v1.2.0
+pi install git:github.com/1993yihuan/pi-ui-extension@v1.2.1
 ```
 
 ### 临时加载本地源码

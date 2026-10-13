@@ -289,7 +289,7 @@ test("pinned session remains visible ahead of the five-item sidebar limit", asyn
   panel.refresh();
   await flushAsync();
   const output = panel.render(42).join("\n");
-  assert.match(output, /★○ Important/);
+  assert.match(output, /○ ★Important/);
   assert.match(output, /Recent 3/);
   assert.doesNotMatch(output, /Recent 4/);
   panel.dispose();
@@ -339,7 +339,7 @@ test("session row ☆/★ toggles pin in place without invoking rename, delete o
   await flushAsync();
   assert.equal(pinned, true);
   assert.match(panel.render(40)[1]!, /★ ✎ ×/);
-  assert.match(panel.render(40)[1]!, /★○ Important/);
+  assert.match(panel.render(40)[1]!, /○ ★Important/);
   click("★");
   await flushAsync();
   assert.equal(pinned, false);
@@ -394,6 +394,22 @@ test("session pin hit area is distinct from rename/delete and cancelled on off-t
   listener?.(`\u001b[<0;${pinX};7m`);
   await flushAsync();
   assert.deepEqual(calls, ["pin"], "current session can still be pinned");
+  panel.dispose();
+});
+
+test("active pinned session shows ● ★ before its title without changing the right-side pin action", async () => {
+  const tui = { addInputListener: () => () => {}, requestRender() {} } as any;
+  const panel = new SessionPanel(theme, {
+    tui, getDesiredWidth: () => 40,
+    loadSessions: async () => [{ ...session("active", "hello"), current: true, pinned: true }],
+    onSelect() {}, onRename() {}, onDelete() {}, onTogglePin() {},
+    onDeleteOthers() {}, onOpenResources() {}, now: () => 0,
+  });
+  panel.refresh();
+  await flushAsync();
+  const row = stripTerminalSequences(panel.render(40)[1]!);
+  assert.match(row, /● ★hello/);
+  assert.match(row, /★ ✎ ·/);
   panel.dispose();
 });
 
