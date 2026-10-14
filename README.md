@@ -110,8 +110,8 @@ For tool definitions, the extension prefers the observable provider-request tool
 | Mode | Tools | Thinking |
 | --- | --- | --- |
 | **Normal** | Native tool transcript | Full thinking text |
-| **Compact** (default) | Condensed tool summary | `Thinking · Live · ~5s` plus up to 3 recent lines while streaming; `Thinking · Done · 5s` after completion when measured |
-| **Hidden** | Hide tool transcript | Only the `Thinking · Hidden` status; reasoning and session data are unchanged |
+| **Compact** (default) | Condensed tool summary | `Thinking · Live · ~5s` plus up to 7 recent terminal-wrapped lines while streaming; `Thinking · Done · 5s` after completion when measured |
+| **Hidden** | Hide tool transcript | Only `Thinking · Live · ~5s` / `Thinking · Done · 5s` status and elapsed time when measurable; no Thinking body |
 
 ```text
 ○ Normal      ● Compact      ○ Hidden
@@ -119,9 +119,9 @@ For tool definitions, the extension prefers the observable provider-request tool
 
 The selector, `/tool-view normal|compact|hidden|status` command, and existing `tool-view-mode.json` persistence are shared. A mode change refreshes both historical tool transcript rows and Pi's existing Thinking components. There is no separate Thinking selector, command or configuration file.
 
-**Thinking duration:** Compact uses Pi's actual `thinking_start` and `thinking_end` provider streaming events to measure the **observable Thinking segment wall time**, not the duration of the complete assistant response. A live duration has a `~` prefix and is updated when streaming content arrives. Completed durations remain fixed; if timing events are missing (for example, a restored session), the summary simply shows `Thinking · Done` instead of making up an elapsed time. On narrow terminals the time suffix is omitted rather than wrapping the heading. Timings exist only in memory for the active session.
+**Thinking duration:** Compact and Hidden use Pi's actual `thinking_start` and `thinking_end` provider streaming events to measure the **observable Thinking segment wall time**, not the duration of the complete assistant response. A live duration has a `~` prefix and is updated when streaming content arrives. Completed durations remain fixed; if timing events are missing (for example, a restored session), the summary simply shows `Thinking · Done` instead of making up an elapsed time. Hidden never renders Thinking body text, including while streaming. On narrow terminals the time suffix is omitted rather than wrapping the heading. Timings exist only in memory for the active session.
 
-**Compatibility:** The extension no longer installs a custom mouse handler or supports clicking Compact Thinking to expand its content. Pi's own native Thinking visibility click behavior remains unchanged. Thinking display uses the public `registerMarkdownTransformer()` and `setHiddenThinkingLabel()` APIs. To see Thinking in Normal/Compact, ensure Pi's native `hideThinkingBlock` is `false` (or toggle native Thinking visibility). VIEW mode selection does not change model reasoning or saved session content.
+**Compatibility:** Compact and Hidden Thinking summaries are **read-only**: clicking `Thinking · Done · 5s` or the live summary will not replace the label with Pi's native `Thinking...` placeholder or expand its contents. The extension uses a narrowly scoped, version-checked guard on Pi **1.1.0 / 1.2.0** to prevent the native click-to-hide action on its own Compact/Hidden Thinking regions; Normal retains native Thinking mouse behavior. On an unverified Pi implementation, the guard safely falls back to native behavior. Thinking display and durations still use the public `registerMarkdownTransformer()` and `setHiddenThinkingLabel()` APIs. To see the extension's Thinking status in Compact/Hidden, ensure Pi's native `hideThinkingBlock` is `false` (or toggle native Thinking visibility); Pi's native hidden placeholder bypasses Markdown transformation. VIEW mode selection does not change model reasoning or saved session content.
 
 Tool View uses Pi's official `pi.registerToolRenderer()` hook for the built-in tools (`read`, `bash`, `edit`, `write`, `grep`, `find`, and `ls`) **and the built-in `codemode` tool**. It never replaces tool definitions or execution functions. Other tools retain their own renderers.
 
@@ -218,7 +218,7 @@ Example configuration:
 To pin a specific version:
 
 ```bash
-pi install npm:pi-ui-extension@1.2.9
+pi install npm:pi-ui-extension@1.3.0
 ```
 
 or:
@@ -226,7 +226,7 @@ or:
 ```json
 {
   "packages": [
-    "npm:pi-ui-extension@1.2.9"
+    "npm:pi-ui-extension@1.3.0"
   ]
 }
 ```
@@ -254,7 +254,7 @@ Configuration form:
 Pin to a Git tag:
 
 ```bash
-pi install git:github.com/1993yihuan/pi-ui-extension@v1.2.9
+pi install git:github.com/1993yihuan/pi-ui-extension@v1.3.0
 ```
 
 ### Temporary local-source testing

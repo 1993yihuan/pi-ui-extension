@@ -15,6 +15,7 @@ import { TOOL_VIEW_MODES, isToolViewMode, type ToolViewMode } from "./types.ts";
 import { renderCodemodeCompactCall, renderCodemodeCompactResult } from "./codemode-compact.ts";
 import { transformThinkingText } from "./thinking.ts";
 import { ThinkingTiming } from "./thinking-timing.ts";
+import { installThinkingClickGuard } from "./thinking-click-guard.ts";
 
 const DEFAULT_MODE_FILE = resolve(getAgentDir(), "tool-view-mode.json");
 const MODE_STATUS_ID = "pi-ui-extension:tool-view";
@@ -204,6 +205,7 @@ export async function installToolViewController(
     );
   if (supportsThinking) {
     pi.registerMarkdownTransformer(thinkingTransformer);
+    installThinkingClickGuard(() => mode, thinkingTransformer);
   }
   let nativeThinkingWarningShown = false;
   const warnNativeThinkingHidden = (ctx: ExtensionContext): void => {

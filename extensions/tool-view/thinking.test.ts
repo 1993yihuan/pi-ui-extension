@@ -6,20 +6,23 @@ import { transformThinkingText } from "./thinking.ts";
 test("one Tool View mode controls both Thinking and tool transcript presentation", () => {
   const source = [
     "Old first line", "Old second line", "Older discarded text",
-    "Recent first", "Recent second", "Recent third",
+    "Old fourth line", "Old fifth line",
+    "Recent first", "Recent second", "Recent third", "Recent fourth",
+    "Recent fifth", "Recent sixth", "Recent seventh",
   ].join("\n");
   const streaming = { messageType: "assistant-thinking", isStreaming: true, availableWidth: 30 } as const;
   const done = { ...streaming, isStreaming: false };
 
   assert.equal(transformThinkingText(source, streaming, "normal"), source);
   assert.equal(transformThinkingText(source, done, "normal"), source);
-  assert.equal(transformThinkingText(source, streaming, "hidden"), "Thinking · Hidden");
-  assert.equal(transformThinkingText(source, done, "hidden"), "Thinking · Hidden");
+  assert.equal(transformThinkingText(source, streaming, "hidden"), "Thinking · Live");
+  assert.equal(transformThinkingText(source, done, "hidden"), "Thinking · Done");
   const compact = transformThinkingText(source, streaming, "compact");
   assert.doesNotMatch(compact, /Old first|Old second|Older discarded/);
   assert.match(compact, /Recent first/);
-  assert.match(compact, /Recent third/);
-  assert.ok(compact.split("\n").length <= 4);
+  assert.match(compact, /Recent seventh/);
+  assert.equal(compact.split("\n").length, 8, "status plus seven recent wrapped rows");
+  assert.equal(compact.split("\n").slice(1).length, 7);
   assert.ok(compact.split("\n").every((line) => visibleWidth(line) <= 30));
   assert.equal(transformThinkingText(source, done, "compact"), "Thinking · Done");
   assert.equal(transformThinkingText(source, { ...streaming, messageType: "assistant" }, "hidden"), source);
@@ -27,8 +30,15 @@ test("one Tool View mode controls both Thinking and tool transcript presentation
 
   const long = "abcdef ".repeat(180);
   const tail = transformThinkingText(long, { ...streaming, availableWidth: 15 }, "compact");
-  assert.ok(tail.split("\n").length <= 4, "long paragraphs must not fill the transcript");
+  assert.equal(tail.split("\n").length, 8, "a long paragraph keeps seven terminal-wrapped rows plus the header");
   assert.ok(tail.split("\n").every((line) => visibleWidth(line) <= 15));
+
+  const wrapped = "OLD_PRIVATE_START\n" + "word ".repeat(40) + "\nLAST_VISIBLE";
+  const narrow = transformThinkingText(wrapped, { ...streaming, availableWidth: 12 }, "compact");
+  assert.equal(narrow.split("\n").length, 8, "wrap boundaries, not original newlines, determine the last seven rows");
+  assert.doesNotMatch(narrow, /OLD_PRIVATE_START/);
+  assert.match(narrow, /LAST_VISIBLE$/);
+  assert.ok(narrow.split("\n").every((line) => visibleWidth(line) <= 12));
 });
 
 test("Thinking elapsed labels come from measured intervals and fit narrow terminals", () => {
@@ -39,23 +49,31 @@ test("Thinking elapsed labels come from measured intervals and fit narrow termin
   assert.equal(transformThinkingText("private details", done, "compact", measured), "Thinking · Done · 5s");
   assert.equal(transformThinkingText("private details", done, "compact"), "Thinking · Done");
   assert.equal(transformThinkingText("private details", done, "normal", measured), "private details");
-  assert.equal(transformThinkingText("private details", done, "hidden", measured), "Thinking · Hidden");
-  const output = transformThinkingText("one\ntwo\nthree\nfour", live, "compact", inProgress);
+  assert.equal(transformThinkingText("private details", done, "hidden", measured), "Thinking · Done · 5s");
+  assert.equal(transformThinkingText("private details", done, "hidden"), "Thinking · Done");
+  assert.equal(transformThinkingText("private details", live, "hidden", inProgress), "Thinking · Live · ~5s");
+  assert.equal(transformThinkingText("private details", live, "hidden"), "Thinking · Live");
+  const output = transformThinkingText("one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine", live, "compact", inProgress);
   assert.match(output, /^Thinking · Live · ~5s\n/);
-  assert.match(output, /four/);
-  assert.ok(output.split("\n").length <= 4);
+  assert.doesNotMatch(output, /\none\n|\ntwo\n/);
+  assert.match(output, /nine$/);
+  assert.equal(output.split("\n").length, 8, "status plus seven thinking rows");
 
   assert.equal(transformThinkingText("private details", done, "compact", () => ({ ms: 540, approximate: false })),
+    "Thinking · Done · 0.5s");
+  assert.equal(transformThinkingText("private details", done, "hidden", () => ({ ms: 540, approximate: false })),
     "Thinking · Done · 0.5s");
   assert.equal(transformThinkingText("private details", done, "compact", () => ({ ms: 65000, approximate: false })),
     "Thinking · Done · 1m05s");
   for (const width of [5, 8, 12, 16, 18, 24, 26, 27, 34, 72]) {
     for (const ctx of [done, live]) {
-      const lines = transformThinkingText("a long sentence ".repeat(40), {
-        ...ctx, availableWidth: width,
-      }, "compact", measured).split("\n");
-      assert.ok(lines.length <= 4);
-      assert.ok(lines.every((line) => visibleWidth(line) <= width), `overflow at width ${width}`);
+      for (const mode of ["compact", "hidden"] as const) {
+        const lines = transformThinkingText("a long sentence ".repeat(40), {
+          ...ctx, availableWidth: width,
+        }, mode, measured).split("\n");
+        assert.ok(lines.length <= (mode === "hidden" ? 1 : 8));
+        assert.ok(lines.every((line) => visibleWidth(line) <= width), `${mode} overflow at width ${width}`);
+      }
     }
   }
 });
@@ -72,7 +90,7 @@ test("real Pi assistant message component applies unified modes to existing and 
   const privateText = "OLD_PRIVATE_THINKING_TEXT_SHOULD_NOT_APPEAR";
   const message = {
     role: "assistant",
-    content: [{ type: "thinking", thinking: `${privateText}\nmore old notes\nrecent one\nrecent two\nrecent three` }],
+    content: [{ type: "thinking", thinking: `${privateText}\nmore old notes\nold three\nold four\nold five\nrecent one\nrecent two\nrecent three\nrecent four\nrecent five\nrecent six\nrecent seven` }],
     stopReason: "stop",
   } as any;
   const component = new AssistantMessageComponent(
@@ -83,16 +101,17 @@ test("real Pi assistant message component applies unified modes to existing and 
 
   component.updateContent(message, true);
   assert.doesNotMatch(visible(), /OLD_PRIVATE_THINKING_TEXT_SHOULD_NOT_APPEAR/);
-  assert.match(visible(), /recent three/);
+  assert.match(visible(), /recent seven/);
+  assert.doesNotMatch(visible(), /old five/);
   component.updateContent(message, false);
   assert.match(visible(), /Thinking · Done/);
-  assert.doesNotMatch(visible(), /recent three/);
+  assert.doesNotMatch(visible(), /recent seven/);
 
   mode = "normal";
   component.setHiddenThinkingLabel("Thinking...");
   assert.match(visible(), /OLD_PRIVATE_THINKING_TEXT_SHOULD_NOT_APPEAR/);
   mode = "hidden";
   component.setHiddenThinkingLabel("Thinking...");
-  assert.match(visible(), /Thinking · Hidden/);
+  assert.match(visible(), /Thinking · Done/);
   assert.doesNotMatch(visible(), /OLD_PRIVATE_THINKING_TEXT_SHOULD_NOT_APPEAR/);
 });

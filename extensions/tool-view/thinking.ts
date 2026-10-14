@@ -2,7 +2,7 @@ import type { MarkdownTransformContext } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import type { ToolViewMode } from "./types.ts";
 
-const COMPACT_LINES = 3;
+const COMPACT_LINES = 7;
 export interface ThinkingDuration {
   ms: number;
   approximate: boolean;
@@ -35,14 +35,13 @@ export function transformThinkingText(
   getDuration?: (markdown: string, streaming: boolean) => ThinkingDuration | undefined,
 ): string {
   if (context.messageType !== "assistant-thinking" || mode === "normal") return markdown;
-  if (mode === "hidden") return "Thinking · Hidden";
   const width = Math.max(1, context.availableWidth);
   const header = summaryHeader(context.isStreaming, width, getDuration?.(markdown, context.isStreaming));
-  if (!context.isStreaming) return header;
+  if (mode === "hidden" || !context.isStreaming) return header;
   // Streaming can produce a single very long paragraph. Process only its
   // recent suffix instead of repeatedly wrapping the entire growing response.
-  // Eight terminal widths give ample room for the latest three visual rows.
-  const limit = Math.max(64, width * 8);
+  // Keep a bounded suffix large enough to cover at least seven wrapped rows.
+  const limit = Math.max(64, width * (COMPACT_LINES + 5));
   const suffix = markdown.length > limit ? markdown.slice(-limit) : markdown;
   const rows = suffix.replace(/\r\n?/g, "\n").split("\n")
     .flatMap((line) => wrapTextWithAnsi(line, width));

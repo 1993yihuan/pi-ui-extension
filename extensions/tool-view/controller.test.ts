@@ -111,7 +111,7 @@ test("the single Tool View mode controls Thinking, persists once, and refreshes 
     await controller.setMode("normal", ctx);
     assert.equal(transformer("private thought", context), "private thought");
     await commands.get("tool-view").handler("hidden", ctx);
-    assert.equal(transformer("private thought", context), "Thinking · Hidden");
+    assert.match(transformer("private thought", context), /^Thinking · Done · /);
     assert.equal(controller.getMode(), "hidden");
     assert.deepEqual(JSON.parse(await readFile(modeFile, "utf8")), { mode: "hidden" });
     assert.equal(refreshed, 2, "one public refresh per mode change, including historical Thinking");
@@ -131,7 +131,9 @@ test("unified Tool View removes the earlier click adapter when reloaded", async 
   const prototype = AssistantMessageComponent.prototype;
   const original = prototype.updateContent;
   const symbol = Symbol.for("pi-ui-extension:thinking-click-adapter");
+  const guardSymbol = Symbol.for("pi-ui-extension:thinking-click-guard");
   const marker = prototype as unknown as Record<symbol, any>;
+  const previousGuard = marker[guardSymbol];
   const patched: typeof original = function (this: AssistantMessageComponent, ...args) {
     return original.apply(this, args);
   };
@@ -144,11 +146,14 @@ test("unified Tool View removes the earlier click adapter when reloaded", async 
       registerCommand() {}, registerShortcut() {}, getCommands: () => [], on() {},
     } as any;
     await installToolViewController(pi, { modeFile: join(directory, "mode.json") });
-    assert.equal(prototype.updateContent, original);
+    assert.notEqual(prototype.updateContent, patched, "the old clickable-detail adapter is gone");
     assert.equal(marker[symbol], undefined);
+    assert.ok(marker[guardSymbol], "the compact-only native click guard replaces the old adapter");
   } finally {
     prototype.updateContent = original;
     delete marker[symbol];
+    if (previousGuard) marker[guardSymbol] = previousGuard;
+    else delete marker[guardSymbol];
     await rm(directory, { recursive: true, force: true });
   }
 });
