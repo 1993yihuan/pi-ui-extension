@@ -13,6 +13,7 @@ import { readFile, rename, writeFile } from "node:fs/promises";
 import { TOOL_VIEW_MODES, isToolViewMode, type ToolViewMode } from "./types.ts";
 import { renderCodemodeCompactCall, renderCodemodeCompactResult } from "./codemode-compact.ts";
 import { transformThinkingText } from "./thinking.ts";
+import { installThinkingClickAdapter } from "./thinking-click.ts";
 
 const DEFAULT_MODE_FILE = resolve(getAgentDir(), "tool-view-mode.json");
 const MODE_STATUS_ID = "pi-ui-extension:tool-view";
@@ -183,9 +184,16 @@ export async function installToolViewController(
   let modeChangeQueue = Promise.resolve();
   const modeListeners = new Set<(mode: ToolViewMode) => void>();
   const supportsThinking = typeof pi.registerMarkdownTransformer === "function";
+  let thinkingClickHintEnabled = false;
+  const thinkingTransformer: Parameters<ExtensionAPI["registerMarkdownTransformer"]>[0] =
+    (markdown, context) => transformThinkingText(markdown, context, mode, thinkingClickHintEnabled);
   if (supportsThinking) {
-    pi.registerMarkdownTransformer((markdown, context) => transformThinkingText(markdown, context, mode));
+    pi.registerMarkdownTransformer(thinkingTransformer);
   }
+  const thinkingClicks = supportsThinking
+    ? installThinkingClickAdapter(() => mode, thinkingTransformer)
+    : { enabled: false, reset() {} };
+  thinkingClickHintEnabled = thinkingClicks.enabled;
   let nativeThinkingWarningShown = false;
   const warnNativeThinkingHidden = (ctx: ExtensionContext): void => {
     if (ctx.mode !== "tui" || nativeThinkingWarningShown || mode === "hidden" ||
@@ -263,6 +271,7 @@ export async function installToolViewController(
     const sessionId = ctx.sessionManager.getSessionId();
     modeChangeQueue = modeChangeQueue.then(async () => {
       mode = nextMode;
+      thinkingClicks.reset();
       if (mode !== "compact") stopAllTickers();
       let persistError: unknown;
       try {

@@ -94,7 +94,7 @@ test("the single Tool View mode controls Thinking, persists once, and refreshes 
     const controller = await installToolViewController(pi, { modeFile });
     assert.equal(controller.getMode(), "compact");
     assert.equal(typeof transformer, "function");
-    assert.equal(transformer("private thought", context), "Thinking · Done");
+    assert.match(transformer("private thought", context), /Thinking · Done.*▸ Expand/);
     for (const callback of handlers.get("session_start") ?? []) callback({}, ctx);
 
     await controller.setMode("normal", ctx);

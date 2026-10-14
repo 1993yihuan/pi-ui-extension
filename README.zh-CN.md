@@ -106,12 +106,12 @@ Composition 会将当前可观测上下文拆分为：
 
 ### 5. Tool View 与 Thinking 显示模式
 
-`TOOL VIEW` 保留原来的**单行** Normal / Compact / Hidden 按钮，统一控制工具输出与 Thinking 正文：
+`VIEW` 保留原来的**单行** Normal / Compact / Hidden 按钮，统一控制工具输出与 Thinking 正文：
 
 | 模式 | Tools | Thinking |
 | --- | --- | --- |
 | **Normal** | 保留原生完整工具输出 | 完整显示 Thinking |
-| **Compact**（默认） | 紧凑工具摘要 | 流式显示最近 3 行（按终端宽度换行），完成后显示 `Thinking · Done` |
+| **Compact**（默认） | 紧凑工具摘要 | 流式显示 `Thinking · Live   ▸ Expand` 提示与最近 3 行（按终端宽度换行），完成后显示 `Thinking · Done   ▸ Expand` |
 | **Hidden** | 隐藏工具 transcript | 仅显示 `Thinking · Hidden` 状态，不影响模型推理和原始 Session |
 
 ```text
@@ -120,7 +120,9 @@ Composition 会将当前可观测上下文拆分为：
 
 直接点击按钮，或使用原有的 `/tool-view normal|compact|hidden|status` 命令切换。继续复用原来的 `tool-view-mode.json` 持久化配置，切换时同步刷新历史工具记录和 Thinking 消息。不新增 Thinking 独立按钮、命令或配置文件。
 
-**兼容说明：** Thinking 展示基于 Pi 官方 `registerMarkdownTransformer()` 与 `setHiddenThinkingLabel()` UI API，不修改内部消息渲染器。使用 Normal/Compact 时需要确保 Pi 原生 `hideThinkingBlock` 为 `false`（或通过 Pi 原生 Thinking 快捷键显示），否则原生隐藏会先于扩展生效。官方接口暂不支持自定义单条点击展开或准确的 Thinking 耗时；可切换 **Normal** 或执行 `/tool-view normal` 查看完整 Thinking。
+**单条展开（Pi 1.1.0 / 1.2.0）：** Compact 模式下点击 `Thinking · Done   ▸ Expand` 可展开该条完整思考内容；再次点击 `Thinking · Done   ▾ Collapse` 标题或正文可收起。流式 Thinking 同样使用 `Thinking · Live   ▸ Expand` / `Thinking · Live   ▾ Collapse`。操作提示采用弱化颜色，窄终端自动缩短为箭头，不影响其他 Thinking 块。Normal 保持全文，Hidden 保持隐藏；切换 VIEW 模式会重置临时展开状态。
+
+**兼容说明：** Thinking 摘要使用 Pi 官方 `registerMarkdownTransformer()` 和 `setHiddenThinkingLabel()` UI API；单条点击另需对内部 `AssistantMessageComponent` 鼠标区域进行严格限定的兼容适配。仅在经过验证的 **Pi 1.1.0 / 1.2.0** 实现下启用，内部变化时安全回退，不修改 Session 或模型消息。使用 Normal/Compact 时请确保 Pi 原生 `hideThinkingBlock` 为 `false`（或通过 Pi 快捷键切换为可见）。目前不显示无法可靠获取的 Thinking 耗时。
 
 Tool View 使用 Pi 官方的 `pi.registerToolRenderer()` 接口管理内置工具（`read`、`bash`、`edit`、`write`、`grep`、`find` 和 `ls`）**以及内置 `codemode` 工具**的展示，不再重注册工具定义或接管工具执行逻辑。其他 Tool 保留其自身的渲染方式。
 
@@ -217,7 +219,7 @@ Pi 会安装 package，并将声明写入个人配置：
 如果希望固定版本：
 
 ```bash
-pi install npm:pi-ui-extension@1.2.7
+pi install npm:pi-ui-extension@1.2.8
 ```
 
 或者：
@@ -225,7 +227,7 @@ pi install npm:pi-ui-extension@1.2.7
 ```json
 {
   "packages": [
-    "npm:pi-ui-extension@1.2.7"
+    "npm:pi-ui-extension@1.2.8"
   ]
 }
 ```
@@ -253,7 +255,7 @@ pi install git:github.com/1993yihuan/pi-ui-extension
 固定到 Git tag：
 
 ```bash
-pi install git:github.com/1993yihuan/pi-ui-extension@v1.2.7
+pi install git:github.com/1993yihuan/pi-ui-extension@v1.2.8
 ```
 
 ### 临时加载本地源码

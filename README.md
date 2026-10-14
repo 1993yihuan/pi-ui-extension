@@ -105,12 +105,12 @@ For tool definitions, the extension prefers the observable provider-request tool
 
 ### 5. Tool View and Thinking display modes
 
-`TOOL VIEW` keeps its **single** Normal / Compact / Hidden selector. The selected mode controls both built-in tool transcripts and assistant Thinking display:
+`VIEW` keeps its **single** Normal / Compact / Hidden selector. The selected mode controls both built-in tool transcripts and assistant Thinking display:
 
 | Mode | Tools | Thinking |
 | --- | --- | --- |
 | **Normal** | Native tool transcript | Full thinking text |
-| **Compact** (default) | Condensed tool summary | Latest 3 terminal-wrapped lines while streaming; `Thinking · Done` after completion |
+| **Compact** (default) | Condensed tool summary | A subtle `Thinking · Live   ▸ Expand` hint plus up to 3 recent lines while streaming; `Thinking · Done   ▸ Expand` after completion |
 | **Hidden** | Hide tool transcript | Only the `Thinking · Hidden` status; reasoning and session data are unchanged |
 
 ```text
@@ -119,7 +119,9 @@ For tool definitions, the extension prefers the observable provider-request tool
 
 The selector, `/tool-view normal|compact|hidden|status` command, and existing `tool-view-mode.json` persistence are shared. A mode change refreshes both historical tool transcript rows and Pi's existing Thinking components. There is no separate Thinking selector, command or configuration file.
 
-**Compatibility:** Thinking display uses Pi's public `registerMarkdownTransformer()` and `setHiddenThinkingLabel()` UI APIs, not a patched transcript renderer. To see Thinking in Normal or Compact, ensure Pi's native `hideThinkingBlock` setting is `false` (or use Pi's Thinking visibility toggle); otherwise Pi hides the whole block before this extension can transform it. The public API does not support custom per-message click-to-expand or reliable Thinking durations. Select **Normal** or run `/tool-view normal` to view the full Thinking content.
+**Click to expand (Pi 1.1.0 / 1.2.0):** In Compact mode, click `Thinking · Done   ▸ Expand` to reveal that block's original Thinking text; click `Thinking · Done   ▾ Collapse` (or the body) to collapse it. For live Thinking, the same hints read `Thinking · Live   ▸ Expand` / `Thinking · Live   ▾ Collapse`. The action hint is rendered in a dimmer terminal style and shortens to an arrow on narrow terminals. Blocks expand independently. Normal always shows full text; Hidden stays hidden. Changing VIEW mode clears temporary expansions.
+
+**Compatibility:** Thinking summaries use Pi's public `registerMarkdownTransformer()` and `setHiddenThinkingLabel()` UI APIs. Per-block clicks additionally use a narrowly scoped adapter to Pi's internal `AssistantMessageComponent` mouse regions. It activates only for **tested Pi 1.1.0 / 1.2.0** implementations and safely falls back if internals change; no session or model data is modified. Set Pi's native `hideThinkingBlock` to `false` (or toggle native Thinking visibility) to use Normal/Compact. Thinking durations are not displayed because Pi does not expose them reliably.
 
 Tool View uses Pi's official `pi.registerToolRenderer()` hook for the built-in tools (`read`, `bash`, `edit`, `write`, `grep`, `find`, and `ls`) **and the built-in `codemode` tool**. It never replaces tool definitions or execution functions. Other tools retain their own renderers.
 
@@ -216,7 +218,7 @@ Example configuration:
 To pin a specific version:
 
 ```bash
-pi install npm:pi-ui-extension@1.2.7
+pi install npm:pi-ui-extension@1.2.8
 ```
 
 or:
@@ -224,7 +226,7 @@ or:
 ```json
 {
   "packages": [
-    "npm:pi-ui-extension@1.2.7"
+    "npm:pi-ui-extension@1.2.8"
   ]
 }
 ```
@@ -252,7 +254,7 @@ Configuration form:
 Pin to a Git tag:
 
 ```bash
-pi install git:github.com/1993yihuan/pi-ui-extension@v1.2.7
+pi install git:github.com/1993yihuan/pi-ui-extension@v1.2.8
 ```
 
 ### Temporary local-source testing
