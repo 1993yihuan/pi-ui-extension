@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { stripTerminalSequences, visibleWidth } from "@earendil-works/pi-tui";
-import { thinkingActionHeader, transformThinkingText } from "./thinking.ts";
+import { visibleWidth } from "@earendil-works/pi-tui";
+import { transformThinkingText } from "./thinking.ts";
 
 test("one Tool View mode controls both Thinking and tool transcript presentation", () => {
   const source = [
@@ -19,7 +19,7 @@ test("one Tool View mode controls both Thinking and tool transcript presentation
   assert.doesNotMatch(compact, /Old first|Old second|Older discarded/);
   assert.match(compact, /Recent first/);
   assert.match(compact, /Recent third/);
-  assert.ok(compact.split("\n").length <= 3);
+  assert.ok(compact.split("\n").length <= 4);
   assert.ok(compact.split("\n").every((line) => visibleWidth(line) <= 30));
   assert.equal(transformThinkingText(source, done, "compact"), "Thinking · Done");
   assert.equal(transformThinkingText(source, { ...streaming, messageType: "assistant" }, "hidden"), source);
@@ -27,39 +27,36 @@ test("one Tool View mode controls both Thinking and tool transcript presentation
 
   const long = "abcdef ".repeat(180);
   const tail = transformThinkingText(long, { ...streaming, availableWidth: 15 }, "compact");
-  assert.ok(tail.split("\n").length <= 3, "long paragraphs must not fill the transcript");
+  assert.ok(tail.split("\n").length <= 4, "long paragraphs must not fill the transcript");
   assert.ok(tail.split("\n").every((line) => visibleWidth(line) <= 15));
 });
 
-test("clickable Thinking labels show dim actions and fit narrow terminals", () => {
+test("Thinking elapsed labels come from measured intervals and fit narrow terminals", () => {
   const done = { messageType: "assistant-thinking", isStreaming: false, availableWidth: 48 } as const;
   const live = { ...done, isStreaming: true };
-  const collapsed = transformThinkingText("private details", done, "compact", true);
-  assert.equal(stripTerminalSequences(collapsed), "Thinking · Done   ▸ Expand");
-  assert.ok(collapsed.includes(String.fromCharCode(27) + "[2m"), "action uses dim styling");
-  assert.equal(stripTerminalSequences(thinkingActionHeader(false, true, 48)), "Thinking · Done   ▾ Collapse");
-  assert.equal(stripTerminalSequences(thinkingActionHeader(true, true, 48)), "Thinking · Live   ▾ Collapse");
-  assert.equal(transformThinkingText("private details", done, "normal", true), "private details");
-  assert.equal(transformThinkingText("private details", done, "hidden", true), "Thinking · Hidden");
+  const measured = () => ({ ms: 5149, approximate: false });
+  const inProgress = () => ({ ms: 5149, approximate: true });
+  assert.equal(transformThinkingText("private details", done, "compact", measured), "Thinking · Done · 5s");
+  assert.equal(transformThinkingText("private details", done, "compact"), "Thinking · Done");
+  assert.equal(transformThinkingText("private details", done, "normal", measured), "private details");
+  assert.equal(transformThinkingText("private details", done, "hidden", measured), "Thinking · Hidden");
+  const output = transformThinkingText("one\ntwo\nthree\nfour", live, "compact", inProgress);
+  assert.match(output, /^Thinking · Live · ~5s\n/);
+  assert.match(output, /four/);
+  assert.ok(output.split("\n").length <= 4);
 
-  const streaming = transformThinkingText("one\ntwo\nthree\nfour", live, "compact", true);
-  assert.match(stripTerminalSequences(streaming), /^Thinking · Live   ▸ Expand\n/);
-  assert.match(stripTerminalSequences(streaming), /four/);
-  assert.ok(streaming.split("\n").length <= 4, "one action line plus up to three recent rows");
-
+  assert.equal(transformThinkingText("private details", done, "compact", () => ({ ms: 540, approximate: false })),
+    "Thinking · Done · 0.5s");
+  assert.equal(transformThinkingText("private details", done, "compact", () => ({ ms: 65000, approximate: false })),
+    "Thinking · Done · 1m05s");
   for (const width of [5, 8, 12, 16, 18, 24, 26, 27, 34, 72]) {
-    for (const streaming of [false, true]) {
-      for (const expanded of [false, true]) {
-        const header = thinkingActionHeader(streaming, expanded, width);
-        assert.ok(visibleWidth(header) <= width, `header overflows at ${width}`);
-        assert.ok(!header.includes("\n"));
-      }
+    for (const ctx of [done, live]) {
+      const lines = transformThinkingText("a long sentence ".repeat(40), {
+        ...ctx, availableWidth: width,
+      }, "compact", measured).split("\n");
+      assert.ok(lines.length <= 4);
+      assert.ok(lines.every((line) => visibleWidth(line) <= width), `overflow at width ${width}`);
     }
-    const liveText = transformThinkingText("a long sentence ".repeat(40), {
-      ...live, availableWidth: width,
-    }, "compact", true);
-    assert.ok(liveText.split("\n").length <= 4);
-    assert.ok(liveText.split("\n").every((line) => visibleWidth(line) <= width), `live text overflows at ${width}`);
   }
 });
 

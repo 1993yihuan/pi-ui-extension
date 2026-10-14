@@ -110,7 +110,7 @@ For tool definitions, the extension prefers the observable provider-request tool
 | Mode | Tools | Thinking |
 | --- | --- | --- |
 | **Normal** | Native tool transcript | Full thinking text |
-| **Compact** (default) | Condensed tool summary | A subtle `Thinking · Live   ▸ Expand` hint plus up to 3 recent lines while streaming; `Thinking · Done   ▸ Expand` after completion |
+| **Compact** (default) | Condensed tool summary | `Thinking · Live · ~5s` plus up to 3 recent lines while streaming; `Thinking · Done · 5s` after completion when measured |
 | **Hidden** | Hide tool transcript | Only the `Thinking · Hidden` status; reasoning and session data are unchanged |
 
 ```text
@@ -119,9 +119,9 @@ For tool definitions, the extension prefers the observable provider-request tool
 
 The selector, `/tool-view normal|compact|hidden|status` command, and existing `tool-view-mode.json` persistence are shared. A mode change refreshes both historical tool transcript rows and Pi's existing Thinking components. There is no separate Thinking selector, command or configuration file.
 
-**Click to expand (Pi 1.1.0 / 1.2.0):** In Compact mode, click `Thinking · Done   ▸ Expand` to reveal that block's original Thinking text; click `Thinking · Done   ▾ Collapse` (or the body) to collapse it. For live Thinking, the same hints read `Thinking · Live   ▸ Expand` / `Thinking · Live   ▾ Collapse`. The action hint is rendered in a dimmer terminal style and shortens to an arrow on narrow terminals. Blocks expand independently. Normal always shows full text; Hidden stays hidden. Changing VIEW mode clears temporary expansions.
+**Thinking duration:** Compact uses Pi's actual `thinking_start` and `thinking_end` provider streaming events to measure the **observable Thinking segment wall time**, not the duration of the complete assistant response. A live duration has a `~` prefix and is updated when streaming content arrives. Completed durations remain fixed; if timing events are missing (for example, a restored session), the summary simply shows `Thinking · Done` instead of making up an elapsed time. On narrow terminals the time suffix is omitted rather than wrapping the heading. Timings exist only in memory for the active session.
 
-**Compatibility:** Thinking summaries use Pi's public `registerMarkdownTransformer()` and `setHiddenThinkingLabel()` UI APIs. Per-block clicks additionally use a narrowly scoped adapter to Pi's internal `AssistantMessageComponent` mouse regions. It activates only for **tested Pi 1.1.0 / 1.2.0** implementations and safely falls back if internals change; no session or model data is modified. Set Pi's native `hideThinkingBlock` to `false` (or toggle native Thinking visibility) to use Normal/Compact. Thinking durations are not displayed because Pi does not expose them reliably.
+**Compatibility:** The extension no longer installs a custom mouse handler or supports clicking Compact Thinking to expand its content. Pi's own native Thinking visibility click behavior remains unchanged. Thinking display uses the public `registerMarkdownTransformer()` and `setHiddenThinkingLabel()` APIs. To see Thinking in Normal/Compact, ensure Pi's native `hideThinkingBlock` is `false` (or toggle native Thinking visibility). VIEW mode selection does not change model reasoning or saved session content.
 
 Tool View uses Pi's official `pi.registerToolRenderer()` hook for the built-in tools (`read`, `bash`, `edit`, `write`, `grep`, `find`, and `ls`) **and the built-in `codemode` tool**. It never replaces tool definitions or execution functions. Other tools retain their own renderers.
 
@@ -218,7 +218,7 @@ Example configuration:
 To pin a specific version:
 
 ```bash
-pi install npm:pi-ui-extension@1.2.8
+pi install npm:pi-ui-extension@1.2.9
 ```
 
 or:
@@ -226,7 +226,7 @@ or:
 ```json
 {
   "packages": [
-    "npm:pi-ui-extension@1.2.8"
+    "npm:pi-ui-extension@1.2.9"
   ]
 }
 ```
@@ -254,7 +254,7 @@ Configuration form:
 Pin to a Git tag:
 
 ```bash
-pi install git:github.com/1993yihuan/pi-ui-extension@v1.2.8
+pi install git:github.com/1993yihuan/pi-ui-extension@v1.2.9
 ```
 
 ### Temporary local-source testing

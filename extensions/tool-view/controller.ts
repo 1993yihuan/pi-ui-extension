@@ -1,4 +1,5 @@
 import {
+  AssistantMessageComponent,
   getAgentDir,
   type AgentToolResult,
   type ExtensionAPI,
@@ -13,7 +14,7 @@ import { readFile, rename, writeFile } from "node:fs/promises";
 import { TOOL_VIEW_MODES, isToolViewMode, type ToolViewMode } from "./types.ts";
 import { renderCodemodeCompactCall, renderCodemodeCompactResult } from "./codemode-compact.ts";
 import { transformThinkingText } from "./thinking.ts";
-import { installThinkingClickAdapter } from "./thinking-click.ts";
+import { ThinkingTiming } from "./thinking-timing.ts";
 
 const DEFAULT_MODE_FILE = resolve(getAgentDir(), "tool-view-mode.json");
 const MODE_STATUS_ID = "pi-ui-extension:tool-view";
@@ -184,16 +185,26 @@ export async function installToolViewController(
   let modeChangeQueue = Promise.resolve();
   const modeListeners = new Set<(mode: ToolViewMode) => void>();
   const supportsThinking = typeof pi.registerMarkdownTransformer === "function";
-  let thinkingClickHintEnabled = false;
+  const thinkingTiming = new ThinkingTiming();
+  // Undo the v1.2.8 in-memory click adapter when upgrading with Pi's /reload.
+  // Do not install any new mouse adapter or change Pi's native click handler.
+  const legacyKey = Symbol.for("pi-ui-extension:thinking-click-adapter");
+  const componentPrototype = AssistantMessageComponent.prototype as unknown as
+    Record<symbol | "updateContent", any>;
+  const legacy = componentPrototype[legacyKey] as
+    { original?: unknown; patched?: unknown } | undefined;
+  if (legacy && typeof legacy.original === "function" &&
+      componentPrototype.updateContent === legacy.patched) {
+    componentPrototype.updateContent = legacy.original;
+    delete componentPrototype[legacyKey];
+  }
   const thinkingTransformer: Parameters<ExtensionAPI["registerMarkdownTransformer"]>[0] =
-    (markdown, context) => transformThinkingText(markdown, context, mode, thinkingClickHintEnabled);
+    (markdown, context) => transformThinkingText(
+      markdown, context, mode, (text, streaming) => thinkingTiming.duration(text, streaming),
+    );
   if (supportsThinking) {
     pi.registerMarkdownTransformer(thinkingTransformer);
   }
-  const thinkingClicks = supportsThinking
-    ? installThinkingClickAdapter(() => mode, thinkingTransformer)
-    : { enabled: false, reset() {} };
-  thinkingClickHintEnabled = thinkingClicks.enabled;
   let nativeThinkingWarningShown = false;
   const warnNativeThinkingHidden = (ctx: ExtensionContext): void => {
     if (ctx.mode !== "tui" || nativeThinkingWarningShown || mode === "hidden" ||
@@ -271,7 +282,6 @@ export async function installToolViewController(
     const sessionId = ctx.sessionManager.getSessionId();
     modeChangeQueue = modeChangeQueue.then(async () => {
       mode = nextMode;
-      thinkingClicks.reset();
       if (mode !== "compact") stopAllTickers();
       let persistError: unknown;
       try {
@@ -517,8 +527,19 @@ export async function installToolViewController(
     updateSkillRootsFromPromptOptions(event.systemPromptOptions.skills);
   });
 
+  pi.on("message_start", (event) => {
+    if (event.message.role === "assistant") thinkingTiming.endMessage();
+  });
+  pi.on("message_update", (event) => {
+    thinkingTiming.observe(event.assistantMessageEvent);
+  });
+  pi.on("message_end", (event) => {
+    if (event.message.role === "assistant") thinkingTiming.endMessage();
+  });
+
   pi.on("session_start", (_event, ctx) => {
     stopAllTickers();
+    thinkingTiming.reset();
     sessionGeneration++;
     activeSessionId = ctx.sessionManager.getSessionId();
     updateSkillRootsFromPromptOptions(
@@ -533,6 +554,7 @@ export async function installToolViewController(
 
   pi.on("session_shutdown", (_event, ctx) => {
     stopAllTickers();
+    thinkingTiming.reset();
     sessionGeneration++;
     activeSessionId = undefined;
     if (ctx.mode === "tui") ctx.ui.setStatus(MODE_STATUS_ID, undefined);

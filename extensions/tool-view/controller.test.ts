@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { AssistantMessageComponent } from "@earendil-works/pi-coding-agent";
 import { installToolViewController } from "./controller.ts";
 
 type Handler = (event: any, ctx: any) => unknown;
@@ -94,8 +95,18 @@ test("the single Tool View mode controls Thinking, persists once, and refreshes 
     const controller = await installToolViewController(pi, { modeFile });
     assert.equal(controller.getMode(), "compact");
     assert.equal(typeof transformer, "function");
-    assert.match(transformer("private thought", context), /Thinking · Done.*▸ Expand/);
+    assert.equal(transformer("private thought", context), "Thinking · Done");
     for (const callback of handlers.get("session_start") ?? []) callback({}, ctx);
+    assert.equal(handlers.has("message_update"), true, "registered stream timing observer");
+    const partial = { role: "assistant", content: [{ type: "thinking", thinking: "private thought" }] };
+    for (const type of ["thinking_start", "thinking_end"]) {
+      for (const callback of handlers.get("message_update") ?? []) {
+        callback({ assistantMessageEvent: { type, contentIndex: 0, partial } }, ctx);
+      }
+    }
+    assert.match(transformer("private thought", context), /^Thinking · Done · /);
+    for (const callback of handlers.get("message_end") ?? []) callback({ message: partial }, ctx);
+    assert.match(transformer("private thought", context), /^Thinking · Done · /);
 
     await controller.setMode("normal", ctx);
     assert.equal(transformer("private thought", context), "private thought");
@@ -112,6 +123,32 @@ test("the single Tool View mode controls Thinking, persists once, and refreshes 
     const restarted = await installToolViewController(pi, { modeFile });
     assert.equal(restarted.getMode(), "hidden", "existing mode file persists Thinking and Tools together");
   } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("unified Tool View removes the earlier click adapter when reloaded", async () => {
+  const prototype = AssistantMessageComponent.prototype;
+  const original = prototype.updateContent;
+  const symbol = Symbol.for("pi-ui-extension:thinking-click-adapter");
+  const marker = prototype as unknown as Record<symbol, any>;
+  const patched: typeof original = function (this: AssistantMessageComponent, ...args) {
+    return original.apply(this, args);
+  };
+  const directory = await mkdtemp(join(tmpdir(), "view-reload-"));
+  prototype.updateContent = patched;
+  marker[symbol] = { original, patched };
+  try {
+    const pi = {
+      registerToolRenderer() {}, registerMarkdownTransformer() {},
+      registerCommand() {}, registerShortcut() {}, getCommands: () => [], on() {},
+    } as any;
+    await installToolViewController(pi, { modeFile: join(directory, "mode.json") });
+    assert.equal(prototype.updateContent, original);
+    assert.equal(marker[symbol], undefined);
+  } finally {
+    prototype.updateContent = original;
+    delete marker[symbol];
     await rm(directory, { recursive: true, force: true });
   }
 });
