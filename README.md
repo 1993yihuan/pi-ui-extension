@@ -127,6 +127,10 @@ Tool View uses Pi's official `pi.registerToolRenderer()` hook for the built-in t
 
 **Unified Compact tool styling:** Supported direct tools and Codemode share a one-column, theme-colored `›` chevron before the tool name, consistent title alignment, and success (`✓`), running (`… Running`), and failure (`✗ Failed`) status treatment. Their metadata remains tool-specific; built-in `bash` shows its command under a `bash` heading and output as `12 out`. Codemode displays calls/ok/fail and output metrics; the status is followed by plain spacing, **not** a leading `│`. Vertical `│` separators appear only **between** the calls and output metric groups. Titles and result summaries stay to one terminal line and truncate on narrow viewports. For direct tools, expanding a row shows a matching `⌄` and keeps Pi's **native detail renderer and mouse handling** intact; switching to Normal leaves all native rendering unchanged. Skill-related read outputs, failed-tool native details, and third-party tools continue using their original renderer wherever required for correctness. Codemode deliberately remains metadata-only in Compact, even if the host's expanded state is selected; use Normal for full script and nested-tool details.
 
+**Claude-style hierarchy in Compact:** Each supported tool title is indented by two spaces, and its result is displayed as a more-indented, muted `⎿` branch followed by the unchanged colored execution state. This branch belongs to **that one tool result**, even when there is no output or the call is still running; it does not connect different Thinking blocks or merge consecutive tools. On very narrow terminals, the branch is dropped to leave room for the status and essential metrics. Expanded direct-tool content continues using Pi's native renderer.
+
+**Tighter Compact spacing (Pi 1.1.0 / 1.2.0):** Pi's self-rendered tool component prepends a blank row to each tool, including when another tool follows immediately. For this extension's Compact tool records only, a narrowly scoped, version-checked compatibility adapter removes exactly that native leading blank row and adjusts click coordinates accordingly. This is checked against **both the local SDK and Pi's actual bundled CLI**, which minifies the same mouse-handler implementation differently. It does not change Thinking spacing, tool contents, Normal/Hidden layouts, or third-party tool components. If the expected Pi render structure changes or another extension patches the same component, the adapter leaves the native layout untouched. No cross-message grouping or global transcript reflow is attempted.
+
 For **Codemode** specifically:
 
 - **Normal** retains Pi's native script, nested-call, and output rendering (including its own expand/collapse behavior).
@@ -136,11 +140,13 @@ For **Codemode** specifically:
 Example Compact output:
 
 ```text
-›  codemode  8 code lines
-✓  1 call · 1 ok  │  59 out · 85ms
+Thinking · 0.7s
 
-›  bash  git status
-✓  12 out · 45ms
+  ›  codemode  8 code lines
+    ⎿  ✓  1 call · 1 ok  │  59 out · 85ms
+
+  ›  bash  git status
+    ⎿  ✓  12 out · 45ms
 ```
 
 Changing the Tool View mode also updates previously rendered tool rows in the current session. Other third-party tools are unaffected.
@@ -225,7 +231,7 @@ Example configuration:
 To pin a specific version:
 
 ```bash
-pi install npm:pi-ui-extension@1.3.1
+pi install npm:pi-ui-extension@1.5.0
 ```
 
 or:
@@ -233,7 +239,7 @@ or:
 ```json
 {
   "packages": [
-    "npm:pi-ui-extension@1.3.1"
+    "npm:pi-ui-extension@1.5.0"
   ]
 }
 ```
@@ -261,7 +267,7 @@ Configuration form:
 Pin to a Git tag:
 
 ```bash
-pi install git:github.com/1993yihuan/pi-ui-extension@v1.3.1
+pi install git:github.com/1993yihuan/pi-ui-extension@v1.5.0
 ```
 
 ### Temporary local-source testing

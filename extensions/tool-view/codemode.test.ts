@@ -81,7 +81,7 @@ test("Codemode uses the official native renderer in Normal, summary in Compact, 
     const visible = () => stripAnsi(transcript.render(110).join("\n"));
 
     // Default compact mode summarizes metadata, never executable code or nested arguments.
-    assert.match(visible(), /›  codemode.*2 code lines/);
+    assert.match(visible(), /  ›  codemode.*2 code lines/);
     assert.match(visible(), /3 calls/);
     assert.match(visible(), /1 ok/);
     assert.match(visible(), /1 failed/);
@@ -187,7 +187,7 @@ test("one Thinking followed by multiple codemode calls preserves independent too
     } as any, false);
     const combined = [thinking, first, second].map((c) => stripAnsi(c.render(110).join("\n"))).join("\n");
     assert.equal((combined.match(/Thinking · 3s/g) ?? []).length, 1);
-    assert.equal((combined.match(/›  codemode/g) ?? []).length, 2);
+    assert.equal((combined.match(/  ›  codemode/g) ?? []).length, 2);
     assert.match(combined, /1 call · 1 ok/);
     assert.match(combined, /2 calls · 2 ok/);
     assert.match(combined, /1 out · 225ms/);

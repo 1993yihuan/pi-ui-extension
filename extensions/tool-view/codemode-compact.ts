@@ -5,7 +5,7 @@ import type {
   ToolRenderResultOptions,
 } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth, visibleWidth, type Component } from "@earendil-works/pi-tui";
-import { chevronPrefix } from "./chevron.ts";
+import { compactCallPrefix } from "./chevron.ts";
 
 type RenderContext = Parameters<NonNullable<ToolRenderers["renderCall"]>>[2];
 type MetricColor = "text" | "success" | "error" | "warning" | "muted";
@@ -57,7 +57,7 @@ function codeLineCount(args: unknown): string {
 }
 
 export function renderCodemodeCompactCall(args: unknown, theme: Theme): Component {
-  const label = chevronPrefix(theme, false) +
+  const label = compactCallPrefix(theme, false) +
     theme.fg("toolTitle", theme.bold("codemode")) +
     theme.fg("dim", `  ${codeLineCount(args)}`);
   return singleLine(label);

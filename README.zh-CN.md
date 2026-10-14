@@ -128,6 +128,10 @@ Tool View 使用 Pi 官方的 `pi.registerToolRenderer()` 接口管理内置工�
 
 **Compact 工具样式统一：** 支持的直调内置工具与 Codemode 使用统一的单列主题色 Chevron 箭头 `›`、固定标题对齐、成功 `✓`、运行中 `… Running` 和失败 `✗ Failed` 状态；各工具仍保留适合自身的统计字段。例如 `bash` 的标题为 `bash`，输出统计为 `12 out`。Codemode 展示子调用及成功/失败/输出统计，状态后不再出现多余的首根竖线；`│` **只用于分隔调用统计与输出统计**。标题和摘要在窄终端保持单行并按宽度截断。直调工具展开时使用 `⌄`，同时保留 Pi **原生详情渲染器及鼠标交互**；Normal 完全保留原生样式。Skill 相关的 read、失败工具的原生详情，以及第三方工具在必要时继续使用原生渲染，以保证兼容。Codemode 在 Compact 中即使宿主设置为展开状态也只展示安全的元数据摘要；需要完整脚本与子调用详情请切换 Normal。
 
+**Compact 的 Claude 风格层级：** 每条受支持工具的标题向右缩进两个空格，结果行再缩进，以弱化颜色的 `⎿` 表示“该工具的结果”，后面保留原有的成功、失败和运行中状态及统计。即使没有输出或仍在执行，也会显示独立结果标记。标记只属于**这一条工具调用**，不会在不同 Thinking 之间画跨消息的连续连接线，也不会合并连续工具。极窄终端下可省略装饰符，以优先显示执行状态和关键指标。直调工具展开后仍沿用 Pi 原生详情。
+
+**Compact 垂直间距优化（Pi 1.1.0 / 1.2.0）：** Pi 原生 self-render 工具组件会在每条工具记录前固定插入一行空白，即使前一条也是工具。本扩展只针对自身的 Compact 工具记录，通过经过版本校验的有限兼容适配去掉**这一行**空白，并同步调整鼠标点击的纵坐标。兼容校验同时覆盖**本地 SDK 和真实 Pi 打包版 CLI**（两者鼠标处理方法的压缩格式不同），避免出现测试通过但实际运行被跳过的情况。不改变 Thinking 间距、工具内容、Normal/Hidden 布局或第三方工具组件。如果 Pi 原生渲染结构变化，或者其他扩展已修改同一个组件，则安全回退原生间距；不跨消息强行分组，也不修改整个会话布局。
+
 对于 **Codemode**：
 
 - **Normal**：保留 Pi 原生的脚本、子工具调用、输出详情，以及原生展开 / 收起行为。
@@ -137,11 +141,13 @@ Tool View 使用 Pi 官方的 `pi.registerToolRenderer()` 接口管理内置工�
 Compact 效果示例：
 
 ```text
-›  codemode  8 code lines
-✓  1 call · 1 ok  │  59 out · 85ms
+Thinking · 0.7s
 
-›  bash  git status
-✓  12 out · 45ms
+  ›  codemode  8 code lines
+    ⎿  ✓  1 call · 1 ok  │  59 out · 85ms
+
+  ›  bash  git status
+    ⎿  ✓  12 out · 45ms
 ```
 
 切换 Tool View 模式也会更新当前会话中已经展示的历史工具记录；其他第三方工具保持原有渲染方式。
@@ -226,7 +232,7 @@ Pi 会安装 package，并将声明写入个人配置：
 如果希望固定版本：
 
 ```bash
-pi install npm:pi-ui-extension@1.3.1
+pi install npm:pi-ui-extension@1.5.0
 ```
 
 或者：
@@ -234,7 +240,7 @@ pi install npm:pi-ui-extension@1.3.1
 ```json
 {
   "packages": [
-    "npm:pi-ui-extension@1.3.1"
+    "npm:pi-ui-extension@1.5.0"
   ]
 }
 ```
@@ -262,7 +268,7 @@ pi install git:github.com/1993yihuan/pi-ui-extension
 固定到 Git tag：
 
 ```bash
-pi install git:github.com/1993yihuan/pi-ui-extension@v1.3.1
+pi install git:github.com/1993yihuan/pi-ui-extension@v1.5.0
 ```
 
 ### 临时加载本地源码

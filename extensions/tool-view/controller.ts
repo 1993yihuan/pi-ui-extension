@@ -16,7 +16,8 @@ import { renderCodemodeCompactCall, renderCodemodeCompactResult, singleLine } fr
 import { transformThinkingText } from "./thinking.ts";
 import { ThinkingTiming } from "./thinking-timing.ts";
 import { installThinkingClickGuard } from "./thinking-click-guard.ts";
-import { chevronPrefix, withNativeChevron } from "./chevron.ts";
+import { compactCallPrefix, withCompactResultBranch, withNativeChevron } from "./chevron.ts";
+import { installCompactSpacingGuard, markCompactSpacingRenderer } from "./compact-spacing.ts";
 
 const DEFAULT_MODE_FILE = resolve(getAgentDir(), "tool-view-mode.json");
 const MODE_STATUS_ID = "pi-ui-extension:tool-view";
@@ -399,7 +400,7 @@ export async function installToolViewController(
     const summary = COMPACT_SPECS[toolName]!.call(args);
     const title = theme.fg("toolTitle", theme.bold(summary.title));
     const detail = summary.detail ? `  ${theme.fg("dim", summary.detail)}` : "";
-    return singleLine(chevronPrefix(theme, false) + title + detail);
+    return singleLine(compactCallPrefix(theme, false) + title + detail);
   }
 
   function compactResult(
@@ -409,9 +410,12 @@ export async function installToolViewController(
     context: AnyRenderContext,
     options: ToolRenderResultOptions,
   ) {
-    if (toolName === "codemode") return renderCodemodeCompactResult(result, theme, context, options, syncTicker(context, options.isPartial));
+    if (toolName === "codemode") return withCompactResultBranch(
+      renderCodemodeCompactResult(result, theme, context, options, syncTicker(context, options.isPartial)),
+      theme,
+    );
     // A failed tool must not imply that its mutation was saved/applied.
-    const summary = context.isError ? "" : COMPACT_SPECS[toolName]!.result(result, context, options);
+    const summary = context.isError || options.isPartial ? "" : COMPACT_SPECS[toolName]!.result(result, context, options);
     const statusColor = context.isError ? "error" : options.isPartial ? "warning" : "success";
     const icon = context.isError ? "✗ Failed" : options.isPartial ? "… Running" : "✓";
     const duration = typeof context.durationMs === "number" && Number.isFinite(context.durationMs) &&
@@ -419,8 +423,8 @@ export async function installToolViewController(
       ? context.durationMs < 1_000 ? `${Math.round(context.durationMs)}ms` : `${(context.durationMs / 1_000).toFixed(1)}s`
       : "";
     const metrics = [summary, duration].filter(Boolean).join(" · ");
-    return singleLine(theme.fg(statusColor, icon) +
-      (metrics ? `  ${theme.fg("muted", metrics)}` : ""));
+    return withCompactResultBranch(singleLine(theme.fg(statusColor, icon) +
+      (metrics ? `  ${theme.fg("muted", metrics)}` : "")), theme);
   }
 
   // Resolve renderers only. Pi retains its registered tools, execution pipeline,
@@ -445,7 +449,7 @@ export async function installToolViewController(
       preserveCall(context.args, context) || mode === "normal" ||
       (mode === "compact" && !isCodemode && (context.isError || options.expanded));
 
-    return {
+    return markCompactSpacingRenderer({
       renderShell: "self",
       renderCall(args, theme, context) {
         if (useNativeCall(args, context) && nativeDefinition) {
@@ -491,15 +495,16 @@ export async function installToolViewController(
           }
           return new Container();
         }
-        if (options.isPartial && !isCodemode) return new Text(theme.fg("warning", "… Running"), 0, 0);
+        if (options.isPartial && !isCodemode) return compactResult(toolName, result, theme, context, options);
         const state = context.state as RendererState;
         if (state.nativeResultComponent && nativeDefinition) {
           resultNativeRenderer(nativeDefinition, result, options, theme, context);
         }
         return compactResult(toolName, result, theme, context, options);
       },
-    };
+    });
   });
+  installCompactSpacingGuard(() => mode);
 
   pi.registerCommand(MODE_COMMAND, {
     description: "Change Tool View mode: normal, compact, hidden, or status",

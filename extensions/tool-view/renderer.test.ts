@@ -88,9 +88,9 @@ test("uses one official renderer resolver without replacing or executing Pi tool
     const read = resolver("read", () => native)!;
     const args = { path: "example.ts" };
     const state = {};
-    assert.match(render(read, state, args), /›  read  example\.ts/);
+    assert.match(render(read, state, args), /  ›  read  example\.ts/);
     assert.match(render(read, state, args), /2 lines/);
-    assert.match(render(resolver("bash", () => native)!, {}, { command: "echo ok" }), /›  bash  echo ok[\s\S]*✓  2 out/);
+    assert.match(render(resolver("bash", () => native)!, {}, { command: "echo ok" }), /  ›  bash  echo ok[\s\S]*    ⎿  ✓  2 out/);
     for (const name of ["read", "bash", "edit", "write", "grep", "find", "ls"]) {
       const argumentsByTool: Record<string, any> = {
         read: { path: "demo.ts" }, bash: { command: "git status" },
@@ -101,7 +101,7 @@ test("uses one official renderer resolver without replacing or executing Pi tool
       const title = direct.renderCall!(argumentsByTool[name], theme, {
         args: argumentsByTool[name], cwd: directory, state: {}, isError: false, isPartial: false, expanded: false,
       } as any);
-      assert.match(title.render(90).join(""), new RegExp(`^›  ${name}\\b`), `${name} must share the same chevron/title spacing`);
+      assert.match(title.render(90).join(""), new RegExp(`^  ›  ${name}\\b`), `${name} must share the same chevron/title spacing`);
       for (const width of [8, 16, 25, 60]) {
         const lines = title.render(width);
         assert.equal(lines.length, 1, `${name} compact title must remain on one line`);
@@ -110,6 +110,21 @@ test("uses one official renderer resolver without replacing or executing Pi tool
     }
     assert.match(render(resolver("write", () => native)!, {}, { path: "file.ts", content: "ok" }), /Saved/);
     assert.match(render(resolver("edit", () => native)!, {}, { path: "file.ts" }), /Applied/);
+    const empty = resolver("bash", () => native)!;
+    const zeroOutput = empty.renderResult!({
+      content: [], details: {}, isError: false,
+    }, { isPartial: false, expanded: false }, theme, {
+      args: { command: "true" }, state: {}, cwd: directory, durationMs: 12,
+      isError: false, isPartial: false, expanded: false,
+    } as any);
+    assert.match(zeroOutput.render(80).join(""), /^    ⎿  ✓  12ms$/, "empty output still has one result branch");
+    const running = empty.renderResult!({
+      content: [], details: {}, isError: false,
+    }, { isPartial: true, expanded: false }, theme, {
+      args: { command: "sleep 1" }, state: {}, cwd: directory, isPartial: true,
+      isError: false, expanded: false,
+    } as any);
+    assert.match(running.render(80).join(""), /^    ⎿  … Running$/, "streaming uses the same branch without inventing output");
     assert.equal(counters.nativeCall, 0, "compact must not run native renderer unnecessarily");
 
     await controller.setMode("normal", ctx);
@@ -151,7 +166,7 @@ test("uses one official renderer resolver without replacing or executing Pi tool
     );
     transcript.updateResult(result, false);
     const plain = (lines: string[]) => lines.join("\n").replace(/\u001b\[[0-9;]*m/g, "");
-    assert.match(plain(transcript.render(100)), /›  read  example\.ts/);
+    assert.match(plain(transcript.render(100)), /  ›  read  example\.ts/);
     function clickToolHeading(marker: string) {
       const lines = transcript.render(100).map(line => line.replace(/\u001b\[[0-9;]*m/g, ""));
       const row = lines.findIndex(line => line.includes(marker));
@@ -183,7 +198,7 @@ test("uses one official renderer resolver without replacing or executing Pi tool
       );
       instance.updateResult({ ...result, durationMs: 48 }, false);
       const view = () => plain(instance.render(80));
-      assert.match(view(), new RegExp(`›  ${toolName}\\b`), `${toolName} compact heading`);
+      assert.match(view(), new RegExp(`  ›  ${toolName}\\b`), `${toolName} compact heading`);
       const lines = view().split("\n");
       const headerRow = lines.findIndex(line => line.includes(`›  ${toolName}`));
       assert.ok(headerRow >= 0);
@@ -201,7 +216,7 @@ test("uses one official renderer resolver without replacing or executing Pi tool
         type: "click", button: "left", x: 4, y: expandedRow,
         screenX: 4, screenY: expandedRow, width: 80, height: expandedLines.length,
       } as any);
-      assert.match(view(), new RegExp(`›  ${toolName}\\b`), `${toolName} should collapse again`);
+      assert.match(view(), new RegExp(`  ›  ${toolName}\\b`), `${toolName} should collapse again`);
     }
 
     const write = resolver("write", () => native)!;
