@@ -126,6 +126,8 @@ Composition 会将当前可观测上下文拆分为：
 
 Tool View 使用 Pi 官方的 `pi.registerToolRenderer()` 接口管理内置工具（`read`、`bash`、`edit`、`write`、`grep`、`find` 和 `ls`）**以及内置 `codemode` 工具**的展示，不再重注册工具定义或接管工具执行逻辑。其他 Tool 保留其自身的渲染方式。
 
+**Compact 工具样式统一：** 支持的直调内置工具与 Codemode 使用统一的单列主题色 Chevron 箭头 `›`、固定标题对齐、成功 `✓`、运行中 `… Running` 和失败 `✗ Failed` 状态；各工具仍保留适合自身的统计字段。例如 `bash` 的标题为 `bash`，输出统计为 `12 out`。Codemode 展示子调用及成功/失败/输出统计，状态后不再出现多余的首根竖线；`│` **只用于分隔调用统计与输出统计**。标题和摘要在窄终端保持单行并按宽度截断。直调工具展开时使用 `⌄`，同时保留 Pi **原生详情渲染器及鼠标交互**；Normal 完全保留原生样式。Skill 相关的 read、失败工具的原生详情，以及第三方工具在必要时继续使用原生渲染，以保证兼容。Codemode 在 Compact 中即使宿主设置为展开状态也只展示安全的元数据摘要；需要完整脚本与子调用详情请切换 Normal。
+
 对于 **Codemode**：
 
 - **Normal**：保留 Pi 原生的脚本、子工具调用、输出详情，以及原生展开 / 收起行为。
@@ -135,8 +137,11 @@ Tool View 使用 Pi 官方的 `pi.registerToolRenderer()` 接口管理内置工�
 Compact 效果示例：
 
 ```text
-▸ codemode  8 code lines
-✓  │  1 call · 1 ok  │  59 out · 85ms
+›  codemode  8 code lines
+✓  1 call · 1 ok  │  59 out · 85ms
+
+›  bash  git status
+✓  12 out · 45ms
 ```
 
 切换 Tool View 模式也会更新当前会话中已经展示的历史工具记录；其他第三方工具保持原有渲染方式。

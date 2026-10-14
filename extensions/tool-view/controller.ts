@@ -12,10 +12,11 @@ import { Box, Container, Text } from "@earendil-works/pi-tui";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { readFile, rename, writeFile } from "node:fs/promises";
 import { TOOL_VIEW_MODES, isToolViewMode, type ToolViewMode } from "./types.ts";
-import { renderCodemodeCompactCall, renderCodemodeCompactResult } from "./codemode-compact.ts";
+import { renderCodemodeCompactCall, renderCodemodeCompactResult, singleLine } from "./codemode-compact.ts";
 import { transformThinkingText } from "./thinking.ts";
 import { ThinkingTiming } from "./thinking-timing.ts";
 import { installThinkingClickGuard } from "./thinking-click-guard.ts";
+import { chevronPrefix, withNativeChevron } from "./chevron.ts";
 
 const DEFAULT_MODE_FILE = resolve(getAgentDir(), "tool-view-mode.json");
 const MODE_STATUS_ID = "pi-ui-extension:tool-view";
@@ -124,10 +125,10 @@ const COMPACT_SPECS: Record<string, CompactToolSpec> = {
     },
   },
   bash: {
-    call: (args) => ({ title: "$", detail: compactText(args.command) || "…" }),
+    call: (args) => ({ title: "bash", detail: compactText(args.command) || "…" }),
     result: (result) => {
       const lines = nonEmptyLineCount(textOutput(result));
-      return lines > 0 ? `Done · ${formatCount(lines, "line")}` : "Done";
+      return lines > 0 ? `${lines} out` : "";
     },
   },
   edit: {
@@ -397,8 +398,8 @@ export async function installToolViewController(
     if (toolName === "codemode") return renderCodemodeCompactCall(args, theme);
     const summary = COMPACT_SPECS[toolName]!.call(args);
     const title = theme.fg("toolTitle", theme.bold(summary.title));
-    const detail = summary.detail ? ` ${theme.fg("accent", summary.detail)}` : "";
-    return new Text(title + detail, 0, 0);
+    const detail = summary.detail ? `  ${theme.fg("dim", summary.detail)}` : "";
+    return singleLine(chevronPrefix(theme, false) + title + detail);
   }
 
   function compactResult(
@@ -409,10 +410,17 @@ export async function installToolViewController(
     options: ToolRenderResultOptions,
   ) {
     if (toolName === "codemode") return renderCodemodeCompactResult(result, theme, context, options, syncTicker(context, options.isPartial));
-    const summary = COMPACT_SPECS[toolName]!.result(result, context, options);
+    // A failed tool must not imply that its mutation was saved/applied.
+    const summary = context.isError ? "" : COMPACT_SPECS[toolName]!.result(result, context, options);
     const statusColor = context.isError ? "error" : options.isPartial ? "warning" : "success";
-    const icon = context.isError ? "✗ " : options.isPartial ? "… " : "✓ ";
-    return new Text(theme.fg(statusColor, icon) + theme.fg("muted", summary), 0, 0);
+    const icon = context.isError ? "✗ Failed" : options.isPartial ? "… Running" : "✓";
+    const duration = typeof context.durationMs === "number" && Number.isFinite(context.durationMs) &&
+      context.durationMs >= 0 && !options.isPartial
+      ? context.durationMs < 1_000 ? `${Math.round(context.durationMs)}ms` : `${(context.durationMs / 1_000).toFixed(1)}s`
+      : "";
+    const metrics = [summary, duration].filter(Boolean).join(" · ");
+    return singleLine(theme.fg(statusColor, icon) +
+      (metrics ? `  ${theme.fg("muted", metrics)}` : ""));
   }
 
   // Resolve renderers only. Pi retains its registered tools, execution pipeline,
@@ -442,7 +450,10 @@ export async function installToolViewController(
       renderCall(args, theme, context) {
         if (useNativeCall(args, context) && nativeDefinition) {
           const component = callNativeRenderer(nativeDefinition, toolName, args, theme, context);
-          if (nativeDefinition.renderShell === "self") return component;
+          const decorate = (native: ReturnType<NonNullable<ToolRenderers["renderCall"]>>) =>
+            mode === "compact" && !preserveCall(args, context) && !isCodemode
+              ? withNativeChevron(native, theme, context.expanded) : native;
+          if (nativeDefinition.renderShell === "self") return decorate(component);
           const state = context.state as RendererState;
           const box = state.nativeBox ?? new Box(1, 1);
           state.nativeBox = box;
@@ -452,7 +463,7 @@ export async function installToolViewController(
             text,
           ));
           box.addChild(component);
-          return box;
+          return decorate(box);
         }
         if (mode === "hidden") return new Container();
         return compactCall(toolName, args, theme);
@@ -480,7 +491,7 @@ export async function installToolViewController(
           }
           return new Container();
         }
-        if (options.isPartial && !isCodemode) return new Text(theme.fg("warning", "Running…"), 0, 0);
+        if (options.isPartial && !isCodemode) return new Text(theme.fg("warning", "… Running"), 0, 0);
         const state = context.state as RendererState;
         if (state.nativeResultComponent && nativeDefinition) {
           resultNativeRenderer(nativeDefinition, result, options, theme, context);

@@ -5,6 +5,7 @@ import type {
   ToolRenderResultOptions,
 } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth, visibleWidth, type Component } from "@earendil-works/pi-tui";
+import { chevronPrefix } from "./chevron.ts";
 
 type RenderContext = Parameters<NonNullable<ToolRenderers["renderCall"]>>[2];
 type MetricColor = "text" | "success" | "error" | "warning" | "muted";
@@ -18,9 +19,10 @@ type Metric = {
 
 const CALL_SEPARATOR = "  │  ";
 const METRIC_SEPARATOR = " · ";
+const STATUS_SPACING = "  ";
 
 /** One terminal row regardless of viewport width; no wrapping or padding. */
-function singleLine(line: string): Component {
+export function singleLine(line: string): Component {
   return {
     render(width: number): string[] {
       return width > 0 ? [truncateToWidth(line, width, "…")] : [];
@@ -55,7 +57,7 @@ function codeLineCount(args: unknown): string {
 }
 
 export function renderCodemodeCompactCall(args: unknown, theme: Theme): Component {
-  const label = theme.fg("accent", "▸ ") +
+  const label = chevronPrefix(theme, false) +
     theme.fg("toolTitle", theme.bold("codemode")) +
     theme.fg("dim", `  ${codeLineCount(args)}`);
   return singleLine(label);
@@ -80,7 +82,10 @@ function formatSummary(
     let lastGroup: Metric["group"] | undefined;
     for (const metric of metrics) {
       if (!selected.has(metric)) continue;
-      const separator = lastGroup && lastGroup === metric.group ? METRIC_SEPARATOR : CALL_SEPARATOR;
+      // The status glyph is not a metric group. A leading │ after ✓ looks
+      // like a stray border; only separate two actual metric groups.
+      const separator = !lastGroup ? STATUS_SPACING
+        : lastGroup === metric.group ? METRIC_SEPARATOR : CALL_SEPARATOR;
       row += theme.fg("dim", separator) + theme.fg(metric.color, metric.label);
       lastGroup = metric.group;
     }

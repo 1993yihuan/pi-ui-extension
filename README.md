@@ -125,6 +125,8 @@ The selector, `/tool-view normal|compact|hidden|status` command, and existing `t
 
 Tool View uses Pi's official `pi.registerToolRenderer()` hook for the built-in tools (`read`, `bash`, `edit`, `write`, `grep`, `find`, and `ls`) **and the built-in `codemode` tool**. It never replaces tool definitions or execution functions. Other tools retain their own renderers.
 
+**Unified Compact tool styling:** Supported direct tools and Codemode share a one-column, theme-colored `›` chevron before the tool name, consistent title alignment, and success (`✓`), running (`… Running`), and failure (`✗ Failed`) status treatment. Their metadata remains tool-specific; built-in `bash` shows its command under a `bash` heading and output as `12 out`. Codemode displays calls/ok/fail and output metrics; the status is followed by plain spacing, **not** a leading `│`. Vertical `│` separators appear only **between** the calls and output metric groups. Titles and result summaries stay to one terminal line and truncate on narrow viewports. For direct tools, expanding a row shows a matching `⌄` and keeps Pi's **native detail renderer and mouse handling** intact; switching to Normal leaves all native rendering unchanged. Skill-related read outputs, failed-tool native details, and third-party tools continue using their original renderer wherever required for correctness. Codemode deliberately remains metadata-only in Compact, even if the host's expanded state is selected; use Normal for full script and nested-tool details.
+
 For **Codemode** specifically:
 
 - **Normal** retains Pi's native script, nested-call, and output rendering (including its own expand/collapse behavior).
@@ -134,8 +136,11 @@ For **Codemode** specifically:
 Example Compact output:
 
 ```text
-▸ codemode  8 code lines
-✓  │  1 call · 1 ok  │  59 out · 85ms
+›  codemode  8 code lines
+✓  1 call · 1 ok  │  59 out · 85ms
+
+›  bash  git status
+✓  12 out · 45ms
 ```
 
 Changing the Tool View mode also updates previously rendered tool rows in the current session. Other third-party tools are unaffected.

@@ -81,7 +81,7 @@ test("Codemode uses the official native renderer in Normal, summary in Compact, 
     const visible = () => stripAnsi(transcript.render(110).join("\n"));
 
     // Default compact mode summarizes metadata, never executable code or nested arguments.
-    assert.match(visible(), /▸ codemode.*2 code lines/);
+    assert.match(visible(), /›  codemode.*2 code lines/);
     assert.match(visible(), /3 calls/);
     assert.match(visible(), /1 ok/);
     assert.match(visible(), /1 failed/);
@@ -89,6 +89,7 @@ test("Codemode uses the official native renderer in Normal, summary in Compact, 
     assert.match(visible(), /2 out/);
     assert.match(visible(), /1 image/);
     assert.match(visible(), /1.3s/);
+    assert.doesNotMatch(visible(), /✓\s*│/, "no leading vertical divider after a successful status");
     assert.match(visible(), /! Partial/, "successful parent with failed nested calls is not marked fully successful");
     assert.doesNotMatch(visible(), /[\u3400-\u9fff]/, "Compact labels must be English-only");
     assert.doesNotMatch(visible(), /DO_NOT_DISPLAY|PRIVATE_OUTPUT_TEXT|PRIVATE_NESTED_ARGS/);
@@ -186,11 +187,12 @@ test("one Thinking followed by multiple codemode calls preserves independent too
     } as any, false);
     const combined = [thinking, first, second].map((c) => stripAnsi(c.render(110).join("\n"))).join("\n");
     assert.equal((combined.match(/Thinking · 3s/g) ?? []).length, 1);
-    assert.equal((combined.match(/▸ codemode/g) ?? []).length, 2);
+    assert.equal((combined.match(/›  codemode/g) ?? []).length, 2);
     assert.match(combined, /1 call · 1 ok/);
     assert.match(combined, /2 calls · 2 ok/);
     assert.match(combined, /1 out · 225ms/);
     assert.match(combined, /3 out · 1.9s/);
+    assert.doesNotMatch(combined, /✓\s*│/, "result metrics should not begin with a separator");
     assert.doesNotMatch(combined, /✓ Done|Private reasoning|text\('a'\)|text\('b'\)/);
   } finally {
     await rm(directory, { recursive: true, force: true });

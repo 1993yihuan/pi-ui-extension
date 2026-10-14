@@ -3,7 +3,7 @@ import test from "node:test";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Text } from "@earendil-works/pi-tui";
+import { Text, visibleWidth } from "@earendil-works/pi-tui";
 import type { ToolRendererResolver, ToolRenderers } from "@earendil-works/pi-coding-agent";
 import { installToolViewController } from "./controller.ts";
 
@@ -88,9 +88,26 @@ test("uses one official renderer resolver without replacing or executing Pi tool
     const read = resolver("read", () => native)!;
     const args = { path: "example.ts" };
     const state = {};
-    assert.match(render(read, state, args), /read example.ts/);
+    assert.match(render(read, state, args), /›  read  example\.ts/);
     assert.match(render(read, state, args), /2 lines/);
-    assert.match(render(resolver("bash", () => native)!, {}, { command: "echo ok" }), /Done · 2 lines/);
+    assert.match(render(resolver("bash", () => native)!, {}, { command: "echo ok" }), /›  bash  echo ok[\s\S]*✓  2 out/);
+    for (const name of ["read", "bash", "edit", "write", "grep", "find", "ls"]) {
+      const argumentsByTool: Record<string, any> = {
+        read: { path: "demo.ts" }, bash: { command: "git status" },
+        edit: { path: "src/index.ts" }, write: { path: "out.txt", content: "ok" },
+        grep: { pattern: "TODO" }, find: { pattern: "*.ts" }, ls: { path: "." },
+      };
+      const direct = resolver(name, () => native)!;
+      const title = direct.renderCall!(argumentsByTool[name], theme, {
+        args: argumentsByTool[name], cwd: directory, state: {}, isError: false, isPartial: false, expanded: false,
+      } as any);
+      assert.match(title.render(90).join(""), new RegExp(`^›  ${name}\\b`), `${name} must share the same chevron/title spacing`);
+      for (const width of [8, 16, 25, 60]) {
+        const lines = title.render(width);
+        assert.equal(lines.length, 1, `${name} compact title must remain on one line`);
+        assert.ok(visibleWidth(lines[0]!) <= width, `${name} compact title must fit width ${width}`);
+      }
+    }
     assert.match(render(resolver("write", () => native)!, {}, { path: "file.ts", content: "ok" }), /Saved/);
     assert.match(render(resolver("edit", () => native)!, {}, { path: "file.ts" }), /Applied/);
     assert.equal(counters.nativeCall, 0, "compact must not run native renderer unnecessarily");
@@ -114,6 +131,7 @@ test("uses one official renderer resolver without replacing or executing Pi tool
     );
     await controller.setMode("compact", ctx);
     assert.match(render(read, {}, args, { expanded: true }), /NATIVE CALL/);
+    assert.match(render(read, {}, args, { expanded: true }), /⌄  /, "expanded native content gets the matching downward chevron");
     assert.match(render(read, {}, args, { isError: true }), /NATIVE CALL/);
     const nextSelf = { ...native, renderShell: "self" as const };
     await controller.setMode("normal", ctx);
@@ -133,7 +151,69 @@ test("uses one official renderer resolver without replacing or executing Pi tool
     );
     transcript.updateResult(result, false);
     const plain = (lines: string[]) => lines.join("\n").replace(/\u001b\[[0-9;]*m/g, "");
-    assert.match(plain(transcript.render(100)), /read example.ts/);
+    assert.match(plain(transcript.render(100)), /›  read  example\.ts/);
+    function clickToolHeading(marker: string) {
+      const lines = transcript.render(100).map(line => line.replace(/\u001b\[[0-9;]*m/g, ""));
+      const row = lines.findIndex(line => line.includes(marker));
+      assert.ok(row >= 0, `missing clickable tool title: ${marker}`);
+      const result = transcript.handleMouse({
+        type: "click", button: "left", x: 5, y: row,
+        screenX: 5, screenY: row, width: 100, height: lines.length,
+      } as any);
+      assert.equal(result?.handled, true, "native Pi tool expansion must remain clickable");
+    }
+    clickToolHeading("›  read");
+    assert.match(plain(transcript.render(100)), /⌄  /, "expanded mode uses a downward chevron");
+    assert.match(plain(transcript.render(100)), /NATIVE CALL/, "native detail is still visible when expanded");
+    assert.match(plain(transcript.render(100)), /NATIVE RESULT/);
+    clickToolHeading("⌄  ");
+    assert.match(plain(transcript.render(100)), /›  read/, "click again collapses the tool");
+
+    for (const [toolName, toolArgs] of [
+      ["bash", { command: "pwd" }],
+      ["edit", { path: "src/index.ts" }],
+      ["write", { path: "out.txt", content: "updated" }],
+      ["grep", { pattern: "TODO" }],
+      ["find", { pattern: "*.ts" }],
+      ["ls", { path: "." }],
+    ] as const) {
+      const renderer = resolver(toolName, () => native)!;
+      const instance = new ToolExecutionComponent(
+        toolName, `call-${toolName}`, toolArgs, {}, renderer, { requestRender() {} } as any, directory,
+      );
+      instance.updateResult({ ...result, durationMs: 48 }, false);
+      const view = () => plain(instance.render(80));
+      assert.match(view(), new RegExp(`›  ${toolName}\\b`), `${toolName} compact heading`);
+      const lines = view().split("\n");
+      const headerRow = lines.findIndex(line => line.includes(`›  ${toolName}`));
+      assert.ok(headerRow >= 0);
+      const clickResult = instance.handleMouse({
+        type: "click", button: "left", x: 4, y: headerRow,
+        screenX: 4, screenY: headerRow, width: 80, height: lines.length,
+      } as any);
+      assert.equal(clickResult?.handled, true, `${toolName} expansion should work`);
+      assert.match(view(), /⌄  /, `${toolName} expanded native header`);
+      assert.match(view(), /NATIVE RESULT/, `${toolName} native result remains available`);
+      const expandedLines = view().split("\n");
+      const expandedRow = expandedLines.findIndex(line => line.includes("⌄  "));
+      assert.ok(expandedRow >= 0);
+      instance.handleMouse({
+        type: "click", button: "left", x: 4, y: expandedRow,
+        screenX: 4, screenY: expandedRow, width: 80, height: expandedLines.length,
+      } as any);
+      assert.match(view(), new RegExp(`›  ${toolName}\\b`), `${toolName} should collapse again`);
+    }
+
+    const write = resolver("write", () => native)!;
+    const failedWrite = new ToolExecutionComponent(
+      "write", "failed-write", { path: "out.txt", content: "secret" }, {},
+      write, { requestRender() {} } as any, directory,
+    );
+    failedWrite.updateResult({
+      content: [{ type: "text", text: "Could not save" }], isError: true, durationMs: 25,
+    }, false);
+    assert.match(plain(failedWrite.render(100)), /NATIVE RESULT/, "failed tool uses native error details");
+    assert.doesNotMatch(plain(failedWrite.render(100)), /✓  Saved/, "failure must not report a saved result");
     await controller.setMode("hidden", ctx);
     transcript.setExpanded(false);
     assert.deepEqual(transcript.render(100), [], "hidden mode should remove the complete transcript row");
