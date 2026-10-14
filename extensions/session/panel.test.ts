@@ -104,6 +104,8 @@ test("renders and opens the MCP resource button", async () => {
 
   panel.refresh();
   await flushAsync();
+  assert.match(panel.render(40).join("\n"), /AGENTS/, "resource button should display AGENTS");
+  assert.doesNotMatch(panel.render(40).join("\n"), /AGENTS\.md/, "the displayed button must be shortened only");
   assert.match(panel.render(40).join("\n"), /MCP/);
 
   assert.deepEqual(listener?.("\u001b[<0;43;9M"), { consume: true });

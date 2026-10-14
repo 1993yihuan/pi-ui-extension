@@ -147,6 +147,8 @@ test("long tool names and group labels adapt to narrow terminal widths without w
 test("keeps the mode selector visible alongside Tool and MCP usage", () => {
   const lines = renderPanel();
   const output = lines.join("\n");
+  assert.match(lines[0] ?? "", /VIEW/);
+  assert.doesNotMatch(lines[0] ?? "", /TOOL VIEW/);
   assert.equal(lines.length, 12);
   assert.match(lines[1] ?? "", /Normal.*Compact.*Hidden/);
   assert.equal(lines[2], `├${"─".repeat(58)}┤`, "mode separator must reach both borders with no padding");

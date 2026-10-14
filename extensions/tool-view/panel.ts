@@ -254,7 +254,7 @@ export class ToolViewPanel implements Component {
     appendGroup("mcp", grouped.mcp);
 
     const lines = [
-      panelTop(this.theme, "TOOL VIEW", renderWidth),
+      panelTop(this.theme, "VIEW", renderWidth),
       panelContent(this.theme, body, "dim", contentWidth),
       flushSeparator(this.theme, renderWidth),
       ...usageRows,

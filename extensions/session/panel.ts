@@ -45,7 +45,7 @@ export type SessionPanelOptions = {
 };
 
 const RESOURCE_BUTTONS: ReadonlyArray<{ id: ResourceButtonId; label: string }> = [
-  { id: "agents", label: "AGENTS.md" },
+  { id: "agents", label: "AGENTS" },
   { id: "skills", label: "Skills" },
   { id: "extensions", label: "Extensions" },
   { id: "mcp", label: "MCP" },
