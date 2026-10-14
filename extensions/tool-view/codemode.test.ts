@@ -86,9 +86,10 @@ test("Codemode uses the official native renderer in Normal, summary in Compact, 
     assert.match(visible(), /1 ok/);
     assert.match(visible(), /1 failed/);
     assert.match(visible(), /1 cancelled/);
-    assert.match(visible(), /2 lines/);
+    assert.match(visible(), /2 out/);
     assert.match(visible(), /1 image/);
     assert.match(visible(), /1.3s/);
+    assert.match(visible(), /! Partial/, "successful parent with failed nested calls is not marked fully successful");
     assert.doesNotMatch(visible(), /[\u3400-\u9fff]/, "Compact labels must be English-only");
     assert.doesNotMatch(visible(), /DO_NOT_DISPLAY|PRIVATE_OUTPUT_TEXT|PRIVATE_NESTED_ARGS/);
     transcript.setExpanded(true);
@@ -136,6 +137,61 @@ test("Codemode uses the official native renderer in Normal, summary in Compact, 
     assert.doesNotMatch(visible(), /DO_NOT_DISPLAY|PRIVATE_OUTPUT_TEXT|PRIVATE_NESTED_ARGS/);
     assert.equal(expansions.length, 6, "mode switching requests transcript refresh");
     assert.equal(registered, 0);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("one Thinking followed by multiple codemode calls preserves independent tool rows", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "codemode-multiple-"));
+  let resolver: ToolRendererResolver | undefined;
+  const pi = {
+    registerToolRenderer(cb: ToolRendererResolver) { resolver = cb; },
+    registerCommand() {}, registerShortcut() {}, on() {},
+  } as any;
+  try {
+    await installToolViewController(pi, { modeFile: join(directory, "mode.json") });
+    const { initTheme, getMarkdownTheme } = await import(
+      "../../node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/theme/theme.js"
+    );
+    const { AssistantMessageComponent } = await import(
+      "../../node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/assistant-message.js"
+    );
+    const { ToolExecutionComponent } = await import(
+      "../../node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/tool-execution.js"
+    );
+    const { transformThinkingText } = await import("./thinking.ts");
+    initTheme("dark");
+    const thinking = new AssistantMessageComponent(undefined, false, getMarkdownTheme(), "Thinking...", 1, [
+      (text, ctx) => transformThinkingText(text, ctx, "compact", () => ({ ms: 3000, approximate: false })),
+    ]);
+    thinking.updateContent({
+      role: "assistant", stopReason: "stop", content: [{ type: "thinking", thinking: "Private reasoning" }],
+    } as any, false);
+
+    const tool = resolver!("codemode", () => ({}))!;
+    const first = new ToolExecutionComponent(
+      "codemode", "first", { code: "text('a')" }, {}, tool, { requestRender() {} } as any, directory,
+    );
+    const second = new ToolExecutionComponent(
+      "codemode", "second", { code: "text('b')\ntext('c')" }, {}, tool, { requestRender() {} } as any, directory,
+    );
+    first.updateResult({
+      content: [{ type: "text", text: "one" }],
+      details: { calls: [{ status: "ok" }] }, durationMs: 225, isError: false,
+    } as any, false);
+    second.updateResult({
+      content: [{ type: "text", text: "one\ntwo\nthree" }],
+      details: { calls: [{ status: "ok" }, { status: "ok" }] }, durationMs: 1900, isError: false,
+    } as any, false);
+    const combined = [thinking, first, second].map((c) => stripAnsi(c.render(110).join("\n"))).join("\n");
+    assert.equal((combined.match(/Thinking · 3s/g) ?? []).length, 1);
+    assert.equal((combined.match(/▸ codemode/g) ?? []).length, 2);
+    assert.match(combined, /1 call · 1 ok/);
+    assert.match(combined, /2 calls · 2 ok/);
+    assert.match(combined, /1 out · 225ms/);
+    assert.match(combined, /3 out · 1.9s/);
+    assert.doesNotMatch(combined, /✓ Done|Private reasoning|text\('a'\)|text\('b'\)/);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
@@ -240,8 +296,8 @@ test("Codemode Compact keeps each styled row to one terminal line and prioritize
     }
     assert.match(result.render(28).join(""), /Failed/);
     assert.match(result.render(28).join(""), /4 calls/);
-    assert.doesNotMatch(result.render(28).join(""), /2 lines/);
-    assert.match(result.render(95).join(""), /2 lines/);
+    assert.doesNotMatch(result.render(28).join(""), /2 out/);
+    assert.match(result.render(95).join(""), /2 out/);
     assert.match(result.render(95).join(""), /1\.5s/);
     assert.match(call.render(95).join(""), /3 code lines/);
     assert.deepEqual(call.render(0), []);

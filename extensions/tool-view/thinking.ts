@@ -16,7 +16,8 @@ function formatElapsed(ms: number): string {
 }
 
 function summaryHeader(streaming: boolean, width: number, duration?: ThinkingDuration): string {
-  const status = `Thinking · ${streaming ? "Live" : "Done"}`;
+  // Quiet completed labels improve readability across repeated tool calls.
+  const status = streaming ? "Thinking…" : "Thinking";
   const elapsed = duration && Number.isFinite(duration.ms) && duration.ms >= 0
     ? ` · ${duration.approximate ? "~" : ""}${formatElapsed(duration.ms)}`
     : "";

@@ -100,8 +100,6 @@ export function renderCodemodeCompactResult(
   options: ToolRenderResultOptions,
   runningSince?: number,
 ): Component {
-  const status = options.isPartial ? "… Running" : context.isError ? "✗ Failed" : "✓ Done";
-  const stateColor = options.isPartial ? "warning" : context.isError ? "error" : "success";
   const rawCalls: unknown = result.details?.calls;
   const calls: readonly unknown[] = Array.isArray(rawCalls) ? rawCalls : [];
   const statuses = { ok: 0, error: 0, cancelled: 0, running: 0 };
@@ -112,6 +110,13 @@ export function renderCodemodeCompactResult(
       statuses[state]++;
     }
   }
+  // The outer call may succeed even when a nested tool fails or is cancelled.
+  const partialFailure = statuses.error > 0 || statuses.cancelled > 0;
+  const status = options.isPartial ? "… Running"
+    : context.isError ? "✗ Failed"
+    : partialFailure ? "! Partial" : "✓";
+  const stateColor = options.isPartial || (partialFailure && !context.isError)
+    ? "warning" : context.isError ? "error" : "success";
   const metrics: Metric[] = [];
   const countLabel = (count: number, singular: string): string => `${count} ${singular}${count === 1 ? "" : "s"}`;
   if (calls.length > 0) metrics.push({ label: countLabel(calls.length, "call"), color: "text", group: "calls", priority: 1 });
@@ -121,7 +126,7 @@ export function renderCodemodeCompactResult(
   if (statuses.running) metrics.push({ label: `${statuses.running} running`, color: "warning", group: "calls", priority: 3 });
   if (!options.isPartial) {
     const { lines, images } = countContent(result);
-    if (lines) metrics.push({ label: countLabel(lines, "line"), color: "muted", group: "output", priority: 6 });
+    if (lines) metrics.push({ label: `${lines} out`, color: "muted", group: "output", priority: 6 });
     if (images) metrics.push({ label: countLabel(images, "image"), color: "muted", group: "output", priority: 7 });
   }
   // Pi provides durationMs only after completion; partial rows show an

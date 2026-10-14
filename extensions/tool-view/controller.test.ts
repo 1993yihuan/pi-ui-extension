@@ -95,7 +95,7 @@ test("the single Tool View mode controls Thinking, persists once, and refreshes 
     const controller = await installToolViewController(pi, { modeFile });
     assert.equal(controller.getMode(), "compact");
     assert.equal(typeof transformer, "function");
-    assert.equal(transformer("private thought", context), "Thinking · Done");
+    assert.equal(transformer("private thought", context), "Thinking");
     for (const callback of handlers.get("session_start") ?? []) callback({}, ctx);
     assert.equal(handlers.has("message_update"), true, "registered stream timing observer");
     const partial = { role: "assistant", content: [{ type: "thinking", thinking: "private thought" }] };
@@ -104,14 +104,14 @@ test("the single Tool View mode controls Thinking, persists once, and refreshes 
         callback({ assistantMessageEvent: { type, contentIndex: 0, partial } }, ctx);
       }
     }
-    assert.match(transformer("private thought", context), /^Thinking · Done · /);
+    assert.match(transformer("private thought", context), /^Thinking · /);
     for (const callback of handlers.get("message_end") ?? []) callback({ message: partial }, ctx);
-    assert.match(transformer("private thought", context), /^Thinking · Done · /);
+    assert.match(transformer("private thought", context), /^Thinking · /);
 
     await controller.setMode("normal", ctx);
     assert.equal(transformer("private thought", context), "private thought");
     await commands.get("tool-view").handler("hidden", ctx);
-    assert.match(transformer("private thought", context), /^Thinking · Done · /);
+    assert.match(transformer("private thought", context), /^Thinking · /);
     assert.equal(controller.getMode(), "hidden");
     assert.deepEqual(JSON.parse(await readFile(modeFile, "utf8")), { mode: "hidden" });
     assert.equal(refreshed, 2, "one public refresh per mode change, including historical Thinking");

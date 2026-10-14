@@ -111,8 +111,8 @@ Composition 会将当前可观测上下文拆分为：
 | 模式 | Tools | Thinking |
 | --- | --- | --- |
 | **Normal** | 保留原生完整工具输出 | 完整显示 Thinking |
-| **Compact**（默认） | 紧凑工具摘要 | 流式显示 `Thinking · Live · ~5s` 与最近 7 行（按终端实际换行计算），结束后在有计时数据时显示 `Thinking · Done · 5s` |
-| **Hidden** | 隐藏工具 transcript | 仅显示 `Thinking · Live · ~5s` / `Thinking · Done · 5s` 状态和可测量的耗时，不显示思考正文 |
+| **Compact**（默认） | 紧凑工具摘要 | 流式显示 `Thinking… · ~5s` 与最近 7 行（按终端实际换行计算），结束后在有计时数据时显示 `Thinking · 5s` |
+| **Hidden** | 隐藏工具 transcript | 仅显示 `Thinking… · ~5s` / `Thinking · 5s` 状态和可测量的耗时，不显示思考正文 |
 
 ```text
 ○ Normal      ● Compact      ○ Hidden
@@ -120,26 +120,28 @@ Composition 会将当前可观测上下文拆分为：
 
 直接点击按钮，或使用原有的 `/tool-view normal|compact|hidden|status` 命令切换。继续复用原来的 `tool-view-mode.json` 持久化配置，切换时同步刷新历史工具记录和 Thinking 消息。不新增 Thinking 独立按钮、命令或配置文件。
 
-**Thinking 耗时：** Compact 和 Hidden 均使用 Pi 模型流提供的 `thinking_start` / `thinking_end` 事件测量**可观察到的 Thinking 阶段实际耗时**，不会把整个模型响应时间误算为思考时间。流式显示 `~` 估计标记，在收到新内容时更新；完成后显示固定时长。Hidden 在流式及完成后都不展示思考正文。历史会话恢复、事件缺失等无法准确测量时仅显示 `Thinking · Done`，不猜测时间。窄屏不足以容纳时间时仅保留状态。计时记录仅保存在当前会话内存，不写入 Session。
+**Thinking 耗时：** Compact 和 Hidden 均使用 Pi 模型流提供的 `thinking_start` / `thinking_end` 事件测量**可观察到的 Thinking 阶段实际耗时**，不会把整个模型响应时间误算为思考时间。流式显示 `Thinking…` 和 `~` 估计标记，在收到新内容时更新；完成后显示 `Thinking · 5s` 一类的固定时长。Hidden 在流式及完成后都不展示思考正文。历史会话恢复、事件缺失等无法准确测量时仅显示 `Thinking`，不猜测时间。窄屏不足以容纳时间时仅保留状态。计时记录仅保存在当前会话内存，不写入 Session。
 
-**兼容说明：** Compact 和 Hidden 的 Thinking 摘要是**只读状态行**。点击 `Thinking · Done · 5s` 或 Live 状态，不会触发 Pi 原生点击隐藏，不会跳变成 `Thinking...`，也不提供点击展开详情。针对已验证的 Pi **1.1.0 / 1.2.0**，插件只对自身 Compact/Hidden Thinking 的鼠标区域增加有限的点击保护，Normal 仍保留 Pi 原生鼠标行为；未验证版本或内部结构变化时安全回退原生行为。Thinking 展示和计时仍使用官方 `registerMarkdownTransformer()` 和 `setHiddenThinkingLabel()` API；Compact/Hidden 下应确保 Pi 原生 `hideThinkingBlock` 为 `false`（或通过原生快捷键切换为可见），否则原生 `Thinking...` 会先于摘要转换显示。VIEW 模式不影响推理过程和原始 Session。
+**兼容说明：** Compact 和 Hidden 的 Thinking 摘要是**只读状态行**。点击 `Thinking · 5s` 或流式状态，不会触发 Pi 原生点击隐藏，不会跳变成 `Thinking...`，也不提供点击展开详情。针对已验证的 Pi **1.1.0 / 1.2.0**，插件只对自身 Compact/Hidden Thinking 的鼠标区域增加有限的点击保护，Normal 仍保留 Pi 原生鼠标行为；未验证版本或内部结构变化时安全回退原生行为。Thinking 展示和计时仍使用官方 `registerMarkdownTransformer()` 和 `setHiddenThinkingLabel()` API；Compact/Hidden 下应确保 Pi 原生 `hideThinkingBlock` 为 `false`（或通过原生快捷键切换为可见），否则原生 `Thinking...` 会先于摘要转换显示。VIEW 模式不影响推理过程和原始 Session。
 
 Tool View 使用 Pi 官方的 `pi.registerToolRenderer()` 接口管理内置工具（`read`、`bash`、`edit`、`write`、`grep`、`find` 和 `ls`）**以及内置 `codemode` 工具**的展示，不再重注册工具定义或接管工具执行逻辑。其他 Tool 保留其自身的渲染方式。
 
 对于 **Codemode**：
 
 - **Normal**：保留 Pi 原生的脚本、子工具调用、输出详情，以及原生展开 / 收起行为。
-- **Compact**：采用带有状态颜色、简短英文文案的双行摘要。第一行突出 Codemode 和代码行数；第二行将状态、子调用统计、输出规模与耗时分组展示。运行期间从首次可观察到的部分结果开始估算耗时，以 `~` 标记并每秒刷新；结束后采用 Pi 上报的准确耗时。即使展开或执行失败，也不会展示完整代码、子调用参数或真实输出；终端宽度不足时优先保留状态、失败信息和调用次数。
+- **Compact**：采用带有状态颜色、简短英文文案的双行摘要。第一行突出 Codemode 和代码行数；第二行将状态、子调用统计、输出规模（如 `57 out`）与耗时分组展示。成功时绿色 `✓` 代替重复的 `✓ Done`；父调用成功但子调用有失败或取消时显示 `! Partial`；父调用失败时显示 `✗ Failed`。运行期间从首次可观察到的部分结果开始估算耗时，以 `~` 标记并每秒刷新；结束后采用 Pi 上报的准确耗时。即使展开或执行失败，也不会展示完整代码、子调用参数或真实输出；终端宽度不足时优先保留状态、失败信息和调用次数。
 - **Hidden**：隐藏 Codemode 工具记录（包括展开和失败结果），但不影响实际执行或 Tool / MCP 调用统计。
 
 Compact 效果示例：
 
 ```text
 ▸ codemode  8 code lines
-✓ Done  │  1 call · 1 ok  │  59 lines · 85ms
+✓  │  1 call · 1 ok  │  59 out · 85ms
 ```
 
 切换 Tool View 模式也会更新当前会话中已经展示的历史工具记录；其他第三方工具保持原有渲染方式。
+
+同一段 Thinking 后连续发生多个工具调用时，保留 Pi 原有执行顺序：一条 Thinking 摘要后依次显示**每次**独立的 Codemode 双行记录。扩展不合并工具调用、不重复插入 Thinking，也不额外添加分割线；组件间距仍由 Pi 原生布局控制。
 
 内置工具与 Codemode 的 Compact 摘要、模式通知和 Tool View 状态统一使用英文；CTX 缓存命中率标签由 `Catch` 更正为 `Cache`。
 
@@ -219,7 +221,7 @@ Pi 会安装 package，并将声明写入个人配置：
 如果希望固定版本：
 
 ```bash
-pi install npm:pi-ui-extension@1.3.0
+pi install npm:pi-ui-extension@1.3.1
 ```
 
 或者：
@@ -227,7 +229,7 @@ pi install npm:pi-ui-extension@1.3.0
 ```json
 {
   "packages": [
-    "npm:pi-ui-extension@1.3.0"
+    "npm:pi-ui-extension@1.3.1"
   ]
 }
 ```
@@ -255,7 +257,7 @@ pi install git:github.com/1993yihuan/pi-ui-extension
 固定到 Git tag：
 
 ```bash
-pi install git:github.com/1993yihuan/pi-ui-extension@v1.3.0
+pi install git:github.com/1993yihuan/pi-ui-extension@v1.3.1
 ```
 
 ### 临时加载本地源码

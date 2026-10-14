@@ -25,7 +25,7 @@ test("Thinking stopwatch uses the explicit provider start/end stream events, nev
   assert.deepEqual(timing.duration("Private reasoning", false), { ms: 5150, approximate: false });
   assert.equal(transformThinkingText("Private reasoning", {
     messageType: "assistant-thinking", isStreaming: false, availableWidth: 40,
-  }, "compact", (text, streaming) => timing.duration(text, streaming)), "Thinking · Done · 5s");
+  }, "compact", (text, streaming) => timing.duration(text, streaming)), "Thinking · 5s");
   timing.endMessage();
   assert.deepEqual(timing.duration("Private reasoning", false), { ms: 5150, approximate: false });
   timing.reset();

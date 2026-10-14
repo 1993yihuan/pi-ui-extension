@@ -110,8 +110,8 @@ For tool definitions, the extension prefers the observable provider-request tool
 | Mode | Tools | Thinking |
 | --- | --- | --- |
 | **Normal** | Native tool transcript | Full thinking text |
-| **Compact** (default) | Condensed tool summary | `Thinking · Live · ~5s` plus up to 7 recent terminal-wrapped lines while streaming; `Thinking · Done · 5s` after completion when measured |
-| **Hidden** | Hide tool transcript | Only `Thinking · Live · ~5s` / `Thinking · Done · 5s` status and elapsed time when measurable; no Thinking body |
+| **Compact** (default) | Condensed tool summary | `Thinking… · ~5s` plus up to 7 recent terminal-wrapped lines while streaming; `Thinking · 5s` after completion when measured |
+| **Hidden** | Hide tool transcript | Only `Thinking… · ~5s` / `Thinking · 5s` status and elapsed time when measurable; no Thinking body |
 
 ```text
 ○ Normal      ● Compact      ○ Hidden
@@ -119,26 +119,28 @@ For tool definitions, the extension prefers the observable provider-request tool
 
 The selector, `/tool-view normal|compact|hidden|status` command, and existing `tool-view-mode.json` persistence are shared. A mode change refreshes both historical tool transcript rows and Pi's existing Thinking components. There is no separate Thinking selector, command or configuration file.
 
-**Thinking duration:** Compact and Hidden use Pi's actual `thinking_start` and `thinking_end` provider streaming events to measure the **observable Thinking segment wall time**, not the duration of the complete assistant response. A live duration has a `~` prefix and is updated when streaming content arrives. Completed durations remain fixed; if timing events are missing (for example, a restored session), the summary simply shows `Thinking · Done` instead of making up an elapsed time. Hidden never renders Thinking body text, including while streaming. On narrow terminals the time suffix is omitted rather than wrapping the heading. Timings exist only in memory for the active session.
+**Thinking duration:** Compact and Hidden use Pi's actual `thinking_start` and `thinking_end` provider streaming events to measure the **observable Thinking segment wall time**, not the duration of the complete assistant response. A live duration has a `~` prefix and is updated when streaming content arrives. Completed durations remain fixed; if timing events are missing (for example, a restored session), the summary simply shows `Thinking` instead of making up an elapsed time. Hidden never renders Thinking body text, including while streaming. On narrow terminals the time suffix is omitted rather than wrapping the heading. Timings exist only in memory for the active session.
 
-**Compatibility:** Compact and Hidden Thinking summaries are **read-only**: clicking `Thinking · Done · 5s` or the live summary will not replace the label with Pi's native `Thinking...` placeholder or expand its contents. The extension uses a narrowly scoped, version-checked guard on Pi **1.1.0 / 1.2.0** to prevent the native click-to-hide action on its own Compact/Hidden Thinking regions; Normal retains native Thinking mouse behavior. On an unverified Pi implementation, the guard safely falls back to native behavior. Thinking display and durations still use the public `registerMarkdownTransformer()` and `setHiddenThinkingLabel()` APIs. To see the extension's Thinking status in Compact/Hidden, ensure Pi's native `hideThinkingBlock` is `false` (or toggle native Thinking visibility); Pi's native hidden placeholder bypasses Markdown transformation. VIEW mode selection does not change model reasoning or saved session content.
+**Compatibility:** Compact and Hidden Thinking summaries are **read-only**: clicking `Thinking · 5s` or the live summary will not replace the label with Pi's native `Thinking...` placeholder or expand its contents. The extension uses a narrowly scoped, version-checked guard on Pi **1.1.0 / 1.2.0** to prevent the native click-to-hide action on its own Compact/Hidden Thinking regions; Normal retains native Thinking mouse behavior. On an unverified Pi implementation, the guard safely falls back to native behavior. Thinking display and durations still use the public `registerMarkdownTransformer()` and `setHiddenThinkingLabel()` APIs. To see the extension's Thinking status in Compact/Hidden, ensure Pi's native `hideThinkingBlock` is `false` (or toggle native Thinking visibility); Pi's native hidden placeholder bypasses Markdown transformation. VIEW mode selection does not change model reasoning or saved session content.
 
 Tool View uses Pi's official `pi.registerToolRenderer()` hook for the built-in tools (`read`, `bash`, `edit`, `write`, `grep`, `find`, and `ls`) **and the built-in `codemode` tool**. It never replaces tool definitions or execution functions. Other tools retain their own renderers.
 
 For **Codemode** specifically:
 
 - **Normal** retains Pi's native script, nested-call, and output rendering (including its own expand/collapse behavior).
-- **Compact** uses a two-line, status-colored summary with concise English labels: a highlighted Codemode title and script line count, followed by grouped execution status, nested-call counts, output size, and duration. While running, elapsed time is estimated from the first observed partial result (prefixed with `~`, updated every second); when complete, the exact duration reported by Pi replaces the estimate. It omits script source, nested-call arguments, and actual output, even if expanded or failed. On narrow terminals it keeps each part to one row and prioritizes status and failures.
+- **Compact** uses a two-line, status-colored summary with concise English labels: a highlighted Codemode title and script line count, followed by grouped execution status, nested-call counts, output size (`57 out`), and duration. A green `✓` replaces redundant `✓ Done`; `! Partial` identifies successful parent calls with failed/cancelled nested steps, while `✗ Failed` remains explicit for a failed parent. While running, elapsed time is estimated from the first observed partial result (prefixed with `~`, updated every second); when complete, the duration reported by Pi replaces the estimate. It omits script source, nested-call arguments, and actual output, even if expanded or failed. On narrow terminals it keeps each part to one row and prioritizes status and failures.
 - **Hidden** removes the Codemode transcript row, including expanded and failed results, without stopping execution or removing Tool/MCP usage accounting.
 
 Example Compact output:
 
 ```text
 ▸ codemode  8 code lines
-✓ Done  │  1 call · 1 ok  │  59 lines · 85ms
+✓  │  1 call · 1 ok  │  59 out · 85ms
 ```
 
 Changing the Tool View mode also updates previously rendered tool rows in the current session. Other third-party tools are unaffected.
+
+When one Thinking segment precedes several tool calls, Pi retains its original message order: one Thinking summary followed by a separate two-line summary for **each** Codemode call. The extension does not merge calls, duplicate Thinking, or inject transcript dividers; layout spacing remains owned by Pi.
 
 Compact summaries for built-in tools and Codemode, mode notifications, and the Tool View status are in English. The CTX cache-hit label is `Cache` (not `Catch`).
 
@@ -218,7 +220,7 @@ Example configuration:
 To pin a specific version:
 
 ```bash
-pi install npm:pi-ui-extension@1.3.0
+pi install npm:pi-ui-extension@1.3.1
 ```
 
 or:
@@ -226,7 +228,7 @@ or:
 ```json
 {
   "packages": [
-    "npm:pi-ui-extension@1.3.0"
+    "npm:pi-ui-extension@1.3.1"
   ]
 }
 ```
@@ -254,7 +256,7 @@ Configuration form:
 Pin to a Git tag:
 
 ```bash
-pi install git:github.com/1993yihuan/pi-ui-extension@v1.3.0
+pi install git:github.com/1993yihuan/pi-ui-extension@v1.3.1
 ```
 
 ### Temporary local-source testing

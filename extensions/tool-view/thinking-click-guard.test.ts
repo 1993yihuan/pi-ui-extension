@@ -46,10 +46,10 @@ test("Compact Thinking duration does not disappear when clicked; Normal keeps na
       { type: "text", text: "Public response" },
       { type: "thinking", thinking: "Private B" },
     ), false);
-    assert.equal(rendered(c).filter(line => line.includes("Thinking · Done · 2s")).length, 2);
-    click(c, "Thinking · Done · 2s");
-    click(c, "Thinking · Done · 2s", true);
-    assert.equal(rendered(c).filter(line => line.includes("Thinking · Done · 2s")).length, 2);
+    assert.equal(rendered(c).filter(line => line.includes("Thinking · 2s")).length, 2);
+    click(c, "Thinking · 2s");
+    click(c, "Thinking · 2s", true);
+    assert.equal(rendered(c).filter(line => line.includes("Thinking · 2s")).length, 2);
     assert.doesNotMatch(rendered(c).join("\n"), /Thinking\.\.\.|Private A|Private B/);
     assert.match(rendered(c).join("\n"), /Public response/);
 
@@ -63,16 +63,16 @@ test("Compact Thinking duration does not disappear when clicked; Normal keeps na
 
     mode = "hidden";
     c.setHiddenThinkingLabel("Thinking...");
-    assert.equal(rendered(c).filter(line => line.includes("Thinking · Done · 2s")).length, 2);
-    click(c, "Thinking · Done · 2s");
-    click(c, "Thinking · Done · 2s", true);
-    assert.equal(rendered(c).filter(line => line.includes("Thinking · Done · 2s")).length, 2);
+    assert.equal(rendered(c).filter(line => line.includes("Thinking · 2s")).length, 2);
+    click(c, "Thinking · 2s");
+    click(c, "Thinking · 2s", true);
+    assert.equal(rendered(c).filter(line => line.includes("Thinking · 2s")).length, 2);
     assert.doesNotMatch(rendered(c).join("\n"), /Thinking\.\.\./);
     assert.doesNotMatch(rendered(c).join("\n"), /Private A|Private B/);
     c.updateContent(message({ type: "thinking", thinking: "Private streaming details" }), true);
-    assert.match(rendered(c).join("\n"), /Thinking · Live · 2s/);
+    assert.match(rendered(c).join("\n"), /Thinking… · 2s/);
     assert.doesNotMatch(rendered(c).join("\n"), /Private streaming details/);
-    click(c, "Thinking · Live · 2s");
+    click(c, "Thinking… · 2s");
     assert.doesNotMatch(rendered(c).join("\n"), /Private streaming details|Thinking\.\.\./);
   } finally {
     prototype.updateContent = initial;
@@ -95,12 +95,12 @@ test("click guard scopes interception to its own transformer and survives reinst
 
     const newer = new AssistantMessageComponent(undefined, false, getMarkdownTheme(), "Thinking...", 1, [second]);
     newer.updateContent(message({ type: "thinking", thinking: "Secret" }), false);
-    click(newer, "Thinking · Done");
-    assert.match(rendered(newer).join("\n"), /Thinking · Done/);
+    click(newer, "Thinking");
+    assert.match(rendered(newer).join("\n"), /Thinking/);
 
     const older = new AssistantMessageComponent(undefined, false, getMarkdownTheme(), "Thinking...", 1, [first]);
     older.updateContent(message({ type: "thinking", thinking: "Private" }), false);
-    click(older, "Thinking · Done");
+    click(older, "Thinking");
     assert.match(rendered(older).join("\n"), /Thinking\.\.\./,
       "the current extension must not change a different component's native clicks");
 
