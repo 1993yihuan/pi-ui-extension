@@ -3,8 +3,6 @@ import { lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, wr
 import { lstat } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
 
-/** Recent files are protected even when an older Pi instance does not publish a lease. */
-export const SESSION_QUIET_PERIOD_MS = 5 * 60_000;
 const MAX_LEASE_FILES = 4096;
 
 export type SessionFileSnapshot = {
@@ -15,13 +13,11 @@ export type SessionFileSnapshot = {
   readonly ctimeMs: number;
 };
 
-/** Reject symlinks and files modified recently; preserve the exact file identity. */
-export async function snapshotInactiveSession(
-  path: string, now = Date.now(),
-): Promise<SessionFileSnapshot | undefined> {
+/** Capture file identity without excluding recent history; refuse links and non-files. */
+export async function snapshotClearableSession(path: string): Promise<SessionFileSnapshot | undefined> {
   try {
     const info = await lstat(path);
-    if (!info.isFile() || now - info.mtimeMs < SESSION_QUIET_PERIOD_MS) return undefined;
+    if (!info.isFile()) return undefined;
     return { dev: info.dev, ino: info.ino, size: info.size, mtimeMs: info.mtimeMs, ctimeMs: info.ctimeMs };
   } catch {
     return undefined;

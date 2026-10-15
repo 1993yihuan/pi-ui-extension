@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
   createActiveSessionLease, readActiveSessionPaths, sessionFileUnchanged,
-  snapshotInactiveSession, SESSION_QUIET_PERIOD_MS,
+  snapshotClearableSession,
 } from "./safety.ts";
 
 test("separate Pi instances protect their active session paths until shutdown", () => {
@@ -43,22 +43,22 @@ test("a stale PID is ignored, but malformed lease data blocks dangerous cleanup"
   }
 });
 
-test("bulk cleanup protects recently changed sessions and refuses changed or replaced files", async () => {
+test("bulk cleanup includes recently modified sessions but refuses changed or replaced files", async () => {
   const root = mkdtempSync(join(tmpdir(), "session-cleanup-safety-"));
   try {
     const path = join(root, "candidate.jsonl");
     writeFileSync(path, "old session\n");
-    assert.equal(await snapshotInactiveSession(path), undefined, "a recently edited session is not a candidate");
+    assert.ok(await snapshotClearableSession(path), "a recently edited session is now eligible for review");
     const now = Date.now();
-    const old = new Date(now - SESSION_QUIET_PERIOD_MS - 60_000);
+    const old = new Date(now - 3600_000);
     utimesSync(path, old, old);
-    const snapshot = await snapshotInactiveSession(path, now);
+    const snapshot = await snapshotClearableSession(path);
     assert.ok(snapshot);
     assert.equal(await sessionFileUnchanged(path, snapshot!), true);
     appendFileSync(path, "user resumed writing\n");
     assert.equal(await sessionFileUnchanged(path, snapshot!), false, "resume during confirmation blocks deletion");
     utimesSync(path, old, old);
-    const next = await snapshotInactiveSession(path, now);
+    const next = await snapshotClearableSession(path);
     assert.ok(next);
     rmSync(path);
     writeFileSync(path, "new contents\n");
@@ -66,7 +66,7 @@ test("bulk cleanup protects recently changed sessions and refuses changed or rep
 
     const link = join(root, "link.jsonl");
     symlinkSync(path, link);
-    assert.equal(await snapshotInactiveSession(link, now), undefined, "symlinks cannot be bulk deleted");
+    assert.equal(await snapshotClearableSession(link), undefined, "symlinks cannot be bulk deleted");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

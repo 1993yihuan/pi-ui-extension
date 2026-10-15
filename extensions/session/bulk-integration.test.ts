@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { getAgentDir, SessionManager } from "@earendil-works/pi-coding-agent";
 import piUiExtension from "../index.ts";
-import { createActiveSessionLease, SESSION_QUIET_PERIOD_MS } from "./safety.ts";
+import { createActiveSessionLease } from "./safety.ts";
 
 test("bulk cleanup rechecks active leases and files changed during confirmation", async () => {
   const root = mkdtempSync(join(tmpdir(), "pi-ui-bulk-cleanup-"));
@@ -22,7 +22,7 @@ test("bulk cleanup rechecks active leases and files changed during confirmation"
   const otherActive = makeSession("other Pi instance");
   const unchanged = makeSession("safe to trash");
   const recentlyModified = makeSession("recent activity");
-  const old = new Date(Date.now() - SESSION_QUIET_PERIOD_MS - 60_000);
+  const old = new Date(Date.now() - 3600_000);
   for (const manager of [changed, otherActive, unchanged]) {
     utimesSync(manager.getSessionFile()!, old, old);
   }
@@ -65,10 +65,10 @@ test("bulk cleanup rechecks active leases and files changed during confirmation"
     await piUiExtension(pi);
     await emit("session_start");
     await commands.get("sidebar-session-clear-others")!.handler("", ctx);
-    assert.deepEqual(moves, [unchanged.getSessionFile()]);
+    assert.deepEqual(new Set(moves), new Set([unchanged.getSessionFile(), recentlyModified.getSessionFile()]));
     assert.match(notices.join("\n"), /2 protected\/changed/);
     assert.ok(!moves.includes(active.getSessionFile()!));
-    assert.ok(!moves.includes(recentlyModified.getSessionFile()!));
+    assert.ok(moves.includes(recentlyModified.getSessionFile()!), "recent historical sessions are now eligible");
   } finally {
     await emit("session_shutdown");
     otherInstance.dispose();

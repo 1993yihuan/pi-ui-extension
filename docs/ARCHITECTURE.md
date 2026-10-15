@@ -33,11 +33,12 @@ Advanced management (`/sessions-manager` or `≡`) offers paging (eight records)
 **Bulk cleanup safeguards:**
 
 1. Never delete the current session or pinned sessions.
-2. Exclude sessions whose modification time is within the last **five minutes**.
-3. Exclude sessions advertised as active by Pi instances running this extension. These instances keep private activity metadata under `pi-ui-extension/active-sessions/` in Pi's agent directory and clear it on normal shutdown.
-4. Immediately before moving each file to trash, recheck current-session identity, pin state, active records, file identity and mtime. Skip sessions changed during confirmation.
+2. Exclude sessions advertised as active by Pi instances running this extension. These instances keep private activity metadata under `pi-ui-extension/active-sessions/` in Pi's agent directory and clear it on normal shutdown.
+3. Include recently modified historical sessions, while rejecting symbolic links, non-files and unavailable session paths. There is **no five-minute inactivity rule**.
+4. Show a centered, cancellation-first preview before deletion: eligible and protected/unavailable counts, broken down by current, pinned, active-in-another-Pi, and unavailable-file reasons. Even a zero-eligible preview explains what was protected and has no destructive action.
+5. Immediately before moving each file to trash, recheck current-session identity, pin state, active records, file identity, size, mtime and ctime. Skip sessions changed during confirmation.
 
-A Pi process **not running this extension cannot be reliably detected** by this mechanism. Avoid bulk cleanup when such processes may be using historical sessions. Explicit single-session deletion still requires confirmation and does not use the bulk-cleanup five-minute grace period.
+A Pi process **not running this extension cannot be reliably detected** by this mechanism. Avoid bulk cleanup when such processes may be using historical sessions. Explicit single-session deletion still requires confirmation. Files changed during the modal or reported active are skipped. The removal of the quiet period increases the risk for Pi processes that do not run this extension, so the preview warns about that limitation.
 
 ## CTX estimation and refresh
 

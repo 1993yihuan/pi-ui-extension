@@ -1,5 +1,7 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { createDialogUI } from "./dialogs/index.ts";
+import { confirmSessionCleanup } from "./dialogs/session-cleanup.ts";
+import { previewSessionCleanup } from "./session/cleanup-preview.ts";
 import { basename, dirname, join, resolve } from "node:path";
 import {
   DefaultPackageManager,
@@ -26,11 +28,10 @@ import {
   createActiveSessionLease,
   readActiveSessionPaths,
   sessionFileUnchanged,
-  snapshotInactiveSession,
   type SessionFileSnapshot,
 } from "./session/safety.ts";
 import { createUserPromptCounter } from "./session/user-prompts.ts";
-import { openSessionManager, readSessionPins, sessionsEligibleForClear, sortedSessions, toggleSessionPin } from "./session/manager.ts";
+import { openSessionManager, readSessionPins, sortedSessions, toggleSessionPin } from "./session/manager.ts";
 import type { SessionListItem } from "./session/panel.ts";
 import { installToolViewController } from "./tool-view/controller.ts";
 import type { ToolViewMode } from "./tool-view/types.ts";
@@ -472,7 +473,7 @@ export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
   });
 
   pi.registerCommand(SESSION_CLEAR_COMMAND, {
-    description: "Move inactive, unpinned and unchanged saved sessions to trash",
+    description: "Preview and move eligible noncurrent, unpinned saved sessions to trash",
     handler: async (_args, ctx) => {
       try {
         if (!canManageSessions(ctx)) return;
@@ -484,25 +485,8 @@ export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
         const pinnedIds = readSessionPins(SESSION_PINS_FILE);
         const activePaths = readActiveSessionPaths(ACTIVE_SESSIONS_DIR);
         const sessions = await SessionManager.list(ctx.cwd, ctx.sessionManager.getSessionDir());
-        const others = sessionsEligibleForClear(sessions, currentSessionId, pinnedIds)
-          .filter((session) => !activePaths.has(resolve(session.path)));
-        const candidates: Array<{ id: string; path: string; snapshot: SessionFileSnapshot }> = [];
-        for (let start = 0; start < others.length; start += 8) {
-          const batch = await Promise.all(others.slice(start, start + 8).map(async (session) => ({
-            id: session.id, path: session.path, snapshot: await snapshotInactiveSession(session.path),
-          })));
-          for (const candidate of batch) if (candidate.snapshot) {
-            candidates.push({ ...candidate, snapshot: candidate.snapshot });
-          }
-        }
-        if (candidates.length === 0) {
-          ctx.ui.notify("No inactive, unpinned sessions eligible for cleanup (recent/active sessions are protected)", "info");
-          return;
-        }
-        const confirmed = await createDialogUI(ctx.ui).confirm(
-          "Clear other sessions",
-          `Move ${candidates.length} inactive session(s) to trash? Active, pinned and recently modified (5m) sessions are protected.`,
-        );
+        const { candidates, summary } = await previewSessionCleanup(sessions, currentSessionId, pinnedIds, activePaths);
+        const confirmed = await confirmSessionCleanup(ctx.ui, summary);
         if (!confirmed) return;
 
         // Confirmed IDs are an upper bound: never include sessions created or

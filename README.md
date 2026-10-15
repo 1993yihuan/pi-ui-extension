@@ -21,7 +21,7 @@ pi install npm:pi-ui-extension
 Start Pi in fullscreen mode. The right sidebar appears automatically. To install a specific release instead:
 
 ```bash
-pi install npm:pi-ui-extension@1.7.2
+pi install npm:pi-ui-extension@1.8.0
 ```
 
 Pinned packages do not automatically move to newer versions. See [Installation and updates](#installation-and-updates) for Git, local and removal options.
@@ -48,9 +48,9 @@ Open **Advanced Sessions** with `≡` or `/sessions-manager` to:
 
 - Search titles/IDs, sort by last updated, question count, or title, and browse all sessions in pages of eight.
 - Switch, rename, pin/unpin, or move an individual session to trash (confirmation required).
-- Bulk-clean eligible sessions with `⊗`, keeping current, pinned, recently modified, and known active sessions safe.
+- Preview and bulk-clean eligible sessions with `⊗`, protecting the current session, pinned sessions, and sessions known to be active in another Pi instance.
 
-**Deletion safeguards:** The current session cannot be deleted. Mutating session operations require Pi to be idle. Bulk cleanup excludes sessions modified in the last **5 minutes**, and sessions advertised as active by *other Pi instances running this extension*. Immediately before moving a file to trash, the extension checks its identity, modification time, and protection state again. **Pi instances without this extension cannot be detected reliably**; avoid bulk cleanup while they may be using saved sessions. Single-session deletion requires confirmation but does not use the five-minute bulk-cleanup grace period.
+**Deletion safeguards:** The current session cannot be deleted; session changes require Pi to be idle. The centered bulk-cleanup preview displays **Eligible** and **Protected / unavailable** totals with reasons (current, pinned, active in another Pi, unreadable/non-file). **Recently modified historical sessions are eligible**—there is no five-minute grace period. Cleanup always requires explicit confirmation (Cancel is selected by default). Before each trash move, the extension rechecks file identity, modification time, pins and activity; any session changed during confirmation is skipped. **Pi instances without this extension cannot be detected reliably**; avoid bulk cleanup if another such Pi process may be using saved sessions. Individual deletion also requires confirmation.
 
 The bottom of SESSIONS provides these resource shortcuts:
 
@@ -124,9 +124,9 @@ For day-to-day usage, prefer **npm**. Git is available for unreleased repository
 | Action | Command |
 | --- | --- |
 | Install latest npm release | `pi install npm:pi-ui-extension` |
-| Pin v1.7.2 | `pi install npm:pi-ui-extension@1.7.2` |
+| Pin v1.8.0 | `pi install npm:pi-ui-extension@1.8.0` |
 | Install from GitHub | `pi install git:github.com/1993yihuan/pi-ui-extension` |
-| Pin a Git tag | `pi install git:github.com/1993yihuan/pi-ui-extension@v1.7.2` |
+| Pin a Git tag | `pi install git:github.com/1993yihuan/pi-ui-extension@v1.8.0` |
 | Install only for the current project | `pi install --local npm:pi-ui-extension` |
 | Update unpinned packages | `pi update --extensions` |
 | List installed packages | `pi list` |
