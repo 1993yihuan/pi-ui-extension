@@ -21,7 +21,7 @@ pi install npm:pi-ui-extension
 以 fullscreen 模式启动 Pi，右侧 Sidebar 将自动显示。如需固定版本：
 
 ```bash
-pi install npm:pi-ui-extension@1.5.1
+pi install npm:pi-ui-extension@1.6.0
 ```
 
 固定版本不会自动升级到后续版本。其他安装方式见[安装与更新](#安装与更新)。
@@ -91,7 +91,7 @@ Thinking · 0.7s
     ⎿  ✓  12 out · 45ms
 ```
 
-每次调用都独立显示，不合并；成功、运行中、部分失败和失败状态明确区分。直调内置工具可以展开查看 Pi 原生详情；**Codemode 在 Compact 下始终只展示摘要**，完整脚本、子调用和输出需切换到 Normal。第三方工具和特殊原生 Renderer 保留原有行为。
+每次调用都独立显示，不合并；成功、运行中、部分失败和失败状态明确区分。**包括 Codemode 在内的受支持工具都可点击 `›` 展开 Pi 原生详情**（脚本、内嵌调用、输出及错误），再点击 `⌄` 收起，恢复 Compact 摘要；Normal 同样可以查看完整详情。第三方工具和特殊原生 Renderer 保留原有行为。
 
 Thinking 耗时表示**可观测的思考阶段耗时**，不是整个回复的耗时。流式时间用 `~` 标记；恢复历史 Session 等无法准确计时时只显示 `Thinking`。已验证 Pi 版本的 Compact / Hidden Thinking 状态行只读，点击不会展开正文。
 
@@ -122,9 +122,9 @@ VIEW 下方按调用来源统计工具：
 | 操作 | 命令 |
 | --- | --- |
 | 安装最新 npm 版本 | `pi install npm:pi-ui-extension` |
-| 固定 v1.5.1 | `pi install npm:pi-ui-extension@1.5.1` |
+| 固定 v1.6.0 | `pi install npm:pi-ui-extension@1.6.0` |
 | 从 GitHub 安装 | `pi install git:github.com/1993yihuan/pi-ui-extension` |
-| 固定 Git tag | `pi install git:github.com/1993yihuan/pi-ui-extension@v1.5.1` |
+| 固定 Git tag | `pi install git:github.com/1993yihuan/pi-ui-extension@v1.6.0` |
 | 仅当前项目安装 | `pi install --local npm:pi-ui-extension` |
 | 更新非固定版本 | `pi update --extensions` |
 | 列出已配置扩展 | `pi list` |

@@ -12,7 +12,7 @@ const secretOutput = "PRIVATE_OUTPUT_TEXT";
 const privateArgs = '{"token":"PRIVATE_NESTED_ARGS"}';
 const stripAnsi = (text: string): string => text.replace(/\u001b\[[0-9;]*m/g, "");
 
-test("Codemode uses the official native renderer in Normal, summary in Compact, and no row in Hidden", async () => {
+test("Codemode uses compact summaries until clicked, native details when expanded, and no row in Hidden", async () => {
   const directory = await mkdtemp(join(tmpdir(), "codemode-view-"));
   const renderers: ToolRendererResolver[] = [];
   const callbacks = new Map<string, Array<(event: any, ctx: any) => void>>();
@@ -80,7 +80,7 @@ test("Codemode uses the official native renderer in Normal, summary in Compact, 
     transcript.updateResult(result, false);
     const visible = () => stripAnsi(transcript.render(110).join("\n"));
 
-    // Default compact mode summarizes metadata, never executable code or nested arguments.
+    // Default compact mode summarizes metadata, hiding executable code and nested arguments.
     assert.match(visible(), /  ›  codemode.*2 code lines/);
     assert.match(visible(), /3 calls/);
     assert.match(visible(), /1 ok/);
@@ -93,7 +93,31 @@ test("Codemode uses the official native renderer in Normal, summary in Compact, 
     assert.match(visible(), /! Partial/, "successful parent with failed nested calls is not marked fully successful");
     assert.doesNotMatch(visible(), /[\u3400-\u9fff]/, "Compact labels must be English-only");
     assert.doesNotMatch(visible(), /DO_NOT_DISPLAY|PRIVATE_OUTPUT_TEXT|PRIVATE_NESTED_ARGS/);
-    transcript.setExpanded(true);
+    const clickTitle = (marker: string, width = 110) => {
+      const lines = transcript.render(width).map(line => stripAnsi(line));
+      const y = lines.findIndex(line => line.includes(marker));
+      assert.ok(y >= 0, `missing clickable Codemode title: ${marker}`);
+      const clicked = transcript.handleMouse({
+        type: "click", button: "left", x: 5, y, screenX: 5,
+        screenY: y, width, height: lines.length,
+      } as any);
+      assert.equal(clicked?.handled, true, "native Pi tool click must toggle the Codemode row");
+    };
+    clickTitle("›  codemode");
+    assert.match(visible(), /⌄  /, "expanded Codemode has the same down chevron as direct tools");
+    assert.match(visible(), /DO_NOT_DISPLAY/, "expanded Codemode shows its native script");
+    assert.match(visible(), /PRIVATE_OUTPUT_TEXT/, "expanded Codemode shows its native output");
+    assert.match(visible(), /PRIVATE_NESTED_ARGS/, "expanded Codemode shows nested tool details");
+    assert.doesNotMatch(visible(), /⎿\s*! Partial/, "native expanded details must replace, not duplicate, the compact result row");
+    for (const width of [20, 40, 80, 110]) {
+      const rendered = transcript.render(width);
+      assert.ok(rendered.length > 2, `native expanded output should have multiple rows at ${width}`);
+      for (const line of rendered) {
+        assert.ok(visibleWidth(line) <= width, `expanded Codemode overflow at ${width}`);
+      }
+    }
+    clickTitle("⌄  ");
+    assert.match(visible(), /›  codemode/, "click again collapses the row");
     assert.doesNotMatch(visible(), /DO_NOT_DISPLAY|PRIVATE_OUTPUT_TEXT|PRIVATE_NESTED_ARGS/);
 
     await controller.setMode("normal", ctx);
@@ -124,6 +148,13 @@ test("Codemode uses the official native renderer in Normal, summary in Compact, 
     assert.match(visible(), /Running/);
     assert.match(visible(), /1 running/);
     assert.doesNotMatch(visible(), /DO_NOT_DISPLAY|PRIVATE_NESTED_ARGS/);
+    clickTitle("›  codemode");
+    assert.match(visible(), /⌄  /);
+    assert.match(visible(), /DO_NOT_DISPLAY/, "can inspect Codemode while it is still streaming");
+    assert.match(visible(), /PRIVATE_NESTED_ARGS/, "running native nested calls are available on demand");
+    clickTitle("⌄  ");
+    assert.match(visible(), /… Running/);
+    assert.doesNotMatch(visible(), /PRIVATE_NESTED_ARGS/);
 
     transcript.updateResult({
       content: [{ type: "text", text: secretOutput }],
@@ -131,10 +162,15 @@ test("Codemode uses the official native renderer in Normal, summary in Compact, 
       isError: true,
       durationMs: 400,
     }, false);
-    transcript.setExpanded(true);
     assert.match(visible(), /✗ Failed/);
     assert.match(visible(), /1 failed/);
     assert.match(visible(), /400ms/);
+    assert.doesNotMatch(visible(), /DO_NOT_DISPLAY|PRIVATE_OUTPUT_TEXT|PRIVATE_NESTED_ARGS/);
+    clickTitle("›  codemode");
+    assert.match(visible(), /⌄  /);
+    assert.match(visible(), /DO_NOT_DISPLAY/);
+    assert.match(visible(), /PRIVATE_OUTPUT_TEXT/);
+    clickTitle("⌄  ");
     assert.doesNotMatch(visible(), /DO_NOT_DISPLAY|PRIVATE_OUTPUT_TEXT|PRIVATE_NESTED_ARGS/);
     assert.equal(expansions.length, 6, "mode switching requests transcript refresh");
     assert.equal(registered, 0);
@@ -288,7 +324,7 @@ test("Codemode Compact keeps each styled row to one terminal line and prioritize
       details: { calls: [
         { status: "ok" }, { status: "ok" }, { status: "error" }, { status: "cancelled" },
       ] },
-    }, { isPartial: false, expanded: true }, theme, context);
+    }, { isPartial: false, expanded: false }, theme, context);
     for (const width of [1, 6, 12, 20, 28, 40, 60, 95]) {
       for (const component of [call, result]) {
         const lines = component.render(width);

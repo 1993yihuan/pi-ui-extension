@@ -21,7 +21,7 @@ pi install npm:pi-ui-extension
 Start Pi in fullscreen mode. The right sidebar appears automatically. To install a specific release instead:
 
 ```bash
-pi install npm:pi-ui-extension@1.5.1
+pi install npm:pi-ui-extension@1.6.0
 ```
 
 Pinned packages do not automatically move to newer versions. See [Installation and updates](#installation-and-updates) for Git, local and removal options.
@@ -91,7 +91,7 @@ Thinking · 0.7s
     ⎿  ✓  12 out · 45ms
 ```
 
-Each tool call has its own summary; calls are never merged. Success, running, partial failure, and failure remain distinct. Direct built-in tools can expand to Pi's native details; **Codemode stays summary-only in Compact**—switch to Normal to view its script, nested calls, or full output. Third-party tools and special native renderers are left intact.
+Each tool call has its own summary; calls are never merged. Success, running, partial failure, and failure remain distinct. **Click any supported tool's `›` chevron, including Codemode, to expand Pi's native details** (script, nested calls, output, or errors); click `⌄` to collapse back to the Compact summary. Normal also supports native details. Third-party tools and special native renderers are left intact.
 
 Thinking duration measures the **observable Thinking phase**, not the whole response. Live time is prefixed by `~`; if reliable timing is unavailable (e.g. after restoring a session), only `Thinking` is shown. Compact/Hidden Thinking labels are read-only on verified Pi versions; clicking them does not expand private text.
 
@@ -122,9 +122,9 @@ For day-to-day usage, prefer **npm**. Git is available for unreleased repository
 | Action | Command |
 | --- | --- |
 | Install latest npm release | `pi install npm:pi-ui-extension` |
-| Pin v1.5.1 | `pi install npm:pi-ui-extension@1.5.1` |
+| Pin v1.6.0 | `pi install npm:pi-ui-extension@1.6.0` |
 | Install from GitHub | `pi install git:github.com/1993yihuan/pi-ui-extension` |
-| Pin a Git tag | `pi install git:github.com/1993yihuan/pi-ui-extension@v1.5.1` |
+| Pin a Git tag | `pi install git:github.com/1993yihuan/pi-ui-extension@v1.6.0` |
 | Install only for the current project | `pi install --local npm:pi-ui-extension` |
 | Update unpinned packages | `pi update --extensions` |
 | List installed packages | `pi list` |

@@ -437,17 +437,17 @@ export async function installToolViewController(
   pi.registerToolRenderer((toolName, next) => {
     if (toolName !== "codemode" && !Object.hasOwn(COMPACT_SPECS, toolName)) return next();
     const nativeDefinition = next();
-    // Codemode must stay summarized in Compact, even for expanded/error rows.
-    // Its own renderer already provides rich details in Normal mode.
+    // Keep compact summaries when collapsed; allow the host's native Codemode
+    // script/nested-call/output details when the user expands that tool.
     const isCodemode = toolName === "codemode";
     const preserveCall = (args: any, context: AnyRenderContext): boolean =>
       toolName === "read" && shouldPreserveReadRenderer(args, context);
     const useNativeCall = (args: any, context: AnyRenderContext): boolean =>
       preserveCall(args, context) || mode === "normal" ||
-      (mode === "compact" && !isCodemode && (context.isError || context.expanded));
+      (mode === "compact" && (context.expanded || (!isCodemode && context.isError)));
     const useNativeResult = (context: AnyRenderContext, options: ToolRenderResultOptions): boolean =>
       preserveCall(context.args, context) || mode === "normal" ||
-      (mode === "compact" && !isCodemode && (context.isError || options.expanded));
+      (mode === "compact" && (options.expanded || (!isCodemode && context.isError)));
 
     return markCompactSpacingRenderer({
       renderShell: "self",
@@ -455,7 +455,7 @@ export async function installToolViewController(
         if (useNativeCall(args, context) && nativeDefinition) {
           const component = callNativeRenderer(nativeDefinition, toolName, args, theme, context);
           const decorate = (native: ReturnType<NonNullable<ToolRenderers["renderCall"]>>) =>
-            mode === "compact" && !preserveCall(args, context) && !isCodemode
+            mode === "compact" && !preserveCall(args, context)
               ? withNativeChevron(native, theme, context.expanded) : native;
           if (nativeDefinition.renderShell === "self") return decorate(component);
           const state = context.state as RendererState;
