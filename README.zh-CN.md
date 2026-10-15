@@ -21,7 +21,7 @@ pi install npm:pi-ui-extension
 以 fullscreen 模式启动 Pi，右侧 Sidebar 将自动显示。如需固定版本：
 
 ```bash
-pi install npm:pi-ui-extension@1.8.0
+pi install npm:pi-ui-extension@1.8.1
 ```
 
 固定版本不会自动升级到后续版本。其他安装方式见[安装与更新](#安装与更新)。
@@ -50,7 +50,7 @@ pi install npm:pi-ui-extension@1.8.0
 - 切换、重命名、置顶 / 取消置顶，或经确认后将单个 Session 移入回收站。
 - 使用 `⊗` 预览并批量清理符合条件的 Session，保护当前、置顶及已知正在被其他 Pi 实例使用的会话。
 
-**删除安全保护：** 当前 Session 不能删除；会话管理操作只能在 Pi 空闲时执行。批量清理时，居中弹窗展示**可删除**和**受保护／不可用**数量，并按当前、置顶、其他 Pi 正在使用、无法读取等原因分类。**最近 5 分钟内修改过的历史会话也允许删除**，不再有时间保护期。操作必须明确选择删除（默认 Cancel）。移动到回收站前会重新检查文件身份、修改时间、置顶及活动状态；确认期间发生变化的文件会被跳过。**没有加载本扩展的其他 Pi 进程无法被可靠检测**，如果此类进程可能正在使用历史会话，请勿批量清理。单个会话删除仍需确认。
+**删除安全保护：** 当前 Session 不能删除；会话管理操作只能在 Pi 空闲时执行。批量清理时，居中弹窗展示**可删除**和**受保护／不可用**数量，并按当前、置顶、其他 Pi 正在使用、无法读取等原因分类。各项原因的数字在统一列内右对齐，便于阅读。**最近 5 分钟内修改过的历史会话也允许删除**，不再有时间保护期。操作必须明确选择删除（默认 Cancel）。移动到回收站前会重新检查文件身份、修改时间、置顶及活动状态；确认期间发生变化的文件会被跳过。**没有加载本扩展的其他 Pi 进程无法被可靠检测**，如果此类进程可能正在使用历史会话，请勿批量清理。单个会话删除仍需确认。
 
 SESSIONS 底部提供四类资源快捷入口：
 
@@ -124,9 +124,9 @@ VIEW 下方按调用来源统计工具：
 | 操作 | 命令 |
 | --- | --- |
 | 安装最新 npm 版本 | `pi install npm:pi-ui-extension` |
-| 固定 v1.8.0 | `pi install npm:pi-ui-extension@1.8.0` |
+| 固定 v1.8.1 | `pi install npm:pi-ui-extension@1.8.1` |
 | 从 GitHub 安装 | `pi install git:github.com/1993yihuan/pi-ui-extension` |
-| 固定 Git tag | `pi install git:github.com/1993yihuan/pi-ui-extension@v1.8.0` |
+| 固定 Git tag | `pi install git:github.com/1993yihuan/pi-ui-extension@v1.8.1` |
 | 仅当前项目安装 | `pi install --local npm:pi-ui-extension` |
 | 更新非固定版本 | `pi update --extensions` |
 | 列出已配置扩展 | `pi list` |

@@ -29,13 +29,18 @@ export async function confirmSessionCleanup(ui: ExtensionUIContext, summary: Cle
         const total = `Eligible to trash: ${summary.eligible}`;
         const kept = `Protected / unavailable: ${summary.protected}`;
         const tiny = rows < 17;
-        const compact = rows < 28;
+        const compact = rows < 28 || width < 34;
+        const reasons = [
+          ["Current session", summary.current],
+          ["Pinned sessions", summary.pinned],
+          ["Active in another Pi", summary.active],
+          ["Unavailable session files", summary.unavailable],
+        ] as const;
+        const labelWidth = Math.max(...reasons.map(([label]) => label.length));
+        const countWidth = Math.max(...reasons.map(([, count]) => String(count).length));
         const details = compact
           ? [`Current ${summary.current} · Pinned ${summary.pinned}`, `Other Pi ${summary.active} · Unavailable ${summary.unavailable}`]
-          : [`Current session                  ${summary.current}`,
-            `Pinned sessions                 ${summary.pinned}`,
-            `Active in another Pi           ${summary.active}`,
-            `Unavailable session files      ${summary.unavailable}`];
+          : reasons.map(([label, count]) => `${label.padEnd(labelWidth)}  ${String(count).padStart(countWidth)}`);
         const info = tiny ? [
           theme.fg("success", total), theme.fg("warning", kept),
           theme.fg("muted", `Cur ${summary.current} · Pin ${summary.pinned} · Pi ${summary.active} · N/A ${summary.unavailable}`),

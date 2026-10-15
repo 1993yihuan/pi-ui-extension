@@ -38,6 +38,24 @@ test("cleanup preview is centered, shows actionable and protected counts and def
   assert.equal(await pending, false, "Enter alone cannot delete anything");
 });
 
+test("protection reason counts share a right-aligned column, including multiple digits", async () => {
+  const { ui, modals } = modalHost();
+  const values = [1, 20, 300, 4000];
+  confirmSessionCleanup(ui, {
+    ...summary, current: values[0]!, pinned: values[1]!, active: values[2]!, unavailable: values[3]!,
+  });
+  const lines = modals[0]!.render(60).map(stripTerminalSequences);
+  const labels = ["Current session", "Pinned sessions", "Active in another Pi", "Unavailable session files"];
+  const countEnds = labels.map((label, index) => {
+    const line = lines.find(text => text.includes(label));
+    assert.ok(line, `missing ${label}`);
+    const countText = String(values[index]);
+    assert.match(line, new RegExp(`${label}\\s+${countText}\\s`));
+    return line.indexOf(countText) + countText.length;
+  });
+  assert.equal(new Set(countEnds).size, 1, `count columns differ: ${countEnds}`);
+});
+
 test("only an explicit destructive selection can authorize cleanup; Esc cancels", async () => {
   const { ui, modals } = modalHost();
   const approved = confirmSessionCleanup(ui, summary);
