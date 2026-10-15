@@ -21,7 +21,7 @@ pi install npm:pi-ui-extension
 以 fullscreen 模式启动 Pi，右侧 Sidebar 将自动显示。如需固定版本：
 
 ```bash
-pi install npm:pi-ui-extension@1.6.0
+pi install npm:pi-ui-extension@1.7.0
 ```
 
 固定版本不会自动升级到后续版本。其他安装方式见[安装与更新](#安装与更新)。
@@ -37,6 +37,8 @@ pi install npm:pi-ui-extension@1.6.0
 | **VIEW** | Normal / Compact / Hidden 显示模式与 Tool/MCP 调用统计 |
 
 支持鼠标、滚轮、终端缩放，并在终端空间不足时自动调整显示。
+
+**居中弹窗：** Session 管理、批量清理、重命名、资源/MCP 浏览和 Tool View 模式选择现在统一使用主题色居中浮层。可用 ↑/↓ 和 Enter 选择、Esc 取消；资源详情为可滚动的只读预览。**移入回收站默认选中 Cancel**，侧边栏 `×` 和高级管理都会要求明确确认后才执行删除。兼容 Pi 1.1.0/1.2.0。
 
 ### Sessions 会话与资源管理
 
@@ -122,9 +124,9 @@ VIEW 下方按调用来源统计工具：
 | 操作 | 命令 |
 | --- | --- |
 | 安装最新 npm 版本 | `pi install npm:pi-ui-extension` |
-| 固定 v1.6.0 | `pi install npm:pi-ui-extension@1.6.0` |
+| 固定 v1.7.0 | `pi install npm:pi-ui-extension@1.7.0` |
 | 从 GitHub 安装 | `pi install git:github.com/1993yihuan/pi-ui-extension` |
-| 固定 Git tag | `pi install git:github.com/1993yihuan/pi-ui-extension@v1.6.0` |
+| 固定 Git tag | `pi install git:github.com/1993yihuan/pi-ui-extension@v1.7.0` |
 | 仅当前项目安装 | `pi install --local npm:pi-ui-extension` |
 | 更新非固定版本 | `pi update --extensions` |
 | 列出已配置扩展 | `pi list` |

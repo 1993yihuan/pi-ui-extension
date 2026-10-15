@@ -16,6 +16,12 @@ The sidebar supports mouse events, wheel scrolling, terminal resizing, and scrol
 
 Resource shortcuts inspect current project/Pi instruction, skill, extension, and MCP resources. They do not attempt to load or connect missing resources.
 
+## Centered modal UX
+
+The extension uses Pi’s public `ctx.ui.custom()` API with `overlay: true` and a centered, theme-aware frame rather than relying on the native editor-bottom `select`/`confirm`/`input` dialogs. This covers the Sessions manager (paging, sort, action menu, search), rename, bulk cleanup, resource/MCP pickers and read-only details, and the Tool View mode selector. The implementation lives in `extensions/dialogs/`; no Pi Core source or TUI prototype is modified.
+
+Selection overlays retain keyboard and mouse controls; multi-page content is read-only and scrollable. Confirmations are deliberately cancellation-first: Enter without moving selection chooses **Cancel**, Esc cancels, and a destructive action requires selecting **Move to Trash**. The command that performs a single Session trash move is the only confirmation owner for both sidebar and advanced manager, avoiding duplicate dialogs. Before deletion it rechecks idle state, current-session ID, file path/identity/mtime and activity reported by other Pi instances. The existing bulk-cleanup safety rechecks remain intact. Non-interactive/test hosts can fall back to native Pi UI calls when `ctx.ui.custom` is unavailable.
+
 ## Session management and safety
 
 The quick session list favors the current session and pinned sessions; pins persist as IDs in `pi-ui-extension/session-pins.json` under the Pi agent directory. Pins do not save message bodies. The quick sidebar supports `☆`/`★` without opening `/sessions-manager`, with lower-priority buttons hidden when space is limited.

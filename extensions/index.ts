@@ -1,4 +1,5 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { createDialogUI } from "./dialogs/index.ts";
 import { basename, dirname, join, resolve } from "node:path";
 import {
   DefaultPackageManager,
@@ -338,7 +339,7 @@ export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
     sessionManagerOpen = true;
     try {
       await openSessionManager({
-        ui: ctx.ui,
+        ui: createDialogUI(ctx.ui),
         loadSessions: () => loadSessionRows(ctx),
         togglePin: (id) => toggleSessionPin(SESSION_PINS_FILE, id),
         onPinChanged: () => refreshSessions(),
@@ -396,7 +397,7 @@ export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
           return;
         }
         const title = target.name ?? target.firstMessage;
-        const nextName = await ctx.ui.input("Rename session", title);
+        const nextName = await createDialogUI(ctx.ui).input("Rename session", title);
         const next = nextName?.trim();
         if (!next) return;
 
@@ -417,6 +418,7 @@ export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
   pi.registerCommand(SESSION_DELETE_COMMAND, {
     description: "Delete a saved session selected from the sidebar",
     handler: async (args, ctx) => {
+      if (!canManageSessions(ctx)) return;
       const sessionId = args.trim();
       if (!sessionId) {
         ctx.ui.notify("Missing session id", "error");
@@ -433,6 +435,26 @@ export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
         if (!target) {
           ctx.ui.notify("Session no longer exists", "error");
           refreshSessions();
+          return;
+        }
+        const before = statSync(target.path);
+        const confirmed = await createDialogUI(ctx.ui).confirm(
+          "Delete session",
+          `Move “${target.name ?? target.firstMessage ?? target.id}” to trash? This session cannot be restored from Pi; it can be recovered from your system trash.`,
+        );
+        if (!confirmed) return;
+        // Revalidate after the user interacted with the modal.
+        if (!ctx.isIdle() || target.id === ctx.sessionManager.getSessionId() ||
+            (await SessionManager.list(ctx.cwd, ctx.sessionManager.getSessionDir()))
+              .find((session) => session.id === sessionId)?.path !== target.path) return;
+        if (readActiveSessionPaths(ACTIVE_SESSIONS_DIR).has(resolve(target.path))) {
+          ctx.ui.notify("Session is in use by another Pi instance; deletion cancelled", "warning");
+          return;
+        }
+        const after = statSync(target.path);
+        if (before.dev !== after.dev || before.ino !== after.ino ||
+            before.size !== after.size || before.mtimeMs !== after.mtimeMs) {
+          ctx.ui.notify("Session changed during confirmation; deletion cancelled", "warning");
           return;
         }
         const result = await deleteSessionFile(pi, target.path);
@@ -477,7 +499,7 @@ export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
           ctx.ui.notify("No inactive, unpinned sessions eligible for cleanup (recent/active sessions are protected)", "info");
           return;
         }
-        const confirmed = await ctx.ui.confirm(
+        const confirmed = await createDialogUI(ctx.ui).confirm(
           "Clear other sessions",
           `Move ${candidates.length} inactive session(s) to trash? Active, pinned and recently modified (5m) sessions are protected.`,
         );
@@ -707,7 +729,7 @@ export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
             }
             if (button === "mcp") {
               updateMcpStatus();
-              showMcpStatusDialog(ctx, mcpStatus);
+              showMcpStatusDialog({ ui: createDialogUI(ctx.ui) }, mcpStatus);
               return;
             }
             void loadResourceEntries(pi, ctx.cwd, mcpResources, ctx.isProjectTrusted(), button)
@@ -717,10 +739,10 @@ export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
                   return;
                 }
                 if (button === "agents" && rows.length === 1) {
-                  showResourceDialog(ctx, button, rows, rows[0]!.content);
+                  showResourceDialog({ ui: createDialogUI(ctx.ui) }, button, rows, rows[0]!.content);
                   return;
                 }
-                showResourceDialog(ctx, button, rows);
+                showResourceDialog({ ui: createDialogUI(ctx.ui) }, button, rows);
               })
               .catch((error) => {
                 const message = error instanceof Error ? error.message : String(error);

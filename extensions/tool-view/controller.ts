@@ -16,6 +16,7 @@ import { renderCodemodeCompactCall, renderCodemodeCompactResult, singleLine } fr
 import { transformThinkingText } from "./thinking.ts";
 import { ThinkingTiming } from "./thinking-timing.ts";
 import { installThinkingClickGuard } from "./thinking-click-guard.ts";
+import { createDialogUI } from "../dialogs/index.ts";
 import { compactCallPrefix, withCompactResultBranch, withNativeChevron } from "./chevron.ts";
 import { installCompactSpacingGuard, markCompactSpacingRenderer } from "./compact-spacing.ts";
 
@@ -520,7 +521,7 @@ export async function installToolViewController(
           const choices = MODE_ORDER.map(
             (value) => `${modeLabel(value)}${value === mode ? " · Current" : ""}`,
           );
-          const selected = await ctx.ui.select("Tool View mode", choices);
+          const selected = await createDialogUI(ctx.ui).select("Tool View mode", choices);
           const selectedIndex = selected ? choices.indexOf(selected) : -1;
           if (selectedIndex >= 0) await setMode(MODE_ORDER[selectedIndex]!, ctx);
           return;

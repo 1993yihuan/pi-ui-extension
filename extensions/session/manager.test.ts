@@ -118,7 +118,7 @@ test("manager can navigate pages, pin and unpin, and switch using the selected s
   }
 });
 
-test("manager searches, sorts, and requires confirmation to delete noncurrent sessions", async () => {
+test("manager searches and sorts, then delegates session deletion to the central confirming command", async () => {
   const names = [session("a", 1, "alpha"), session("b", 2, "Beta"), session("c", 3, "gamma")];
   const { ui, viewed } = scriptedUI([
     (_title, choices) => choices.find((item) => item.startsWith("⌕ ")), // Search
@@ -127,17 +127,17 @@ test("manager searches, sorts, and requires confirmation to delete noncurrent se
     (_title, choices) => choices.find((value) => value.startsWith("1. ")),
     (_title, choices) => choices.find((value) => value === "移到回收站"),
   ]);
-  let confirmed = false;
+  let redundantConfirmation = false;
   let deleted = "";
   ui.input = async () => "BETA";
-  ui.confirm = async () => { confirmed = true; return true; };
+  ui.confirm = async () => { redundantConfirmation = true; return true; };
   await openSessionManager({
     ui, loadSessions: async () => names,
     togglePin: () => false, onPinChanged() {},
     onSwitch() {}, onRename() {},
     onDelete(item) { deleted = item.id; },
   });
-  assert.equal(confirmed, true);
+  assert.equal(redundantConfirmation, false, "the central delete command must be the only confirmation point");
   assert.equal(deleted, "b");
   assert.match(viewed[3]!.title, /1\/3/);
   assert.ok(!viewed[3]!.choices.some((value) => value.includes("gamma")));

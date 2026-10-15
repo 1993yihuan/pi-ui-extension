@@ -47,6 +47,7 @@ pi --no-extensions -e builtin:mcp -e ./extensions/index.ts --tui-mode fullscreen
 pi-ui-extension/
 ├── extensions/
 │   ├── ctx/                 # Context composition, deltas, runtime metrics
+│   ├── dialogs/             # Centered TUI overlay dialogs and keyboard handling
 │   ├── footer/              # Compact footer
 │   ├── mcp/                 # MCP resources, runtime state and attribution
 │   ├── session/             # Session browsing, question count and cleanup

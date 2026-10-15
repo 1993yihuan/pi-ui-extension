@@ -169,8 +169,10 @@ export async function openSessionManager(options: SessionManagerOptions): Promis
           ui.notify(`保存置顶失败：${error instanceof Error ? error.message : String(error)}`, "error");
         }
       } else if (action === "移到回收站") {
-        const confirmed = await ui.confirm("删除会话", `将“${safeLabel(session.title)}”移到回收站？`);
-        if (confirmed) { options.onDelete(session); return; }
+        // The central delete command owns the final confirmation for both
+        // the sidebar and this manager. Never present two successive prompts.
+        options.onDelete(session);
+        return;
       } else if (action === "切换到此会话") {
         options.onSwitch(session);
         return;
