@@ -8,7 +8,7 @@ import {
   type ToolRenderers,
   type ToolRenderResultOptions,
 } from "@earendil-works/pi-coding-agent";
-import { Box, Container, Text } from "@earendil-works/pi-tui";
+import { Box, Container, Text, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { readFile, rename, writeFile } from "node:fs/promises";
 import { TOOL_VIEW_MODES, isToolViewMode, type ToolViewMode } from "./types.ts";
@@ -130,7 +130,7 @@ const COMPACT_SPECS: Record<string, CompactToolSpec> = {
     call: (args) => ({ title: "bash", detail: compactText(args.command) || "…" }),
     result: (result) => {
       const lines = nonEmptyLineCount(textOutput(result));
-      return lines > 0 ? `${lines} out` : "";
+      return lines > 0 ? formatCount(lines, "line") : "";
     },
   },
   edit: {
@@ -423,9 +423,26 @@ export async function installToolViewController(
       context.durationMs >= 0 && !options.isPartial
       ? context.durationMs < 1_000 ? `${Math.round(context.durationMs)}ms` : `${(context.durationMs / 1_000).toFixed(1)}s`
       : "";
-    const metrics = [summary, duration].filter(Boolean).join(" · ");
-    return withCompactResultBranch(singleLine(theme.fg(statusColor, icon) +
-      (metrics ? `  ${theme.fg("muted", metrics)}` : "")), theme);
+    const resultLine = {
+      render(width: number) {
+        if (width <= 0) return [];
+        const heading = theme.fg(statusColor, icon);
+        const shortSummary = summary.replace(/^(\d+) lines?$/, "$1 out");
+        const compose = (label: string, withDuration: boolean) =>
+          heading + (label ? `  ${theme.fg("muted", label)}` : "") +
+          (withDuration && duration
+            ? `${label ? theme.fg("dim", " · ") : "  "}${theme.fg("dim", duration)}` : "");
+        const optionsToFit = [
+          compose(summary, true), compose(shortSummary, true),
+          compose(summary, false), compose(shortSummary, false),
+        ];
+        const line = optionsToFit.find((candidate) => visibleWidth(candidate) <= width) ??
+          truncateToWidth(optionsToFit[optionsToFit.length - 1]!, width, "…");
+        return [line];
+      },
+      invalidate() {},
+    };
+    return withCompactResultBranch(resultLine, theme);
   }
 
   // Resolve renderers only. Pi retains its registered tools, execution pipeline,

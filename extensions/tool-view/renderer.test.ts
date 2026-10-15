@@ -90,7 +90,24 @@ test("uses one official renderer resolver without replacing or executing Pi tool
     const state = {};
     assert.match(render(read, state, args), /  ›  read  example\.ts/);
     assert.match(render(read, state, args), /2 lines/);
-    assert.match(render(resolver("bash", () => native)!, {}, { command: "echo ok" }), /  ›  bash  echo ok[\s\S]*    ⎿  ✓  2 out/);
+    assert.match(render(resolver("bash", () => native)!, {}, { command: "echo ok" }), /  ›  bash  echo ok[\s\S]*    ⎿  ✓  2 lines/);
+    const styled: Array<{ color: string; value: string }> = [];
+    const themeWithSpy = { ...theme, fg(color: string, value: string) {
+      styled.push({ color, value });
+      return value;
+    } };
+    const bashRenderer = resolver("bash", () => native)!;
+    const bashResult = bashRenderer.renderResult!(result, { isPartial: false, expanded: false }, themeWithSpy, {
+      args: { command: "echo ok" }, cwd: directory, state: {}, isError: false,
+      isPartial: false, expanded: false, durationMs: 125,
+    } as any);
+    assert.match(bashResult.render(100).join(""), /✓  2 lines · 125ms/);
+    assert.ok(styled.some(item => item.color === "dim" && item.value === "125ms"), "direct-tool duration should be muted further");
+    const narrowOutput = Array.from({ length: 36 }, (_, i) => i + 1)
+      .map(width => ({ width, line: bashResult.render(width).join("") }))
+      .find(item => item.line.includes("2 out"));
+    assert.ok(narrowOutput, "direct-tool output count should fall back to out on narrow terminals");
+    assert.ok(visibleWidth(narrowOutput.line) <= narrowOutput.width);
     for (const name of ["read", "bash", "edit", "write", "grep", "find", "ls"]) {
       const argumentsByTool: Record<string, any> = {
         read: { path: "demo.ts" }, bash: { command: "git status" },

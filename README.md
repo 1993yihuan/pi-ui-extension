@@ -21,7 +21,7 @@ pi install npm:pi-ui-extension
 Start Pi in fullscreen mode. The right sidebar appears automatically. To install a specific release instead:
 
 ```bash
-pi install npm:pi-ui-extension@1.7.0
+pi install npm:pi-ui-extension@1.7.1
 ```
 
 Pinned packages do not automatically move to newer versions. See [Installation and updates](#installation-and-updates) for Git, local and removal options.
@@ -88,12 +88,12 @@ In Compact, supported built-in tools (`read`, `bash`, `edit`, `write`, `grep`, `
 ```text
 Thinking · 0.7s
   ›  codemode  8 code lines
-    ⎿  ✓  1 call · 1 ok  │  59 out · 85ms
+    ⎿  ✓  1 call · 1 ok │ 59 lines · 85ms
   ›  bash  git status
-    ⎿  ✓  12 out · 45ms
+    ⎿  ✓  12 lines · 45ms
 ```
 
-Each tool call has its own summary; calls are never merged. Success, running, partial failure, and failure remain distinct. **Click any supported tool's `›` chevron, including Codemode, to expand Pi's native details** (script, nested calls, output, or errors); click `⌄` to collapse back to the Compact summary. Normal also supports native details. Third-party tools and special native renderers are left intact.
+Output counts use `line/lines` (falling back to `out` on narrow terminals); the duration and metric separator are less prominent and spacing is tighter. Each tool call has its own summary; calls are never merged. Success, running, partial failure, and failure remain distinct. **Click any supported tool's `›` chevron, including Codemode, to expand Pi's native details** (script, nested calls, output, or errors); click `⌄` to collapse back to the Compact summary. Normal also supports native details. Third-party tools and special native renderers are left intact.
 
 Thinking duration measures the **observable Thinking phase**, not the whole response. Live time is prefixed by `~`; if reliable timing is unavailable (e.g. after restoring a session), only `Thinking` is shown. Compact/Hidden Thinking labels are read-only on verified Pi versions; clicking them does not expand private text.
 
@@ -124,9 +124,9 @@ For day-to-day usage, prefer **npm**. Git is available for unreleased repository
 | Action | Command |
 | --- | --- |
 | Install latest npm release | `pi install npm:pi-ui-extension` |
-| Pin v1.7.0 | `pi install npm:pi-ui-extension@1.7.0` |
+| Pin v1.7.1 | `pi install npm:pi-ui-extension@1.7.1` |
 | Install from GitHub | `pi install git:github.com/1993yihuan/pi-ui-extension` |
-| Pin a Git tag | `pi install git:github.com/1993yihuan/pi-ui-extension@v1.7.0` |
+| Pin a Git tag | `pi install git:github.com/1993yihuan/pi-ui-extension@v1.7.1` |
 | Install only for the current project | `pi install --local npm:pi-ui-extension` |
 | Update unpinned packages | `pi update --extensions` |
 | List installed packages | `pi list` |

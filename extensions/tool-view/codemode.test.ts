@@ -86,7 +86,7 @@ test("Codemode uses compact summaries until clicked, native details when expande
     assert.match(visible(), /1 ok/);
     assert.match(visible(), /1 failed/);
     assert.match(visible(), /1 cancelled/);
-    assert.match(visible(), /2 out/);
+    assert.match(visible(), /2 lines/);
     assert.match(visible(), /1 image/);
     assert.match(visible(), /1.3s/);
     assert.doesNotMatch(visible(), /✓\s*│/, "no leading vertical divider after a successful status");
@@ -226,8 +226,8 @@ test("one Thinking followed by multiple codemode calls preserves independent too
     assert.equal((combined.match(/  ›  codemode/g) ?? []).length, 2);
     assert.match(combined, /1 call · 1 ok/);
     assert.match(combined, /2 calls · 2 ok/);
-    assert.match(combined, /1 out · 225ms/);
-    assert.match(combined, /3 out · 1.9s/);
+    assert.match(combined, /1 line · 225ms/);
+    assert.match(combined, /3 lines · 1.9s/);
     assert.doesNotMatch(combined, /✓\s*│/, "result metrics should not begin with a separator");
     assert.doesNotMatch(combined, /✓ Done|Private reasoning|text\('a'\)|text\('b'\)/);
   } finally {
@@ -334,12 +334,51 @@ test("Codemode Compact keeps each styled row to one terminal line and prioritize
     }
     assert.match(result.render(28).join(""), /Failed/);
     assert.match(result.render(28).join(""), /4 calls/);
-    assert.doesNotMatch(result.render(28).join(""), /2 out/);
-    assert.match(result.render(95).join(""), /2 out/);
+    assert.doesNotMatch(result.render(28).join(""), /2 (?:out|lines)/);
+    assert.match(result.render(95).join(""), /2 lines/);
     assert.match(result.render(95).join(""), /1\.5s/);
     assert.match(call.render(95).join(""), /3 code lines/);
     assert.deepEqual(call.render(0), []);
     assert.deepEqual(result.render(0), []);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("Codemode output count falls back from lines to out only on narrow rows; duration and separators are subdued", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "codemode-output-layout-"));
+  let resolver: ToolRendererResolver | undefined;
+  const pi = {
+    registerToolRenderer(cb: ToolRendererResolver) { resolver = cb; },
+    registerCommand() {}, registerShortcut() {}, on() {},
+  } as any;
+  const applied: Array<{ name: string; value: string }> = [];
+  const theme = {
+    fg(name: string, value: string) { applied.push({ name, value }); return value; },
+    bold(value: string) { return value; },
+  } as any;
+  try {
+    await installToolViewController(pi, { modeFile: join(directory, "mode.json") });
+    const renderer = resolver!("codemode", () => ({}))!;
+    const context = { args: { code: "text('x')" }, isError: false, durationMs: 213, state: {} } as any;
+    const result = renderer.renderResult!({
+      content: [{ type: "text", text: Array.from({ length: 179 }, () => "output").join("\n") }],
+      details: { calls: Array.from({ length: 6 }, () => ({ status: "ok" })) },
+    }, { isPartial: false, expanded: false }, theme, context);
+    const full = result.render(110).join("");
+    assert.match(full, /6 calls · 6 ok │ 179 lines · 213ms/);
+    assert.ok(applied.some(item => item.name === "dim" && item.value === " │ "));
+    assert.ok(applied.some(item => item.name === "dim" && item.value === "213ms"));
+    assert.ok(applied.some(item => item.name === "muted" && item.value === "179 lines"));
+    const narrowFallback = Array.from({ length: 85 }, (_, i) => i + 1)
+      .map(width => ({ width, value: result.render(width).join("") }))
+      .find(item => item.value.includes("179 out"));
+    assert.ok(narrowFallback, "output lines should fall back to out before hiding the count");
+    assert.ok(visibleWidth(narrowFallback.value) <= narrowFallback.width);
+    assert.doesNotMatch(narrowFallback.value, /179 lines/);
+    const reallyNarrow = result.render(10).join("");
+    assert.match(reallyNarrow, /✓/);
+    assert.ok(visibleWidth(reallyNarrow) <= 10);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

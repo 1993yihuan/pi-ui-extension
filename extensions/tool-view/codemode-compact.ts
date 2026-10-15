@@ -8,16 +8,18 @@ import { truncateToWidth, visibleWidth, type Component } from "@earendil-works/p
 import { compactCallPrefix } from "./chevron.ts";
 
 type RenderContext = Parameters<NonNullable<ToolRenderers["renderCall"]>>[2];
-type MetricColor = "text" | "success" | "error" | "warning" | "muted";
+type MetricColor = "text" | "success" | "error" | "warning" | "muted" | "dim";
 type Metric = {
   label: string;
+  /** Narrow-screen substitute, used before dropping this metric entirely. */
+  shortLabel?: string;
   color: MetricColor;
   group: "calls" | "output";
   /** Lower priority number survives narrower terminals first. */
   priority: number;
 };
 
-const CALL_SEPARATOR = "  │  ";
+const CALL_SEPARATOR = " │ ";
 const METRIC_SEPARATOR = " · ";
 const STATUS_SPACING = "  ";
 
@@ -75,25 +77,29 @@ function formatSummary(
 
   // Work out which complete metrics can be shown, then restore display order.
   // Never show half a metric or let Text wrap the row across multiple lines.
-  const selected = new Set<Metric>();
+  const selected = new Map<Metric, string>();
   const ranked = metrics.slice().sort((a, b) => a.priority - b.priority);
   const compose = (): string => {
     let row = heading;
     let lastGroup: Metric["group"] | undefined;
     for (const metric of metrics) {
-      if (!selected.has(metric)) continue;
+      const label = selected.get(metric);
+      if (label === undefined) continue;
       // The status glyph is not a metric group. A leading │ after ✓ looks
       // like a stray border; only separate two actual metric groups.
       const separator = !lastGroup ? STATUS_SPACING
         : lastGroup === metric.group ? METRIC_SEPARATOR : CALL_SEPARATOR;
-      row += theme.fg("dim", separator) + theme.fg(metric.color, metric.label);
+      row += theme.fg("dim", separator) + theme.fg(metric.color, label);
       lastGroup = metric.group;
     }
     return row;
   };
   for (const metric of ranked) {
-    selected.add(metric);
-    if (visibleWidth(compose()) > width) selected.delete(metric);
+    selected.set(metric, metric.label);
+    if (visibleWidth(compose()) > width) {
+      if (metric.shortLabel) selected.set(metric, metric.shortLabel);
+      if (visibleWidth(compose()) > width) selected.delete(metric);
+    }
   }
   return compose();
 }
@@ -131,7 +137,10 @@ export function renderCodemodeCompactResult(
   if (statuses.running) metrics.push({ label: `${statuses.running} running`, color: "warning", group: "calls", priority: 3 });
   if (!options.isPartial) {
     const { lines, images } = countContent(result);
-    if (lines) metrics.push({ label: `${lines} out`, color: "muted", group: "output", priority: 6 });
+    if (lines) metrics.push({
+      label: countLabel(lines, "line"), shortLabel: `${lines} out`,
+      color: "muted", group: "output", priority: 6,
+    });
     if (images) metrics.push({ label: countLabel(images, "image"), color: "muted", group: "output", priority: 7 });
   }
   // Pi provides durationMs only after completion; partial rows show an
@@ -143,7 +152,7 @@ export function renderCodemodeCompactResult(
         ? formatDuration(Math.max(0, Date.now() - runningSince))
         : formatDuration(context.durationMs);
       const visibleMetrics: Metric[] = elapsed
-        ? [...metrics, { label: (options.isPartial ? "~" : "") + elapsed, color: "muted", group: "output", priority: 4 }]
+        ? [...metrics, { label: (options.isPartial ? "~" : "") + elapsed, color: "dim", group: "output", priority: 4 }]
         : metrics;
       return [formatSummary(theme, status, stateColor, visibleMetrics, width)];
     },
