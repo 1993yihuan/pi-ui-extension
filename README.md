@@ -8,7 +8,7 @@ A fullscreen terminal UI extension for [Pi Coding Agent](https://github.com/eare
 
 ## Preview
 
-<img width="1377" height="671" alt="pi-ui-extension preview" src="https://github.com/1993yihuan/pi-ui-extension/releases/download/v1.1.6/preview.png" />
+<img width="1377" height="865" alt="pi-ui-extension preview" src="https://github.com/1993yihuan/pi-ui-extension/releases/download/v1.7.2/preview.png" />
 
 ## Quick start
 
