@@ -21,7 +21,7 @@ pi install npm:pi-ui-extension
 以 fullscreen 模式启动 Pi，右侧 Sidebar 将自动显示。如需固定版本：
 
 ```bash
-pi install npm:pi-ui-extension@1.7.1
+pi install npm:pi-ui-extension@1.7.2
 ```
 
 固定版本不会自动升级到后续版本。其他安装方式见[安装与更新](#安装与更新)。
@@ -87,10 +87,10 @@ Compact 支持内置的 `read`、`bash`、`edit`、`write`、`grep`、`find`、`
 
 ```text
 Thinking · 0.7s
-  ›  codemode  8 code lines
-    ⎿  ✓  1 call · 1 ok │ 59 lines · 85ms
+  ›  codemode
+    ⎿  1 call · 1 ok │ 59 lines · 85ms
   ›  bash  git status
-    ⎿  ✓  12 lines · 45ms
+    ⎿  12 lines · 45ms
 ```
 
 输出行数显示为 `line/lines`，窄终端自动简写为 `out`；耗时及分组符颜色弱化、统计间距收紧。每次调用都独立显示，不合并；成功、运行中、部分失败和失败状态明确区分。**包括 Codemode 在内的受支持工具都可点击 `›` 展开 Pi 原生详情**（脚本、内嵌调用、输出及错误），再点击 `⌄` 收起，恢复 Compact 摘要；Normal 同样可以查看完整详情。第三方工具和特殊原生 Renderer 保留原有行为。
@@ -124,9 +124,9 @@ VIEW 下方按调用来源统计工具：
 | 操作 | 命令 |
 | --- | --- |
 | 安装最新 npm 版本 | `pi install npm:pi-ui-extension` |
-| 固定 v1.7.1 | `pi install npm:pi-ui-extension@1.7.1` |
+| 固定 v1.7.2 | `pi install npm:pi-ui-extension@1.7.2` |
 | 从 GitHub 安装 | `pi install git:github.com/1993yihuan/pi-ui-extension` |
-| 固定 Git tag | `pi install git:github.com/1993yihuan/pi-ui-extension@v1.7.1` |
+| 固定 Git tag | `pi install git:github.com/1993yihuan/pi-ui-extension@v1.7.2` |
 | 仅当前项目安装 | `pi install --local npm:pi-ui-extension` |
 | 更新非固定版本 | `pi update --extensions` |
 | 列出已配置扩展 | `pi list` |

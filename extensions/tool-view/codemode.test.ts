@@ -81,7 +81,8 @@ test("Codemode uses compact summaries until clicked, native details when expande
     const visible = () => stripAnsi(transcript.render(110).join("\n"));
 
     // Default compact mode summarizes metadata, hiding executable code and nested arguments.
-    assert.match(visible(), /  ›  codemode.*2 code lines/);
+    assert.match(visible(), /  ›  codemode\b/);
+    assert.doesNotMatch(visible(), /code lines|Code: \?/, "collapsed Codemode must not show code line counts");
     assert.match(visible(), /3 calls/);
     assert.match(visible(), /1 ok/);
     assert.match(visible(), /1 failed/);
@@ -89,7 +90,7 @@ test("Codemode uses compact summaries until clicked, native details when expande
     assert.match(visible(), /2 lines/);
     assert.match(visible(), /1 image/);
     assert.match(visible(), /1.3s/);
-    assert.doesNotMatch(visible(), /✓\s*│/, "no leading vertical divider after a successful status");
+    assert.doesNotMatch(visible(), /✓/, "Compact must omit redundant green success checkmarks");
     assert.match(visible(), /! Partial/, "successful parent with failed nested calls is not marked fully successful");
     assert.doesNotMatch(visible(), /[\u3400-\u9fff]/, "Compact labels must be English-only");
     assert.doesNotMatch(visible(), /DO_NOT_DISPLAY|PRIVATE_OUTPUT_TEXT|PRIVATE_NESTED_ARGS/);
@@ -228,7 +229,7 @@ test("one Thinking followed by multiple codemode calls preserves independent too
     assert.match(combined, /2 calls · 2 ok/);
     assert.match(combined, /1 line · 225ms/);
     assert.match(combined, /3 lines · 1.9s/);
-    assert.doesNotMatch(combined, /✓\s*│/, "result metrics should not begin with a separator");
+    assert.doesNotMatch(combined, /⎿\s*✓/, "success rows should contain data without a checkmark");
     assert.doesNotMatch(combined, /✓ Done|Private reasoning|text\('a'\)|text\('b'\)/);
   } finally {
     await rm(directory, { recursive: true, force: true });
@@ -290,7 +291,7 @@ test("Codemode Compact handles missing, malformed, or very large metadata withou
     const context = { args: { code: 123 }, state: {}, durationMs: NaN, isError: false } as any;
     const call = renderer.renderCall!({ code: 123 }, theme, context);
     assert.match(call.render(100).join(""), /codemode/);
-    assert.match(call.render(100).join(""), /Code: \?/);
+    assert.doesNotMatch(call.render(100).join(""), /Code: \?|code lines/, "invalid code metadata must not appear");
     const response = renderer.renderResult!(
       { content: [], details: { calls: [{ status: "unknown" }, null, { status: "ok" }] } },
       { isPartial: false, expanded: false }, theme, context,
@@ -337,7 +338,8 @@ test("Codemode Compact keeps each styled row to one terminal line and prioritize
     assert.doesNotMatch(result.render(28).join(""), /2 (?:out|lines)/);
     assert.match(result.render(95).join(""), /2 lines/);
     assert.match(result.render(95).join(""), /1\.5s/);
-    assert.match(call.render(95).join(""), /3 code lines/);
+    assert.match(call.render(95).join(""), /codemode/);
+    assert.doesNotMatch(call.render(95).join(""), /code lines/);
     assert.deepEqual(call.render(0), []);
     assert.deepEqual(result.render(0), []);
   } finally {
@@ -366,7 +368,8 @@ test("Codemode output count falls back from lines to out only on narrow rows; du
       details: { calls: Array.from({ length: 6 }, () => ({ status: "ok" })) },
     }, { isPartial: false, expanded: false }, theme, context);
     const full = result.render(110).join("");
-    assert.match(full, /6 calls · 6 ok │ 179 lines · 213ms/);
+    assert.match(full, /^    ⎿  6 calls · 6 ok │ 179 lines · 213ms$/);
+    assert.doesNotMatch(full, /✓/, "no standalone success status glyph");
     assert.ok(applied.some(item => item.name === "dim" && item.value === " │ "));
     assert.ok(applied.some(item => item.name === "dim" && item.value === "213ms"));
     assert.ok(applied.some(item => item.name === "muted" && item.value === "179 lines"));
@@ -377,7 +380,7 @@ test("Codemode output count falls back from lines to out only on narrow rows; du
     assert.ok(visibleWidth(narrowFallback.value) <= narrowFallback.width);
     assert.doesNotMatch(narrowFallback.value, /179 lines/);
     const reallyNarrow = result.render(10).join("");
-    assert.match(reallyNarrow, /✓/);
+    assert.ok(reallyNarrow.length > 0, "narrow rows should keep an available metric");
     assert.ok(visibleWidth(reallyNarrow) <= 10);
   } finally {
     await rm(directory, { recursive: true, force: true });

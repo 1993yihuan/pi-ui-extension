@@ -90,7 +90,7 @@ test("uses one official renderer resolver without replacing or executing Pi tool
     const state = {};
     assert.match(render(read, state, args), /  ›  read  example\.ts/);
     assert.match(render(read, state, args), /2 lines/);
-    assert.match(render(resolver("bash", () => native)!, {}, { command: "echo ok" }), /  ›  bash  echo ok[\s\S]*    ⎿  ✓  2 lines/);
+    assert.match(render(resolver("bash", () => native)!, {}, { command: "echo ok" }), /  ›  bash  echo ok[\s\S]*    ⎿  2 lines/);
     const styled: Array<{ color: string; value: string }> = [];
     const themeWithSpy = { ...theme, fg(color: string, value: string) {
       styled.push({ color, value });
@@ -101,7 +101,7 @@ test("uses one official renderer resolver without replacing or executing Pi tool
       args: { command: "echo ok" }, cwd: directory, state: {}, isError: false,
       isPartial: false, expanded: false, durationMs: 125,
     } as any);
-    assert.match(bashResult.render(100).join(""), /✓  2 lines · 125ms/);
+    assert.match(bashResult.render(100).join(""), /^    ⎿  2 lines · 125ms$/);
     assert.ok(styled.some(item => item.color === "dim" && item.value === "125ms"), "direct-tool duration should be muted further");
     const narrowOutput = Array.from({ length: 36 }, (_, i) => i + 1)
       .map(width => ({ width, line: bashResult.render(width).join("") }))
@@ -134,7 +134,7 @@ test("uses one official renderer resolver without replacing or executing Pi tool
       args: { command: "true" }, state: {}, cwd: directory, durationMs: 12,
       isError: false, isPartial: false, expanded: false,
     } as any);
-    assert.match(zeroOutput.render(80).join(""), /^    ⎿  ✓  12ms$/, "empty output still has one result branch");
+    assert.match(zeroOutput.render(80).join(""), /^    ⎿  12ms$/, "empty output still has one result branch");
     const running = empty.renderResult!({
       content: [], details: {}, isError: false,
     }, { isPartial: true, expanded: false }, theme, {

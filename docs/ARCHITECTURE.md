@@ -77,15 +77,15 @@ In Compact, supported tools use a dimmed result branch, consistent indentation a
 
 ```text
 Thinking · 0.7s
-  ›  codemode  8 code lines
-    ⎿  ✓  1 call · 1 ok │ 59 lines · 85ms
+  ›  codemode
+    ⎿  1 call · 1 ok │ 59 lines · 85ms
   ›  bash  git status
-    ⎿  ✓  12 lines · 45ms
+    ⎿  12 lines · 45ms
 ```
 
-Output line counts use `line/lines` (or `out` as a narrow-screen fallback), while elapsed duration and the compact `│` group separator are dimmer than primary statistics. Each tool call remains independent—even when multiple tools follow one Thinking segment. There is no cross-message tree connection, inferred grouping, or inserted group divider. Results distinguish success (`✓`), ongoing activity (`… Running`), failed parent call (`✗ Failed`) and a successful Codemode parent containing failed/cancelled nested calls (`! Partial`). The `│` metric separator only divides meaningful metric groups, never the first status-to-metric transition. Output and duration labels shorten or truncate on narrow terminals; the `⎿` decoration may be omitted first.
+Output line counts use `line/lines` (or `out` as a narrow-screen fallback), while elapsed duration and the compact `│` group separator are dimmer than primary statistics. Each tool call remains independent—even when multiple tools follow one Thinking segment. There is no cross-message tree connection, inferred grouping, or inserted group divider. Completed successful calls omit the redundant green `✓`, while ongoing (`… Running`), failed (`✗ Failed`) and partially failed (`! Partial`) calls still show meaningful state labels. The `│` metric separator only divides meaningful metric groups, never the first status-to-metric transition. Output and duration labels shorten or truncate on narrow terminals; the `⎿` decoration may be omitted first.
 
-Supported built-in tools, **including Codemode**, can be clicked to expand Pi's **native** details without leaving Compact. Collapsed Codemode continues to show just metadata (script line count, nested-call status/count, output size and duration). An expanded Codemode shows the native script, nested tool calls and arguments, output and errors; clicking again restores the two-line Compact summary. The native renderer retains its own expanded state and display logic. Normal still uses Pi's full native rendering; Hidden removes transcript rows without cancelling execution or usage accounting.
+Supported built-in tools, **including Codemode**, can be clicked to expand Pi's **native** details without leaving Compact. Collapsed Codemode shows just the tool name plus nested-call status/count, output size and duration. Its input script line count is intentionally omitted. An expanded Codemode shows the native script, nested tool calls and arguments, output and errors; clicking again restores the two-line Compact summary. The native renderer retains its own expanded state and display logic. Normal still uses Pi's full native rendering; Hidden removes transcript rows without cancelling execution or usage accounting.
 
 **Why a host UI adapter exists:** Pi 1.1.0 and 1.2.0 self-rendered tool components insert a leading blank row before each tool. Public tool renderer APIs cannot control that space. Compact therefore uses a deliberately limited compatibility adapter to remove **exactly one expected blank row** for renderers owned by this extension, and adjusts the mouse y-coordinate so click expansion still targets the right row. It does not change Thinking spacing or third-party, Normal or Hidden layouts.
 

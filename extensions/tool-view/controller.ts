@@ -418,7 +418,7 @@ export async function installToolViewController(
     // A failed tool must not imply that its mutation was saved/applied.
     const summary = context.isError || options.isPartial ? "" : COMPACT_SPECS[toolName]!.result(result, context, options);
     const statusColor = context.isError ? "error" : options.isPartial ? "warning" : "success";
-    const icon = context.isError ? "✗ Failed" : options.isPartial ? "… Running" : "✓";
+    const icon = context.isError ? "✗ Failed" : options.isPartial ? "… Running" : "";
     const duration = typeof context.durationMs === "number" && Number.isFinite(context.durationMs) &&
       context.durationMs >= 0 && !options.isPartial
       ? context.durationMs < 1_000 ? `${Math.round(context.durationMs)}ms` : `${(context.durationMs / 1_000).toFixed(1)}s`
@@ -429,9 +429,9 @@ export async function installToolViewController(
         const heading = theme.fg(statusColor, icon);
         const shortSummary = summary.replace(/^(\d+) lines?$/, "$1 out");
         const compose = (label: string, withDuration: boolean) =>
-          heading + (label ? `  ${theme.fg("muted", label)}` : "") +
+          heading + (label ? `${icon ? "  " : ""}${theme.fg("muted", label)}` : "") +
           (withDuration && duration
-            ? `${label ? theme.fg("dim", " · ") : "  "}${theme.fg("dim", duration)}` : "");
+            ? `${label ? theme.fg("dim", " · ") : icon ? "  " : ""}${theme.fg("dim", duration)}` : "");
         const optionsToFit = [
           compose(summary, true), compose(shortSummary, true),
           compose(summary, false), compose(shortSummary, false),

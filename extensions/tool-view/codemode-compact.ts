@@ -51,17 +51,9 @@ function countContent(result: AgentToolResult<any>): { lines: number; images: nu
   return { lines, images };
 }
 
-function codeLineCount(args: unknown): string {
-  const code = args !== null && typeof args === "object" && "code" in args
-    ? (args as { code?: unknown }).code : undefined;
-  if (typeof code !== "string") return "Code: ?";
-  return `${code ? code.split("\n").length : 0} code lines`;
-}
-
-export function renderCodemodeCompactCall(args: unknown, theme: Theme): Component {
+export function renderCodemodeCompactCall(_args: unknown, theme: Theme): Component {
   const label = compactCallPrefix(theme, false) +
-    theme.fg("toolTitle", theme.bold("codemode")) +
-    theme.fg("dim", `  ${codeLineCount(args)}`);
+    theme.fg("toolTitle", theme.bold("codemode"));
   return singleLine(label);
 }
 
@@ -85,9 +77,9 @@ function formatSummary(
     for (const metric of metrics) {
       const label = selected.get(metric);
       if (label === undefined) continue;
-      // The status glyph is not a metric group. A leading │ after ✓ looks
-      // like a stray border; only separate two actual metric groups.
-      const separator = !lastGroup ? STATUS_SPACING
+      // The status label is not a metric group (and successful rows omit it).
+      // Only separate two actual metric groups with │.
+      const separator = !lastGroup ? (state ? STATUS_SPACING : "")
         : lastGroup === metric.group ? METRIC_SEPARATOR : CALL_SEPARATOR;
       row += theme.fg("dim", separator) + theme.fg(metric.color, label);
       lastGroup = metric.group;
@@ -125,7 +117,7 @@ export function renderCodemodeCompactResult(
   const partialFailure = statuses.error > 0 || statuses.cancelled > 0;
   const status = options.isPartial ? "… Running"
     : context.isError ? "✗ Failed"
-    : partialFailure ? "! Partial" : "✓";
+    : partialFailure ? "! Partial" : "";
   const stateColor = options.isPartial || (partialFailure && !context.isError)
     ? "warning" : context.isError ? "error" : "success";
   const metrics: Metric[] = [];
