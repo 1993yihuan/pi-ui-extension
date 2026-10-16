@@ -23,7 +23,8 @@
     "typecheck": "tsc -p tsconfig.check.json",
     "test": "node --import tsx --test",
     "check:package": "node scripts/check-package.mjs",
-    "check": "npm run typecheck && npm test && npm run check:package"
+    "check": "npm run typecheck && npm test && npm run check:docs && npm run check:package",
+    "check:docs": "node scripts/check-docs.mjs"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": ">=1.2.0",

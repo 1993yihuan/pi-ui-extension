@@ -19,11 +19,12 @@ npm ci
 npm run check
 ```
 
-`npm run check` runs type checking, tests, and package validation:
+`npm run check` runs type checking, tests, documentation checks, and package validation:
 
 ```bash
 npm run typecheck
 npm test
+npm run check:docs
 npm run check:package
 ```
 
@@ -78,7 +79,7 @@ The `pi-package` keyword and declared package image make the published package e
 
 ## Supported test matrix
 
-The [CI workflow](../.github/workflows/ci.yml) validates all four combinations on pushes to `main` and pull requests:
+The [CI workflow](../.github/workflows/ci.yml) validates all four combinations on pushes to `main` and pull requests that change code, dependencies, scripts, or configuration:
 
 | Node.js | Pi SDK |
 | --- | --- |
@@ -88,6 +89,10 @@ The [CI workflow](../.github/workflows/ci.yml) validates all four combinations o
 | 24 | 1.3.0 |
 
 The minimum-supported Pi SDK leg pins the entire `@earendil-works/pi-*` SDK family to `1.2.0` so transitive semver ranges do not mix incompatible versions. The installed SDK versions are checked before running the complete test suite.
+
+Changes limited to root README files, `LICENSE`, and Markdown/images under `docs/` instead run a lightweight job without installing dependencies. It checks Markdown UTF-8, final newlines, conflict markers, existing local link targets, and npm package contents. External links and section anchors are not fetched or validated. Missing or unreadable Git diffs fall back to the full matrix.
+
+Configure branch protection to require **`CI result`**. This check runs for both routes and fails if any required job fails, is cancelled, or is unexpectedly skipped. Do not require individual matrix jobs, which are intentionally skipped for documentation-only commits. Superseded CI runs are cancelled; release runs use a separate package-wide queue.
 
 **Do not rely on local SDK-only tests for host UI compatibility.** Global Pi distributions may run a separately bundled class instance with different minified method text. The Compact spacing regression tests cover both the unbundled SDK and bundled CLI; also validate actual `pi -e` behavior when changing guarded host UI interactions. See [Architecture](ARCHITECTURE.md).
 
@@ -107,7 +112,7 @@ Check which shells and projects rely on each installation before removing an old
 
 ## Release workflow
 
-Use [`.github/workflows/release.yml`](../.github/workflows/release.yml) for publishing. It triggers on `v*` tags, validates tag format, and checks that the tagged commit is reachable from `main`.
+Use [`.github/workflows/release.yml`](../.github/workflows/release.yml) for publishing. Tag pushes matching `v*` enter the workflow, but only canonical stable tags such as `v1.8.4` are accepted; prereleases and build suffixes are rejected. Every release of this package shares a [queue](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency#example-queueing-multiple-pending-runs) (`queue: max`, no cancellation), so pending versions do not replace one another.
 
 For a documentation-only correction, use a patch release, e.g. `1.5.1`. Bump the package version, update the lockfile and **version-pinned installation examples in both README languages**, then run validation:
 
@@ -126,12 +131,30 @@ git push origin vX.Y.Z
 
 Substitute the exact version for `X.Y.Z`. Avoid pushing a tag for an untested commit; never force-push release tags. The Release workflow performs:
 
-1. Validate tag, ancestry and npm package version.
-2. Install dependencies under Node.js 24 and run `npm run check`.
-3. Inspect the package with `npm pack --dry-run`.
-4. Publish with **npm Trusted Publishing (OIDC)**, without a long-lived `NPM_TOKEN`.
-5. Retry npm Registry visibility for up to approximately **10 minutes**.
-6. Create an official GitHub Release once registry verification succeeds.
+1. Validate tag, `main` ancestry, package name/version, and the latest `main` push CI run for that **exact commit SHA**. All four Node/Pi jobs must have succeeded; a documentation-only CI run is insufficient. It waits up to ten minutes for CI to finish.
+2. Check out the exact source SHA, install dependencies under Node.js 24 with pinned npm **11.21.0**, and run `npm run check`.
+3. Pack once, validate actual tarball contents, and record its SHA-512 integrity and source SHA. The packed manifest includes `gitHead`; the source manifest is restored afterward. The same artifact is passed between jobs and retained for 14 days.
+4. Look for an existing npm version. If its `gitHead` and integrity match, skip publication. Otherwise publish the validated tarball once with **npm Trusted Publishing (OIDC)**. New publication requires the matching tag event and cannot move npm `latest` backwards.
+5. Verify registry `gitHead`, tarball integrity, and visibility of `latest` within one **ten-minute deadline**. Each HTTP request is limited to 20 seconds; 404 indexing delays, network errors, 429, and server errors may retry. Authentication failures and mismatched artifacts fail immediately. `npm publish` itself is never automatically retried.
+6. Recheck the remote tag SHA, then create or complete the official GitHub Release. Recovery preserves existing release notes and does not mark an older release as latest.
+
+Permissions are scoped to jobs: validation and packaging are read-only, only npm publication receives `id-token: write`, and only the final GitHub Release job receives `contents: write`. Checkouts do not persist credentials. Actions are pinned to full commit SHAs; Dependabot tracks their updates.
+
+### Validation and recovery
+
+The manual workflow entry accepts an existing stable `tag` and an `operation`:
+
+```bash
+# Validate the tag, exact-commit CI and package without publishing or changing Releases.
+gh workflow run release.yml --ref main -f tag=vX.Y.Z -f operation=validate
+
+# Verify an already uploaded package and create/complete its GitHub Release.
+gh workflow run release.yml --ref main -f tag=vX.Y.Z -f operation=recover
+```
+
+`recover` never runs `npm publish`. Use it when npm accepted the upload but indexing or GitHub Release creation failed. It rebuilds the artifact from the tag with the pinned npm version and requires the same SHA and bytes as the registry. Legacy packages or packaging changes that produce different bytes fail verification without overwriting anything.
+
+If publication never reached npm, rerun the original **tag-triggered** workflow after resolving the error; a manual run does not initiate a new publication. When rerunning failed jobs, the workflow reuses the successful packaging job's artifact name. If its 14-day artifact retention has expired, rerun all jobs to rebuild and verify the package.
 
 Before announcing a successful release, independently verify:
 
@@ -143,7 +166,7 @@ git rev-parse origin/main
 git rev-list -n1 vX.Y.Z
 ```
 
-If registry verification times out, **inspect npm first** before attempting any further publish. npm versions are immutable, and publication may have succeeded even though indexing is delayed. Do not retry `npm publish` for a version that may already exist.
+If registry verification times out, inspect npm first and use `recover` for an accepted upload. npm versions are immutable, and publication may have succeeded even though indexing is delayed.
 
 ## Documentation conventions
 
