@@ -27,12 +27,17 @@ test("streaming token sampling throttles expensive estimates without delaying fi
   assert.equal(samples.length, 1, "unchanged token counts do not trigger refreshes");
   now = 1_200;
   sampler.observe({ tokens: 2 });
-  assert.deepEqual(samples, [[1, 1_000], [2, 1_200]]);
+  assert.deepEqual(samples, [[1, 1_000]], "unchanged estimates also advance the throttle window");
+  for (let i = 0; i < 1000; i++) sampler.observe({ tokens: 1 });
+  assert.equal(estimates, 3, "a burst of unchanged events must not repeatedly estimate");
+  now = 1_300;
+  sampler.observe({ tokens: 2 });
+  assert.deepEqual(samples, [[1, 1_000], [2, 1_300]]);
 
-  now = 1_250;
+  now = 1_350;
   sampler.reset();
   sampler.observe({ tokens: 1 });
-  assert.deepEqual(samples.at(-1), [1, 1_250], "new provider request is sampled immediately");
+  assert.deepEqual(samples.at(-1), [1, 1_350], "new provider request is sampled immediately");
 });
 
 test("aborted run keeps completed tools but marks interrupted tools as cancelled", () => {

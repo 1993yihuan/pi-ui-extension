@@ -21,7 +21,7 @@ pi install npm:pi-ui-extension
 Start Pi in fullscreen mode. The right sidebar appears automatically. To install a specific release instead:
 
 ```bash
-pi install npm:pi-ui-extension@1.8.2
+pi install npm:pi-ui-extension@1.8.3
 ```
 
 Pinned packages do not automatically move to newer versions. See [Installation and updates](#installation-and-updates) for Git, local and removal options.
@@ -124,9 +124,9 @@ For day-to-day usage, prefer **npm**. Git is available for unreleased repository
 | Action | Command |
 | --- | --- |
 | Install latest npm release | `pi install npm:pi-ui-extension` |
-| Pin v1.8.2 | `pi install npm:pi-ui-extension@1.8.2` |
+| Pin v1.8.3 | `pi install npm:pi-ui-extension@1.8.3` |
 | Install from GitHub | `pi install git:github.com/1993yihuan/pi-ui-extension` |
-| Pin a Git tag | `pi install git:github.com/1993yihuan/pi-ui-extension@v1.8.2` |
+| Pin a Git tag | `pi install git:github.com/1993yihuan/pi-ui-extension@v1.8.3` |
 | Install only for the current project | `pi install --local npm:pi-ui-extension` |
 | Update unpinned packages | `pi update --extensions` |
 | List installed packages | `pi list` |

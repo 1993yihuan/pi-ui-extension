@@ -63,3 +63,29 @@ test("delta tracks the previous settled run and resets", () => {
 test("converts custom context entries", () => {
   assert.equal(messagesFromContextEntries([{type:"custom_message",content:"ok"}]).length, 1);
 });
+
+test("restoring CTX respects SDK context removals, replacements and branch changes", (t) => {
+  const session = SessionManager.inMemory();
+  if (typeof session.appendContextEdit !== "function") { t.skip("context edits require Pi 1.3"); return; }
+  const handlers = new Map<string, Function>();
+  const tracker = installContextEstimates({
+    on: (name: string, fn: Function) => handlers.set(name, fn),
+    getActiveTools: () => [], getAllTools: () => [],
+  } as any, () => {});
+  const ctx = { sessionManager: session, getSystemPrompt: () => "" };
+  const user = session.appendMessage({ role: "user", content: "x".repeat(400), timestamp: 1 });
+  const tool = session.appendMessage({ role: "toolResult", toolName: "read", toolCallId: "read-1", content: [{ type: "text", text: "x".repeat(40000) }], isError: false, timestamp: 2 });
+  session.appendContextEdit(user, { content: "abcd" });
+  session.appendContextEdit(tool, null);
+  for (const name of ["session_start", "turn_end", "agent_settled", "session_tree"]) {
+    handlers.get(name)!({}, ctx);
+    assert.equal(tracker.getSnapshot().total, 1, name);
+    assert.equal(tracker.getSnapshot().categories.find(category => category.name === "Tool Results")?.tokens, 0);
+  }
+  session.branch(tool);
+  handlers.get("session_tree")!({}, ctx);
+  assert.equal(tracker.getSnapshot().total, 10100, "edits on another branch do not apply");
+  session.appendCompaction("kept summary", null, 40400);
+  handlers.get("session_compact")!({}, ctx);
+  assert.ok(tracker.getSnapshot().categories.find(category => category.name === "Summary")!.tokens! > 0);
+});

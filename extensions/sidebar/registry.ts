@@ -18,6 +18,8 @@ export type SidebarPanelContext = {
   readonly tui: TUI;
   readonly theme: Theme;
   readonly getDesiredWidth: () => number;
+  /** Reuse an owned panel's render output only within the current layout frame. */
+  readonly cacheRender?: (component: Component) => void;
 };
 
 export type SidebarPanelInstance<State = unknown> = {

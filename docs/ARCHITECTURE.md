@@ -12,7 +12,7 @@ The extension composes three responsive panels in Pi's fullscreen terminal UI:
 - **CTX** — estimates and observable runtime measurements.
 - **VIEW** — unified tool/Thinking modes and direct/nested/MCP usage.
 
-The sidebar supports mouse events, wheel scrolling, terminal resizing, and scrollable panels in smaller spaces. Regular TUI is not a supported host layout. Footer rendering reports the working directory and Git branch and clips long paths to fit the terminal.
+The sidebar supports mouse events, wheel scrolling, terminal resizing, and scrollable panels in smaller spaces. Its owned panels share render output by width within each layout frame; the cache is cleared at the next root layout pass, so model, usage, theme and elapsed-time updates remain live. Regular TUI is not a supported host layout. Footer rendering reports the working directory and Git branch and clips long paths to fit the terminal.
 
 Resource shortcuts inspect current project/Pi instruction, skill, extension, and MCP resources. They do not attempt to load or connect missing resources.
 
@@ -20,13 +20,13 @@ Resource shortcuts inspect current project/Pi instruction, skill, extension, and
 
 The extension uses Pi’s public `ctx.ui.custom()` API with `overlay: true` and a centered, theme-aware frame rather than relying on the native editor-bottom `select`/`confirm`/`input` dialogs. This covers the Sessions manager (paging, sort, action menu, search), rename, bulk cleanup, resource/MCP pickers and read-only details, and the Tool View mode selector. The implementation lives in `extensions/dialogs/`; no Pi Core source or TUI prototype is modified.
 
-Selection overlays retain keyboard and mouse controls; multi-page content is read-only and scrollable. Confirmations are deliberately cancellation-first: Enter without moving selection chooses **Cancel**, Esc cancels, and a destructive action requires selecting **Move to Trash**. The command that performs a single Session trash move is the only confirmation owner for both sidebar and advanced manager, avoiding duplicate dialogs. Before deletion it rechecks idle state, current-session ID, file path/identity/mtime and activity reported by other Pi instances. The existing bulk-cleanup safety rechecks remain intact. Non-interactive/test hosts can fall back to native Pi UI calls when `ctx.ui.custom` is unavailable.
+Selection overlays retain keyboard and mouse controls; multi-page content is read-only and scrollable. Capturing overlays block background sidebar actions and cancel pending clicks or divider drags; non-capturing resize previews remain interactive. Read-only previews cache wrapped rows until their width changes. Selecting among multiple AGENTS.md resources opens the full selected file. Confirmations are deliberately cancellation-first: Enter without moving selection chooses **Cancel**, Esc cancels, and a destructive action requires selecting **Move to Trash**. The command that performs a single Session trash move is the only confirmation owner for both sidebar and advanced manager, avoiding duplicate dialogs. Before deletion it rechecks idle state, current-session ID, file path/identity/mtime and activity reported by other Pi instances. The existing bulk-cleanup safety rechecks remain intact. Non-interactive/test hosts can fall back to native Pi UI calls when `ctx.ui.custom` is unavailable.
 
 ## Session management and safety
 
 The quick session list favors the current session and pinned sessions; pins persist as IDs in `pi-ui-extension/session-pins.json` under the Pi agent directory. Pins do not save message bodies. The quick sidebar supports `☆`/`★` without opening `/sessions-manager`, with lower-priority buttons hidden when space is limited.
 
-The visible session number counts **top-level user question messages** from a session's JSONL history, not all Pi messages. Assistant messages, tool results and nested operations are not counted. The incremental JSONL reader processes appended bytes, buffers incomplete lines, and rebuilds if the file is truncated or replaced. Missing/unreadable histories display `?`, not a misleading zero.
+The visible session number counts **top-level user question messages** from a session's JSONL history, not all Pi messages. Assistant messages, tool results and nested operations are not counted. The sidebar and advanced manager share a session catalog: each refresh discovers files and checks identity, size, mtime and ctime, but only new or changed histories are streamed again. A single pass extracts the title, activity time and question count without retaining all assistant/tool bodies. Files changed during a read are discarded and retried on a later refresh; unavailable histories are omitted. Destructive commands continue to use fresh SDK discovery and the independent safety checks below, never the display cache as deletion authority.
 
 Advanced management (`/sessions-manager` or `≡`) offers paging (eight records), search, sorting, pinning, renaming, switching and confirmed trash moves. Switching and mutating saved session state requires Pi to be idle.
 
@@ -45,6 +45,8 @@ A Pi process **not running this extension cannot be reliably detected** by this 
 CTX shows the active model and Thinking level, context size and usage, current-run delta, image count, category composition, and speed measurements (run turns/duration, average TTFT/TPS, latest TTFT, cache indicators where observable).
 
 The `System`, `Tools`, `Messages`, `Tool Results`, `Summary`, and `Other` breakdown uses **local heuristic token estimates**. It is for composition and trend analysis, **not provider-exact tokenization or billing**. For tools, prefer the actual observable provider-request tool payload; before a provider request is available, estimate Pi's enabled tool schemas instead.
+
+Restoration uses the SDK's active session projection where available, including context edits and compaction. Removed or replaced content is not reintroduced when a run settles; system messages are accounted for separately through the effective system prompt.
 
 To reduce redraw work, streaming token estimates are sampled at most once every **150 ms**, while the first valid token update is shown immediately. Unchanged estimates do not trigger redundant CTX redraws. The elapsed-time ticker runs only while an agent run is active and is cleaned up when it settles or the panel is disposed.
 

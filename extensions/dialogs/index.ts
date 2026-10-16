@@ -85,10 +85,15 @@ export function createDialogUI(ui: ExtensionUIContext): DialogUI {
       const source = clean(content ?? "").split("\n");
       let position = 0;
       let page = 10;
+      let wrappedWidth = -1;
+      let rendered: string[] = [];
       const modal: Component = {
         render(width) {
           const inner = Math.max(1, width - 4);
-          const rendered = source.flatMap(line => wrapTextWithAnsi(line, inner));
+          if (wrappedWidth !== inner) {
+            rendered = source.flatMap(line => wrapTextWithAnsi(line, inner));
+            wrappedWidth = inner;
+          }
           page = Math.max(1, Math.min(22, Math.floor(tui.terminal.rows * 0.7) - 6));
           position = Math.max(0, Math.min(position, Math.max(0, rendered.length - page)));
           const lines = rendered.slice(position, position + page);

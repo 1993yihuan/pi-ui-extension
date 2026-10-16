@@ -88,7 +88,7 @@ export function createDefaultSidebarPanels(
   return [{
     id: SESSION_PANEL_ID,
     layout: { minSize: 4, maxSize: 9 },
-    create({ tui, theme, getDesiredWidth }) {
+    create({ tui, theme, getDesiredWidth, cacheRender }) {
       const panel = new SessionPanel(theme, {
         tui,
         getDesiredWidth,
@@ -101,6 +101,7 @@ export function createDefaultSidebarPanels(
         onOpenManager: options.onOpenSessionManager,
         onOpenResources: options.onOpenResources,
       });
+      cacheRender?.(panel);
       panel.refresh();
       return {
         component: panel,
@@ -111,7 +112,7 @@ export function createDefaultSidebarPanels(
   }, {
     id: CONTEXT_PANEL_ID,
     layout: { minSize: 10, maxSize: ({ terminalRows }) => Math.max(10, Math.floor(terminalRows * 0.35)) },
-    create({ tui, theme, getDesiredWidth }) {
+    create({ tui, theme, getDesiredWidth, cacheRender }) {
       const panel = new ContextPanel(theme, {
           getEstimate: options.getContextEstimate,
           getDelta: options.getContextDelta,
@@ -123,6 +124,7 @@ export function createDefaultSidebarPanels(
           getThinkingLevel: options.getThinkingLevel,
           getDesiredWidth,
       });
+      cacheRender?.(panel);
       // Keep elapsed time current during a run, but avoid waking an idle TUI.
       // Activity transitions call sidebar.refresh(), which starts/stops this ticker.
       let renderTimer: ReturnType<typeof setInterval> | undefined;
@@ -153,7 +155,7 @@ export function createDefaultSidebarPanels(
       minSize: 3,
       maxSize: ({ terminalRows }) => Math.max(3, Math.floor(terminalRows * 0.35)),
     },
-    create({ tui, theme, getDesiredWidth }) {
+    create({ tui, theme, getDesiredWidth, cacheRender }) {
       const panel = new ToolViewPanel(theme, {
         tui,
         getDesiredWidth,
@@ -162,6 +164,7 @@ export function createDefaultSidebarPanels(
         onSelect: options.onSelectToolViewMode,
         showBottomBorder: false,
       });
+      cacheRender?.(panel);
       const scroll = createToolViewScrollView(panel, theme);
       return {
         component: scroll,

@@ -161,7 +161,11 @@ export function installContextEstimates(pi: ExtensionAPI, onChange: () => void):
       latestProviderImagesWire = undefined;
       latestProviderToolsTokens = undefined;
     }
-    const messages = messagesFromContextEntries(ctx.sessionManager.buildContextEntries());
+    // Pi's projection applies branch-local context edits and compaction before
+    // estimating. System messages are already represented by getSystemPrompt().
+    const messages = typeof ctx.sessionManager.buildSessionProjection === "function"
+      ? ctx.sessionManager.buildSessionProjection().messages.filter(message => message.role !== "system")
+      : messagesFromContextEntries(ctx.sessionManager.buildContextEntries());
     snapshot = estimateContext(messages, ctx.getSystemPrompt(), "active branch", activeToolDefinitions(pi), latestProviderImagesWire);
     if (keepProviderMeasurement && latestProviderToolsTokens !== undefined) {
       const categories = snapshot.categories.map((category) =>

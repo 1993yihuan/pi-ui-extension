@@ -42,3 +42,22 @@ test('text input saves typing and read-only preview scrolls without editing',asy
 test('modal frame fits terminal widths and escapes long titles',()=>{
  for(const width of [8,12,20,38,76]){const f=modalFrame(theme,width,'A very long title with a name',['some extended content'],'Enter select · Esc cancel',true);for(const row of f)assert.ok(visibleWidth(row)<=width,`width ${width}`)}
 });
+
+test('read-only preview reuses wrapped content while scrolling and rebuilds on width changes', async () => {
+ const mock=fakeUI(40),content=Array.from({length:100},(_,i)=>`CACHE_MARKER_${i} ${'detail '.repeat(20)}`).join('\n');
+ const original=Array.prototype.flatMap;
+ let wraps=0;
+ (Array.prototype as any).flatMap=function(this:unknown[],...args:any[]){
+  if(this.length===100&&typeof this[0]==='string'&&this[0].startsWith('CACHE_MARKER_0 '))wraps++;
+  return Reflect.apply(original,this,args);
+ };
+ try {
+ const pending=mock.ui.editor('Instructions',content),view=mock.active[0]!;
+ view.render(80);
+ for(let i=0;i<20;i++){view.handleInput('\x1b[B');view.render(80);}
+ assert.equal(wraps,1);
+ mock.tui.terminal.rows=25;view.render(80);assert.equal(wraps,1,'height changes reuse wrapped rows');
+ const narrow=plain(view,40).join('\n');assert.equal(wraps,2);assert.match(narrow,/CACHE_MARKER_/);
+ view.handleInput('\x1b');await pending;
+ } finally { Array.prototype.flatMap=original; }
+});

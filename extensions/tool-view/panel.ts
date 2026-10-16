@@ -7,7 +7,7 @@ import {
   type TuiInputListener,
 } from "@earendil-works/pi-tui";
 import { panelBottom, panelContent, panelTop } from "../sidebar/panel.ts";
-import { installPriorityInputListener, parseSgrMouseEvent } from "../sidebar/resize.ts";
+import { installPriorityInputListener, isSidebarInputBlocked, parseSgrMouseEvent } from "../sidebar/resize.ts";
 import { TOOL_VIEW_MODES, type ToolViewMode } from "./types.ts";
 import type { ToolUsageCount, ToolUsageKind, ToolUsageSnapshot } from "./usage.ts";
 
@@ -151,6 +151,10 @@ export class ToolViewPanel implements Component {
   }
 
   private handleMouseInput(data: string): { consume: true } | undefined {
+    if (isSidebarInputBlocked(this.options.tui)) {
+      this.pressedMode = undefined;
+      return undefined;
+    }
     const mouse = parseSgrMouseEvent(data);
     // Let the enclosing ScrollView receive wheel events before any click handling.
     if (!mouse || (mouse.button & 64) !== 0) return undefined;
@@ -168,7 +172,7 @@ export class ToolViewPanel implements Component {
       if (released === pressed) {
         queueMicrotask(() => {
           const currentMode = this.options.getMode();
-          if (!this.disposed && currentMode !== undefined && currentMode !== released) {
+          if (!this.disposed && !isSidebarInputBlocked(this.options.tui) && currentMode !== undefined && currentMode !== released) {
             this.options.onSelect(released);
           }
         });

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { loadResourceEntries, resourceDialogOptions, type ResourceEntry } from "./index.ts";
+import { loadResourceEntries, resourceDialogOptions, showResourceDialog, type ResourceEntry } from "./index.ts";
 
 test("resource categories avoid unrelated package discovery and reuse loaded context content", async (t) => {
  const { SettingsManager, DefaultPackageManager } = await import("@earendil-works/pi-coding-agent");
@@ -42,4 +42,21 @@ test("resource dialog keeps the existing one-line description limit", () => {
   }]);
 
   assert.equal(options[0], `skill — ${"x".repeat(109)}…`);
+});
+
+test("selecting among several AGENTS files opens full content, with descriptions as fallback", async () => {
+  const rows = [
+    { name: "AGENTS.md", description: "Parent instructions", content: "# Parent\nFull parent rules" },
+    { name: "AGENTS.md", description: "Project instructions", content: "# Project\nFull project rules" },
+    { name: "Skill", description: "Full skill description" },
+  ];
+  for (let index = 0; index < rows.length; index++) {
+    let viewed: string | undefined;
+    showResourceDialog({ ui: {
+      async select(_title, choices) { return choices[index]; },
+      async editor(_title, content) { viewed = content; return undefined; },
+    } }, "agents", rows);
+    await Promise.resolve();
+    assert.equal(viewed, rows[index]!.content ?? rows[index]!.description);
+  }
 });

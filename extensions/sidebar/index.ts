@@ -8,6 +8,7 @@ import {
   type ViewportTUI,
 } from "@earendil-works/pi-tui";
 import { createSidebarScrollView } from "./layout.ts";
+import { createSidebarRenderCache, SidebarLayoutRoot } from "./render-cache.ts";
 import { installMouseResize, SidebarDivider } from "./resize.ts";
 import type {
   SidebarPanelDefinition,
@@ -103,6 +104,7 @@ export function installSidebar(
   const getSidebarWidth = () => sidebarWidth;
   const mountedPanels = new Map<string, MountedPanel>();
   const createdInstances: SidebarPanelInstance<unknown>[] = [];
+  const renderCache = createSidebarRenderCache();
   let layoutEntries: Array<{
     definition: SidebarPanelDefinition<unknown>;
     instance: SidebarPanelInstance<unknown>;
@@ -110,7 +112,7 @@ export function installSidebar(
   }>;
   try {
     layoutEntries = definitions.map((definition) => {
-      const instance = definition.create({ tui, theme, getDesiredWidth: getSidebarWidth });
+      const instance = definition.create({ tui, theme, getDesiredWidth: getSidebarWidth, cacheRender: renderCache.cacheRender });
       createdInstances.push(instance);
       return { definition, instance, layoutEntry: createLayoutEntry(definition, instance.component, tui) };
     });
@@ -149,7 +151,7 @@ export function installSidebar(
     (line) => theme.fg("dim", line),
     () => tui.terminal.rows,
   );
-  const splitRoot = new HStack([
+  const splitRoot = new SidebarLayoutRoot([
     { component: previousRoot, basis: 0, grow: 1, shrink: 1, minSize: MIN_MAIN_WIDTH },
     {
       component: divider,
@@ -168,7 +170,7 @@ export function installSidebar(
       maxSize: MAX_SIDEBAR_WIDTH,
       visible: ({ width }) => width >= MIN_SPLIT_WIDTH,
     },
-  ]);
+  ], () => { renderCache.beginFrame(); syncPanelLayout(); });
   const splitEntries = (splitRoot as unknown as { entries?: MutableHStack["entries"] }).entries;
   const sidebarEntry = Array.isArray(splitEntries) && splitEntries[2]?.component === sidebarScroll
     ? splitEntries[2] : undefined;
@@ -234,6 +236,7 @@ export function installSidebar(
         try { panel.instance.dispose?.(); } catch { /* Continue releasing the remaining panels. */ }
       }
       mountedPanels.clear();
+      renderCache.beginFrame();
       if (layoutTui.layoutRoot === splitRoot) {
         layoutTui.setLayoutRoot(previousRoot);
       }

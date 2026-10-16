@@ -30,7 +30,7 @@ import {
   sessionFileUnchanged,
   type SessionFileSnapshot,
 } from "./session/safety.ts";
-import { createUserPromptCounter } from "./session/user-prompts.ts";
+import { createSessionCatalog } from "./session/catalog.ts";
 import { openSessionManager, readSessionPins, sortedSessions, toggleSessionPin } from "./session/manager.ts";
 import type { SessionListItem } from "./session/panel.ts";
 import { installToolViewController } from "./tool-view/controller.ts";
@@ -86,7 +86,7 @@ function packageSummary(extensionPath: string, agentDir: string): string | undef
  * When `content` is given (single AGENTS.md), the full file content is shown
  * directly in a scrollable editor dialog (Esc closes, nothing is written back).
  */
-function showResourceDialog(
+export function showResourceDialog(
   ctx: { ui: { select(title: string, options: string[]): Promise<string | undefined>; editor(title: string, prefill?: string): Promise<string | undefined> } },
   button: ResourceButtonId,
   rows: readonly ResourceEntry[],
@@ -112,7 +112,7 @@ function showResourceDialog(
     const index = visible.indexOf(choice);
     const row = index >= 0 ? rows[index] : undefined;
     if (row) {
-      void ctx.ui.editor(`${row.name} (full description · Esc to close)`, row.description).then(() => {});
+      void ctx.ui.editor(`${row.name} (read-only · Esc to close)`, row.content ?? row.description).then(() => {});
     }
   });
 }
@@ -298,17 +298,16 @@ export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
     try { return readSessionPins(SESSION_PINS_FILE); }
     catch { return new Set(); } // Broken preferences must not hide saved sessions.
   };
-  const countUserPrompts = createUserPromptCounter();
+  const sessionCatalog = createSessionCatalog();
   const loadSessionRows = async (ctx: ExtensionContext): Promise<readonly SessionListItem[]> => {
     const currentId = ctx.sessionManager.getSessionId();
     const pinned = safeReadPins();
-    const sessions = await SessionManager.list(ctx.cwd, ctx.sessionManager.getSessionDir());
-    const prompts = await countUserPrompts(sessions);
-    return sortedSessions(sessions.map((session, index) => ({
+    const sessions = await sessionCatalog(ctx.cwd, ctx.sessionManager.getSessionDir());
+    return sortedSessions(sessions.map((session) => ({
       id: session.id,
       title: session.name ?? session.firstMessage,
       modified: session.modified,
-      userPromptCount: prompts[index],
+      userPromptCount: session.userPromptCount,
       current: session.id === currentId,
       pinned: pinned.has(session.id),
     })), "recent");

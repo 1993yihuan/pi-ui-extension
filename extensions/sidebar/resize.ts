@@ -9,6 +9,12 @@ import type {
 const SGR_MOUSE = /^\u001b\[<(\d+);(\d+);(\d+)([Mm])$/;
 const PREVIEW_FRAME_INTERVAL_MS = 16;
 
+/** Capturing overlays own input; the non-capturing resize preview does not. */
+export function isSidebarInputBlocked(tui: TUI): boolean {
+  const overlays = tui as TUI & { isOverlayFocused?: () => boolean };
+  return overlays.isOverlayFocused?.() ?? tui.hasOverlay?.() ?? false;
+}
+
 export type SgrMouseEvent = {
   readonly button: number;
   readonly x: number;
@@ -115,7 +121,7 @@ export function installMouseResize(options: MouseResizeOptions): () => void {
     geometryTimer = undefined;
     hidePreview();
   };
-  const geometryValid = (): boolean => options.isVisible()
+  const geometryValid = (): boolean => !isSidebarInputBlocked(options.tui) && options.isVisible()
     && (!dragging || (dragColumns === options.tui.terminal.columns && dragRows === options.tui.terminal.rows));
   const flushPreview = (): void => {
     clearFrameTimer();

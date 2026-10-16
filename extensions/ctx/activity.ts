@@ -97,8 +97,14 @@ export function createStreamingTokenSampler<T>(
       const observedAt = now();
       if (lastSampleAt !== undefined && observedAt >= lastSampleAt && observedAt - lastSampleAt < intervalMs) return;
       const tokens = estimate(message);
-      if (!Number.isFinite(tokens) || tokens <= 0 || tokens === lastTokens) return;
+      // Keep the first positive sample immediate, then throttle estimates even
+      // when the sampled count is unchanged (notifications remain deduplicated).
+      if (!Number.isFinite(tokens) || tokens <= 0) {
+        if (lastSampleAt !== undefined) lastSampleAt = observedAt;
+        return;
+      }
       lastSampleAt = observedAt;
+      if (tokens === lastTokens) return;
       lastTokens = tokens;
       onTokens(tokens, observedAt);
     },

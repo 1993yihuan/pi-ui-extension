@@ -8,7 +8,7 @@ import {
   type TuiInputListener,
 } from "@earendil-works/pi-tui";
 import { panelBottom, panelContent } from "../sidebar/panel.ts";
-import { installPriorityInputListener, parseSgrMouseEvent } from "../sidebar/resize.ts";
+import { installPriorityInputListener, isSidebarInputBlocked, parseSgrMouseEvent } from "../sidebar/resize.ts";
 
 const MAX_VISIBLE_SESSIONS = 5;
 const SESSION_ACTION_WIDTH = 4;
@@ -290,6 +290,12 @@ export class SessionPanel implements Component {
   }
 
   private handleMouseInput(data: string): { consume: true } | undefined {
+    if (isSidebarInputBlocked(this.options.tui)) {
+      this.refreshPressed = this.clearPressed = this.managePressed = false;
+      this.pressedResource = undefined;
+      this.pressedTarget = undefined;
+      return undefined;
+    }
     const mouse = parseSgrMouseEvent(data);
     if (!mouse) return undefined;
 
@@ -304,7 +310,7 @@ export class SessionPanel implements Component {
       if (this.managePressed) {
         this.managePressed = false;
         if (this.isManageSessionsTarget(x, y)) {
-          queueMicrotask(() => { if (!this.disposed) this.options.onOpenManager?.(); });
+          queueMicrotask(() => { if (!this.disposed && !isSidebarInputBlocked(this.options.tui)) this.options.onOpenManager?.(); });
         }
         this.options.tui.requestRender();
         return { consume: true };
@@ -316,7 +322,7 @@ export class SessionPanel implements Component {
         const released = box ? this.resourceButtonAt(box, x, y) : undefined;
         if (released === pressed) {
           queueMicrotask(() => {
-            if (!this.disposed) this.options.onOpenResources(pressed);
+            if (!this.disposed && !isSidebarInputBlocked(this.options.tui)) this.options.onOpenResources(pressed);
           });
         }
         this.options.tui.requestRender();
@@ -326,7 +332,7 @@ export class SessionPanel implements Component {
         this.clearPressed = false;
         if (this.isClearOthersTarget(x, y)) {
           queueMicrotask(() => {
-            if (!this.disposed) this.options.onDeleteOthers();
+            if (!this.disposed && !isSidebarInputBlocked(this.options.tui)) this.options.onDeleteOthers();
           });
         }
         this.options.tui.requestRender();
@@ -336,7 +342,7 @@ export class SessionPanel implements Component {
         this.refreshPressed = false;
         if (this.isRefreshTarget(x, y)) {
           queueMicrotask(() => {
-            if (!this.disposed) this.refresh();
+            if (!this.disposed && !isSidebarInputBlocked(this.options.tui)) this.refresh();
           });
         }
         this.options.tui.requestRender();
@@ -349,7 +355,7 @@ export class SessionPanel implements Component {
       const released = this.targetAt(x, y);
       if (sameTarget(pressed, released) && released) {
         queueMicrotask(() => {
-          if (!this.disposed) this.invoke(released);
+          if (!this.disposed && !isSidebarInputBlocked(this.options.tui)) this.invoke(released);
         });
       }
       this.options.tui.requestRender();

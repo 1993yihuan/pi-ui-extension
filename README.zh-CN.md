@@ -21,7 +21,7 @@ pi install npm:pi-ui-extension
 以 fullscreen 模式启动 Pi，右侧 Sidebar 将自动显示。如需固定版本：
 
 ```bash
-pi install npm:pi-ui-extension@1.8.2
+pi install npm:pi-ui-extension@1.8.3
 ```
 
 固定版本不会自动升级到后续版本。其他安装方式见[安装与更新](#安装与更新)。
@@ -124,9 +124,9 @@ VIEW 下方按调用来源统计工具：
 | 操作 | 命令 |
 | --- | --- |
 | 安装最新 npm 版本 | `pi install npm:pi-ui-extension` |
-| 固定 v1.8.2 | `pi install npm:pi-ui-extension@1.8.2` |
+| 固定 v1.8.3 | `pi install npm:pi-ui-extension@1.8.3` |
 | 从 GitHub 安装 | `pi install git:github.com/1993yihuan/pi-ui-extension` |
-| 固定 Git tag | `pi install git:github.com/1993yihuan/pi-ui-extension@v1.8.2` |
+| 固定 Git tag | `pi install git:github.com/1993yihuan/pi-ui-extension@v1.8.3` |
 | 仅当前项目安装 | `pi install --local npm:pi-ui-extension` |
 | 更新非固定版本 | `pi update --extensions` |
 | 列出已配置扩展 | `pi list` |
