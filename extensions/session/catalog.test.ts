@@ -35,7 +35,9 @@ test("catalog shares unchanged summaries, reads only changed files and tracks di
     const [second, third] = await Promise.all([catalog(root, directory), catalog(root, directory)]);
     assert.equal(reads, 3, "overlapping UI refreshes must not read unchanged histories");
     assert.strictEqual(second.find(session => session.id === a.getSessionId()), first.find(session => session.id === a.getSessionId()));
-    assert.deepEqual(third, second);
+    // Concurrent file reads may finish in either order; the UI sorts these summaries.
+    const byId = (a: { id: string }, b: { id: string }) => a.id.localeCompare(b.id);
+    assert.deepEqual([...third].sort(byId), [...second].sort(byId));
     a.appendMessage({ role: "user", content: "Second question", timestamp: 2000 });
     a.appendSessionInfo("Renamed A");
     const updated = await catalog(root, directory);
