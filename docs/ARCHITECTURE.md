@@ -88,11 +88,11 @@ Output line counts use `line/lines` (or `out` as a narrow-screen fallback), whil
 
 Supported built-in tools, **including Codemode**, can be clicked to expand Pi's **native** details without leaving Compact. Collapsed Codemode shows just the tool name plus nested-call status/count, output size and duration. Its input script line count is intentionally omitted. An expanded Codemode shows the native script, nested tool calls and arguments, output and errors; clicking again restores the two-line Compact summary. The native renderer retains its own expanded state and display logic. Normal still uses Pi's full native rendering; Hidden removes transcript rows without cancelling execution or usage accounting.
 
-**Why a host UI adapter exists:** Pi 1.1.0 and 1.2.0 self-rendered tool components insert a leading blank row before each tool. Public tool renderer APIs cannot control that space. Compact therefore uses a deliberately limited compatibility adapter to remove **exactly one expected blank row** for renderers owned by this extension, and adjusts the mouse y-coordinate so click expansion still targets the right row. It does not change Thinking spacing or third-party, Normal or Hidden layouts.
+**Why a host UI adapter exists:** Pi 1.2.0 and 1.3.0 self-rendered tool components insert a leading blank row before each tool. Public tool renderer APIs cannot control that space. Compact therefore uses a deliberately limited compatibility adapter to remove **exactly one expected blank row** for renderers owned by this extension, and adjusts the mouse y-coordinate so click expansion still targets the right row. It does not change Thinking spacing or third-party, Normal or Hidden layouts.
 
 The adapter:
 
-- Accepts only known Pi 1.1.0/1.2.0 host layouts.
+- Accepts only known Pi 1.2.0/1.3.0 host layouts.
 - Validates expected render/mouse method shape before patching; incompatible or previously patched shapes fail closed.
 - Accounts for the difference between unbundled SDK (`event.y - 1`) and the official minified Pi CLI (`event.y-1`). The bundled CLI may use a different class instance from the project SDK.
 - Marks extension-owned renderers to avoid rewriting every tool, offsets click coordinates, and avoids stacked wrappers across reloads.
@@ -126,6 +126,6 @@ MCP status UI never displays commands, raw endpoint URLs, headers, tokens, envir
 
 ## Dependency and release considerations
 
-The Pi coding-agent and TUI packages are peer dependencies to avoid bundling duplicate host instances. The code still protects against the real CLI's separately bundled UI runtime via explicit version/shape checks. CI tests Node 22.19.0/24 × Pi SDK 1.1.0/1.2.0.
+The Pi coding-agent and TUI packages are peer dependencies to avoid bundling duplicate host instances. The code still protects against the real CLI's separately bundled UI runtime via explicit version/shape checks. CI tests Node 22.19.0/24 × Pi SDK 1.2.0/1.3.0.
 
 Published npm tarballs contain runtime TypeScript sources but not `*.test.ts`. The full test suite and release workflow are described in [Development](DEVELOPMENT.md); there is no need to ship these architecture notes in the npm tarball when the main README links to the GitHub copies.

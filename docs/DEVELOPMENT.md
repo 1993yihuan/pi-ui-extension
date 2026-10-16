@@ -7,7 +7,7 @@ This document contains maintainer-level instructions for `pi-ui-extension`. User
 ## Prerequisites
 
 - Node.js **>= 22.19.0** and npm.
-- Pi Coding Agent with `registerToolRenderer()`. Development uses Pi SDK **1.2.0**, while CI additionally tests **1.1.0**.
+- Pi Coding Agent with `registerToolRenderer()`. Development uses Pi SDK **1.3.0**; CI also verifies the minimum supported **1.2.0**.
 - Pi fullscreen mode for the sidebar. The standard shell command may resolve to a Bun-global or npm-global Pi installation.
 
 ## Checkout and test
@@ -82,12 +82,12 @@ The [CI workflow](../.github/workflows/ci.yml) validates all four combinations o
 
 | Node.js | Pi SDK |
 | --- | --- |
-| 22.19.0 | 1.1.0 |
 | 22.19.0 | 1.2.0 |
-| 24 | 1.1.0 |
+| 22.19.0 | 1.3.0 |
 | 24 | 1.2.0 |
+| 24 | 1.3.0 |
 
-The older Pi SDK leg pins the entire `@earendil-works/pi-*` SDK family to `1.1.0` so transitive semver ranges do not mix incompatible versions. The installed SDK versions are checked before running the complete test suite.
+The minimum-supported Pi SDK leg pins the entire `@earendil-works/pi-*` SDK family to `1.2.0` so transitive semver ranges do not mix incompatible versions. The installed SDK versions are checked before running the complete test suite.
 
 **Do not rely on local SDK-only tests for host UI compatibility.** Global Pi distributions may run a separately bundled class instance with different minified method text. The Compact spacing regression tests cover both the unbundled SDK and bundled CLI; also validate actual `pi -e` behavior when changing guarded host UI interactions. See [Architecture](ARCHITECTURE.md).
 

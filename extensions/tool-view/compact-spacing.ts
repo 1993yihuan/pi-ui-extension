@@ -5,7 +5,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import type { ToolViewMode } from "./types.ts";
 
-const VERIFIED_PI_VERSIONS = new Set(["1.1.0", "1.2.0"]);
+const VERIFIED_PI_VERSIONS = new Set(["1.2.0", "1.3.0"]);
 const OWNER_KEY = Symbol.for("pi-ui-extension:compact-spacing-owned-renderer");
 const GUARD_KEY = Symbol.for("pi-ui-extension:compact-spacing-guard");
 
@@ -44,7 +44,7 @@ export function markCompactSpacingRenderer<T extends ToolRenderers>(renderer: T)
 }
 
 /**
- * Pi 1.1/1.2's ToolExecutionComponent.render() inserts exactly one empty line
+ * Pi 1.2/1.3's ToolExecutionComponent.render() inserts exactly one empty line
  * before every self-rendered tool. Public renderers cannot remove that line.
  * Trim it only for this extension's Compact tools, then offset the mouse y
  * coordinate back to Pi's original layout. Keep native spacing everywhere else.

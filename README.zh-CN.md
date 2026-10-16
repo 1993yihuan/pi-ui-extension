@@ -21,7 +21,7 @@ pi install npm:pi-ui-extension
 以 fullscreen 模式启动 Pi，右侧 Sidebar 将自动显示。如需固定版本：
 
 ```bash
-pi install npm:pi-ui-extension@1.8.1
+pi install npm:pi-ui-extension@1.8.2
 ```
 
 固定版本不会自动升级到后续版本。其他安装方式见[安装与更新](#安装与更新)。
@@ -38,7 +38,7 @@ pi install npm:pi-ui-extension@1.8.1
 
 支持鼠标、滚轮、终端缩放，并在终端空间不足时自动调整显示。
 
-**居中弹窗：** Session 管理、批量清理、重命名、资源/MCP 浏览和 Tool View 模式选择现在统一使用主题色居中浮层。可用 ↑/↓ 和 Enter 选择、Esc 取消；资源详情为可滚动的只读预览。**移入回收站默认选中 Cancel**，侧边栏 `×` 和高级管理都会要求明确确认后才执行删除。兼容 Pi 1.1.0/1.2.0。
+**居中弹窗：** Session 管理、批量清理、重命名、资源/MCP 浏览和 Tool View 模式选择现在统一使用主题色居中浮层。可用 ↑/↓ 和 Enter 选择、Esc 取消；资源详情为可滚动的只读预览。**移入回收站默认选中 Cancel**，侧边栏 `×` 和高级管理都会要求明确确认后才执行删除。要求 Pi 1.2.0+，已验证 1.2.0 和 1.3.0。
 
 ### Sessions 会话与资源管理
 
@@ -99,7 +99,7 @@ Thinking 耗时表示**可观测的思考阶段耗时**，不是整个回复的�
 
 **注意：** 如需在 Compact / Hidden 显示本扩展的 Thinking 摘要，应确保 Pi 原生 `hideThinkingBlock` 为 `false`（或已通过原生操作开启 Thinking 可见性）；否则原生隐藏占位符会优先生效。
 
-Compact 工具间距优化及 Thinking 点击保护已在 **Pi 1.1.0 和 1.2.0** 验证。部分 UI 行为使用限定范围、带版本检查的宿主兼容适配，并不接管工具执行。不支持的宿主布局会回退到 Pi 原生行为。Normal、Hidden 保持各自布局。实现细节见[技术架构](https://github.com/1993yihuan/pi-ui-extension/blob/main/docs/ARCHITECTURE.md)。
+Compact 工具间距优化及 Thinking 点击保护已在 **Pi 1.2.0 和 1.3.0** 验证。部分 UI 行为使用限定范围、带版本检查的宿主兼容适配，并不接管工具执行。不支持的宿主布局会回退到 Pi 原生行为。Normal、Hidden 保持各自布局。实现细节见[技术架构](https://github.com/1993yihuan/pi-ui-extension/blob/main/docs/ARCHITECTURE.md)。
 
 ### Tool / MCP 调用统计
 
@@ -124,9 +124,9 @@ VIEW 下方按调用来源统计工具：
 | 操作 | 命令 |
 | --- | --- |
 | 安装最新 npm 版本 | `pi install npm:pi-ui-extension` |
-| 固定 v1.8.1 | `pi install npm:pi-ui-extension@1.8.1` |
+| 固定 v1.8.2 | `pi install npm:pi-ui-extension@1.8.2` |
 | 从 GitHub 安装 | `pi install git:github.com/1993yihuan/pi-ui-extension` |
-| 固定 Git tag | `pi install git:github.com/1993yihuan/pi-ui-extension@v1.8.1` |
+| 固定 Git tag | `pi install git:github.com/1993yihuan/pi-ui-extension@v1.8.2` |
 | 仅当前项目安装 | `pi install --local npm:pi-ui-extension` |
 | 更新非固定版本 | `pi update --extensions` |
 | 列出已配置扩展 | `pi list` |
@@ -145,7 +145,7 @@ pi --no-extensions -e builtin:mcp -e ./extensions/index.ts --tui-mode fullscreen
 
 ## 兼容性与常见问题
 
-- **运行要求：** 支持 `registerToolRenderer()` 的 Pi Coding Agent；Node.js **>= 22.19.0**。CI 覆盖 Node 22.19.0/24 × Pi 1.1.0/1.2.0。
+- **运行要求：** Pi Coding Agent **>= 1.2.0** 且支持 `registerToolRenderer()`；Node.js **>= 22.19.0**。CI 覆盖 Node 22.19.0/24 × Pi 1.2.0/1.3.0。
 - **Sidebar 不显示：** 检查是否使用 fullscreen 模式，以及终端宽度；普通 TUI 不支持右侧 Sidebar。
 - **Thinking 摘要不出现：** 检查 Pi 原生 `hideThinkingBlock` 和当前 VIEW 模式。
 - **MCP 连接不确定：** 仅在适配器明确报告时确认连接，详细诊断使用 `/mcp`。

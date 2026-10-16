@@ -6,7 +6,7 @@ import {
 import { Markdown, MouseRegion, Text } from "@earendil-works/pi-tui";
 import type { ToolViewMode } from "./types.ts";
 
-const VERIFIED_PI_VERSIONS = new Set(["1.1.0", "1.2.0"]);
+const VERIFIED_PI_VERSIONS = new Set(["1.2.0", "1.3.0"]);
 const GUARD_KEY = Symbol.for("pi-ui-extension:thinking-click-guard");
 
 type Internals = {

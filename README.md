@@ -21,7 +21,7 @@ pi install npm:pi-ui-extension
 Start Pi in fullscreen mode. The right sidebar appears automatically. To install a specific release instead:
 
 ```bash
-pi install npm:pi-ui-extension@1.8.1
+pi install npm:pi-ui-extension@1.8.2
 ```
 
 Pinned packages do not automatically move to newer versions. See [Installation and updates](#installation-and-updates) for Git, local and removal options.
@@ -38,7 +38,7 @@ The sidebar consists of three panels:
 
 Panels support mouse interaction, scrolling, terminal resizing, and smaller terminal windows.
 
-**Centered dialogs:** Session management, bulk cleanup, renaming, resource/MCP browsing, and the Tool View picker now use consistent theme-aware, centered overlays. Select with ↑/↓ and Enter, cancel with Esc; resource details are read-only and scrollable. **Trash confirmation starts at Cancel**; the sidebar `×` and advanced manager both require explicit confirmation before moving a session to trash. Pi 1.1.0/1.2.0 are supported.
+**Centered dialogs:** Session management, bulk cleanup, renaming, resource/MCP browsing, and the Tool View picker now use consistent theme-aware, centered overlays. Select with ↑/↓ and Enter, cancel with Esc; resource details are read-only and scrollable. **Trash confirmation starts at Cancel**; the sidebar `×` and advanced manager both require explicit confirmation before moving a session to trash. Pi 1.2.0+ is required; 1.2.0 and 1.3.0 are tested.
 
 ### Sessions and resource shortcuts
 
@@ -99,7 +99,7 @@ Thinking duration measures the **observable Thinking phase**, not the whole resp
 
 **Important:** Set Pi's native `hideThinkingBlock` to `false` (or enable native Thinking visibility) for the extension's Compact/Hidden Thinking summary to appear. Pi's native hidden placeholder takes precedence otherwise.
 
-Compact's tighter tool spacing and click protection have been verified for **Pi 1.1.0 and 1.2.0**. They use narrowly scoped, version-checked compatibility adapters for host UI components, rather than changing tool execution. Unsupported host layouts fall back to Pi's native behavior. Normal and Hidden retain their own layouts. Implementation details are in [Architecture](https://github.com/1993yihuan/pi-ui-extension/blob/main/docs/ARCHITECTURE.md).
+Compact's tighter tool spacing and click protection have been verified for **Pi 1.2.0 and 1.3.0**. They use narrowly scoped, version-checked compatibility adapters for host UI components, rather than changing tool execution. Unsupported host layouts fall back to Pi's native behavior. Normal and Hidden retain their own layouts. Implementation details are in [Architecture](https://github.com/1993yihuan/pi-ui-extension/blob/main/docs/ARCHITECTURE.md).
 
 ### Tool / MCP usage statistics
 
@@ -124,9 +124,9 @@ For day-to-day usage, prefer **npm**. Git is available for unreleased repository
 | Action | Command |
 | --- | --- |
 | Install latest npm release | `pi install npm:pi-ui-extension` |
-| Pin v1.8.1 | `pi install npm:pi-ui-extension@1.8.1` |
+| Pin v1.8.2 | `pi install npm:pi-ui-extension@1.8.2` |
 | Install from GitHub | `pi install git:github.com/1993yihuan/pi-ui-extension` |
-| Pin a Git tag | `pi install git:github.com/1993yihuan/pi-ui-extension@v1.8.1` |
+| Pin a Git tag | `pi install git:github.com/1993yihuan/pi-ui-extension@v1.8.2` |
 | Install only for the current project | `pi install --local npm:pi-ui-extension` |
 | Update unpinned packages | `pi update --extensions` |
 | List installed packages | `pi list` |
@@ -145,7 +145,7 @@ pi --no-extensions -e builtin:mcp -e ./extensions/index.ts --tui-mode fullscreen
 
 ## Compatibility and troubleshooting
 
-- **Requirements:** Pi Coding Agent supporting `registerToolRenderer()`; Node.js **>= 22.19.0**. CI tests Node 22.19.0/24 with Pi 1.1.0/1.2.0.
+- **Requirements:** Pi Coding Agent **>= 1.2.0** with `registerToolRenderer()`; Node.js **>= 22.19.0**. CI tests Node 22.19.0/24 with Pi 1.2.0/1.3.0.
 - **No sidebar:** Confirm fullscreen mode and terminal width; regular TUI is not supported for the sidebar.
 - **Missing Thinking summary:** Check Pi's native `hideThinkingBlock` flag and the selected VIEW mode.
 - **Uncertain MCP connection:** Only adapter-reported connections are confirmed; use `/mcp` for diagnostics.

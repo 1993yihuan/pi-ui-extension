@@ -31,7 +31,7 @@ function message(...content: Array<{ type: string; thinking?: string; text?: str
 }
 
 test("Compact Thinking duration does not disappear when clicked; Normal keeps native click behavior", () => {
-  assert.ok(["1.1.0", "1.2.0"].includes(VERSION), `compatibility check required for Pi ${VERSION}`);
+  assert.ok(["1.2.0", "1.3.0"].includes(VERSION), `compatibility check required for Pi ${VERSION}`);
   initTheme("dark");
   const prototype = AssistantMessageComponent.prototype;
   const initial = prototype.updateContent;
