@@ -94,6 +94,18 @@ Changes limited to root README files, `LICENSE`, and Markdown/images under `docs
 
 Configure branch protection to require **`CI result`**. This check runs for both routes and fails if any required job fails, is cancelled, or is unexpectedly skipped. Do not require individual matrix jobs, which are intentionally skipped for documentation-only commits. Superseded CI runs are cancelled; release runs use a separate package-wide queue.
 
+When editing workflow helpers, their focused regression checks can be run without installing the SDK:
+
+```bash
+node --test scripts/ci.test.mjs scripts/release.test.mjs
+```
+
+For workflow syntax checks with `actionlint` 1.7.12, ignore only its unsupported `concurrency.queue` key diagnostic; the queue itself follows the GitHub specification linked below:
+
+```bash
+actionlint -ignore '^unexpected key "queue" for "concurrency" section\.'
+```
+
 **Do not rely on local SDK-only tests for host UI compatibility.** Global Pi distributions may run a separately bundled class instance with different minified method text. The Compact spacing regression tests cover both the unbundled SDK and bundled CLI; also validate actual `pi -e` behavior when changing guarded host UI interactions. See [Architecture](ARCHITECTURE.md).
 
 ## Multiple Pi installations
