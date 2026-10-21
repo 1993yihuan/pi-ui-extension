@@ -57,14 +57,22 @@ Pi 1.2.0 can emit `before_agent_start` for user prompts and idle custom-triggere
 The VIEW selector (`Normal`, `Compact`, `Hidden`) is shared across tool transcript and assistant Thinking presentation; there is no second Thinking selector or persistence file. The mode is stored in `tool-view-mode.json`, and changing it refreshes previously rendered content in the current session.
 
 - **Normal** keeps native tool transcripts and complete Thinking.
-- **Compact** shows terminal-wrapped suffix of the latest **seven** Thinking lines while streaming, then `Thinking · 5s` (for example) when completed. Supported built-in tools use concise summaries.
-- **Hidden** suppresses tool transcripts and never renders Thinking body text, including during streaming; it shows only status and measured duration when available.
+- **Compact** defaults to a collapsed title: a live Braille indicator with `Thinking` while the run streams, then `+ Thought · 1.3s` (or `−` while expanded). Supported built-in tools use concise summaries.
+- **Hidden** suppresses tool transcripts and never renders Thinking body text, including during streaming; it shows only a read-only title with the measured time when available.
 
-Timing uses Pi's observable `thinking_start` and `thinking_end` events for the Thinking segment wall clock. It does **not** claim to measure a model's private internal work or its entire response time. Streaming durations have a `~` indicator and update as new content arrives. After completion, measured time stays fixed. Historical sessions or missing events with no trustworthy duration display just `Thinking`—no invented timer. A narrow terminal may omit the time suffix rather than wrap it.
+Compact titles are the only click target. A title click toggles that block; body clicks, the message's own left/right output padding, the wheel, and other buttons never toggle it, because the extension owns the region child instead of Pi's native `thinkingVisibilityOverrides` handler. An expanded block renders the complete Thinking text through a Markdown component rebuilt from the native child's theme and default text style, minus this extension's transformer, then prefixes every non-blank row with `theme.quoteBorder("│ ")`. Paragraph breaks stay bare.
 
-Pi's native `hideThinkingBlock=true` short-circuits the extension's Markdown transformation. For Compact/Hidden Thinking summaries to appear, set native visibility to **on** (`hideThinkingBlock=false`, or Pi's corresponding control).
+Horizontal alignment follows Pi rather than the extension: the message output padding is read from the native Markdown child (its `paddingX`, which is `AssistantMessageComponent.outputPad`), validated as a finite non-negative integer and clamped, and used for the title, for the quote bar, and for the reserved right margin. The title therefore starts on the same column as the reply text, and body text clears the padding plus the two bar columns. If that padding cannot be read, a safe default of 1 is assumed. As a final safety net every rendered row — header, blank separator, and body — is clipped to the terminal width, so even a one-column terminal with double-width CJK or emoji cannot overflow.
 
-Compact/Hidden Thinking summaries are read-only on verified hosts: a narrow, version-checked click guard prevents the native click-to-hide handler turning the summary into `Thinking...`. Normal keeps native mouse behavior. The transformation and display mechanisms rely on Pi's public `registerMarkdownTransformer()` and `setHiddenThinkingLabel()` APIs, with the limited click compatibility guard described below. Unknown Pi structures fall back to native interaction.
+Expansion is stored in a `WeakMap` keyed by the `AssistantMessageComponent` instance and the Thinking run index. It therefore survives text deltas, `invalidate()`, resize, and the end of thinking, stays independent per message and per run, and never keys off body text. Adjacent Thinking blocks still merge into one run, exactly as Pi groups them.
+
+Timing uses Pi's observable `thinking_start` and `thinking_end` events for the Thinking segment wall clock. It does **not** claim to measure a model's private internal work or its entire response time. `ThinkingTiming.status()` reports `complete` as soon as an explicit `thinking_end` arrives, even while the assistant message is still streaming, so the title settles before `message_end`. Phase and timing trust are tracked separately: an ended run is complete even when no time could be trusted (missing start, empty run, ambiguous content), while the duration is only shown for a measured run. Anything below a minute keeps one decimal (`1.3s`, `10.0s`); a minute or more uses the compact `1m05s` form. Historical sessions, ambiguous identical content, and interrupted runs report `complete` with no duration rather than inventing a timer, and the label then shows just `+ Thought`. A narrow terminal may truncate the title rather than wrap it.
+
+Pi's native `hideThinkingBlock=true` short-circuits the extension's Markdown transformation. For Compact/Hidden Thinking titles to appear, set native visibility to **on** (`hideThinkingBlock=false`, or Pi's corresponding control). A region Pi already renders as its hidden `Text` label is left untouched, so `Ctrl+T` keeps its native behavior, and the same switch (plus Pi's per-run override map) prevents the extra live title for a run that is still empty.
+
+Pi skips a Thinking run with no text yet, so a run that has only emitted `thinking_start` would render nothing. The adapter appends one live title for that trailing empty run, using the run index the real region will receive, so a user who opens the empty title still sees the body once the first delta arrives. The title is only added when the whole contiguous trailing run is empty (an empty block next to a rendered run never adds a second title) and when the run's phase is still `streaming`; an empty run that already ended, or a run the message has moved past, leaves no title behind.
+
+Normal keeps Pi's native body and click handler. The display uses Pi's public `registerMarkdownTransformer()` and `setHiddenThinkingLabel()` APIs. The component adapter is version- and shape-gated: it only rewrites region children of components built with this extension's transformer, refuses unknown Markdown/region shapes, unwraps its own previous patch generation on `/reload` (including the older click-guard generation), and lets unknown Pi builds fall back to the title-only transformer and native interaction. Installation fails closed: when a marker is present but `updateContent` is no longer the patch that marker recorded, another patch sits on top, so nothing is unwrapped, nothing is re-wrapped, and `installCompactThinkingAdapter()` returns `false` rather than stacking onto or breaking someone else's patch.
 
 VIEW controls display only: reasoning settings, transcript source content, tool execution and stored session data are not altered.
 
@@ -79,7 +87,7 @@ It never replaces tool definitions or execution functions. Special native render
 In Compact, supported tools use a dimmed result branch, consistent indentation and `›`/`⌄` chevrons:
 
 ```text
-Thinking · 0.7s
++ Thought · 0.7s
   ›  codemode
     ⎿  1 call · 1 ok │ 59 lines · 85ms
   ›  bash  git status

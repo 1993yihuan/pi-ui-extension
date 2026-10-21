@@ -81,15 +81,15 @@ SESSIONS 底部提供四类资源快捷入口：
 | 模式 | 工具输出 | Thinking |
 | --- | --- | --- |
 | **Normal** | 完整工具输出与详情 | 完整 Thinking 正文 |
-| **Compact**（默认） | 缩进紧凑摘要 | 流式保留最近 **7 行终端换行文本**；结束后显示 `Thinking · 5s` |
-| **Hidden** | 隐藏工具输出 | 只显示状态及测得的耗时，不显示 Thinking 正文 |
+| **Compact**（默认） | 缩进紧凑摘要 | 默认折叠为 `+ Thought · 1.3s` 这类标题；点击标题可展开完整 Thinking 正文 |
+| **Hidden** | 隐藏工具输出 | 只读展示状态与测得的耗时，不显示 Thinking 正文 |
 
 点击边栏按钮、按 **Ctrl+Shift+O**，或输入 `/tool-view normal|compact|hidden|status` 切换。选择会自动保存，并同步更新当前会话中已经显示的消息。显示模式不影响工具执行和调用统计。
 
 Compact 支持 `read`、`bash`、`edit`、`write`、`grep`、`find`、`ls` 和 `codemode`。每次调用独立显示摘要，包括输出数量、可用的耗时，以及运行中 / 失败状态：
 
 ```text
-Thinking · 0.7s
++ Thought · 0.7s
   ›  codemode
     ⎿  1 call · 1 ok │ 59 lines · 85ms
   ›  bash  git status
@@ -98,9 +98,20 @@ Thinking · 0.7s
 
 点击 `›` 可展开受支持工具的详情，包括 Codemode 脚本、内嵌调用、输出和错误；点击 `⌄` 收起并返回 Compact 摘要。第三方工具保留各自的显示方式。
 
-Thinking 耗时表示思考阶段的用时，而非整个回复的用时。流式时间带有 `~` 标记；恢复历史会话等无法计时的情况下，只显示 `Thinking`。Compact / Hidden 的 Thinking 状态行只读，点击不会展开正文。
+Compact 的 Thinking 默认折叠。点击标题即可展开或收起，思考中与完成后都可以：
 
-**Thinking 显示设置：** 请开启 Pi 原生 Thinking 可见性（`hideThinkingBlock: false`），以显示 Compact / Hidden 的 Thinking 摘要。
+| 状态 | 标题 | 正文 |
+| --- | --- | --- |
+| 思考中，折叠 | 动态指示 + `Thinking` | 隐藏 |
+| 思考中，展开 | 动态指示 + `Thinking` | 完整显示，随输出实时更新 |
+| 已完成，折叠 | `+ Thought · 1.3s` | 隐藏 |
+| 已完成，展开 | `− Thought · 1.3s` | 完整显示 |
+
+展开后的正文按终端宽度换行，带灰色竖线并保留段落空行。各段思考可以独立展开，展开状态在流式更新、终端缩放和思考完成后保持。点击正文、标题周围的空白、滚轮滚动和其他鼠标按钮都不会切换展开状态。
+
+耗时只计算思考阶段，不包含整条回复的其他用时。不足一分钟保留一位小数，更长的用时采用 `1m05s` 形式。恢复历史会话等无法可靠计时的情况下，标题省略耗时。尚无正文时也可显示进行中标题。Hidden 始终隐藏正文。
+
+**Thinking 显示设置：** 请开启 Pi 原生 Thinking 可见性（`hideThinkingBlock: false`），以显示 Compact / Hidden 的 Thinking 标题。Pi 自带的隐藏开关（`Ctrl+T`）保持原生作用。
 
 ### Tool / MCP 调用统计
 
@@ -123,9 +134,9 @@ VIEW 下方按调用来源分组：
 | 操作 | 命令 |
 | --- | --- |
 | 安装最新 npm 版本 | `pi install npm:pi-ui-extension` |
-| 固定 v1.8.3 | `pi install npm:pi-ui-extension@1.8.3` |
+| 固定 v1.9.0 | `pi install npm:pi-ui-extension@1.9.0` |
 | 从 GitHub 安装 | `pi install git:github.com/1993yihuan/pi-ui-extension` |
-| 固定 Git tag | `pi install git:github.com/1993yihuan/pi-ui-extension@v1.8.3` |
+| 固定 Git tag | `pi install git:github.com/1993yihuan/pi-ui-extension@v1.9.0` |
 | 仅当前项目安装 | `pi install --local npm:pi-ui-extension` |
 | 更新非固定版本 | `pi update --extensions` |
 | 列出已配置扩展 | `pi list` |
@@ -137,7 +148,7 @@ VIEW 下方按调用来源分组：
 ## 常见问题
 
 - **边栏不显示：** 以 fullscreen 模式启动 Pi；必要时增大终端宽度。
-- **Thinking 摘要不出现：** 开启 Pi 原生 Thinking 可见性，并检查当前 VIEW 模式。
+- **Thinking 标题不出现：** 开启 Pi 原生 Thinking 可见性，并检查当前 VIEW 模式。
 - **MCP 连接不确定：** 使用 `/mcp` 进行诊断或登录。
 - **Pi 版本异常：** 用 `pi --version` 和 `pi list` 确认当前版本及已安装的扩展。
 

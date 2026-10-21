@@ -81,15 +81,15 @@ One selector controls tool output and Thinking. The default is **Compact**.
 | Mode | Tools | Thinking |
 | --- | --- | --- |
 | **Normal** | Full tool output and details | Full Thinking text |
-| **Compact** (default) | Compact, indented summaries | Latest **7 terminal-wrapped lines** while streaming; `Thinking · 5s` when complete |
-| **Hidden** | Tool output hidden | Status and measured time only; no Thinking body |
+| **Compact** (default) | Compact, indented summaries | Collapsed title such as `+ Thought · 1.3s`; click the title to read the full Thinking text |
+| **Hidden** | Tool output hidden | Read-only status and measured time; no Thinking body |
 
 Switch with the sidebar buttons, **Ctrl+Shift+O**, or `/tool-view normal|compact|hidden|status`. The selection is saved and also updates existing messages in the current session. Display modes do not affect tool execution or usage statistics.
 
 Compact supports `read`, `bash`, `edit`, `write`, `grep`, `find`, `ls`, and `codemode`. Each call has its own summary with output counts, elapsed time when available, and running/failure status:
 
 ```text
-Thinking · 0.7s
++ Thought · 0.7s
   ›  codemode
     ⎿  1 call · 1 ok │ 59 lines · 85ms
   ›  bash  git status
@@ -98,9 +98,20 @@ Thinking · 0.7s
 
 Click `›` to expand a supported tool's details, including Codemode scripts, nested calls, output, and errors. Click `⌄` to return to the Compact summary. Third-party tools retain their own display.
 
-Thinking time covers the Thinking phase rather than the whole response. Live time has a `~` prefix. If timing is unavailable, such as in restored history, the label shows only `Thinking`. Compact/Hidden Thinking status lines are read-only; clicking them does not expand the body.
+Compact Thinking starts collapsed. Click the title to expand or collapse it while the model is thinking or after it finishes:
 
-**Thinking visibility:** Enable Pi's native Thinking visibility (`hideThinkingBlock: false`) for Compact/Hidden Thinking summaries to appear.
+| State | Title | Body |
+| --- | --- | --- |
+| Thinking, collapsed | Animated indicator + `Thinking` | Hidden |
+| Thinking, expanded | Animated indicator + `Thinking` | Complete text, updated as it streams |
+| Finished, collapsed | `+ Thought · 1.3s` | Hidden |
+| Finished, expanded | `− Thought · 1.3s` | Complete text |
+
+Expanded text wraps to the terminal width with grey quote bars and paragraph spacing. Each block opens independently and stays open through streaming updates, terminal resizing, and completion. Clicking the body or surrounding padding, scrolling, and other mouse buttons do not toggle it.
+
+Elapsed time measures the Thinking phase, not the whole response. Values below a minute keep one decimal; longer values use `1m05s`. When timing is unavailable, such as in restored history, the title omits it. A live title can appear before the first text arrives. Hidden always keeps the body hidden.
+
+**Thinking visibility:** Enable Pi's native Thinking visibility (`hideThinkingBlock: false`) for Compact/Hidden Thinking titles to appear. Pi's own hide control (`Ctrl+T`) keeps its native behavior.
 
 ### Tool / MCP usage statistics
 
@@ -123,9 +134,9 @@ A compact footer displays the current working directory and Git branch, when ava
 | Action | Command |
 | --- | --- |
 | Install latest npm release | `pi install npm:pi-ui-extension` |
-| Pin v1.8.3 | `pi install npm:pi-ui-extension@1.8.3` |
+| Pin v1.9.0 | `pi install npm:pi-ui-extension@1.9.0` |
 | Install from GitHub | `pi install git:github.com/1993yihuan/pi-ui-extension` |
-| Pin a Git tag | `pi install git:github.com/1993yihuan/pi-ui-extension@v1.8.3` |
+| Pin a Git tag | `pi install git:github.com/1993yihuan/pi-ui-extension@v1.9.0` |
 | Install only for the current project | `pi install --local npm:pi-ui-extension` |
 | Update unpinned packages | `pi update --extensions` |
 | List installed packages | `pi list` |
@@ -137,7 +148,7 @@ Project-local installation requires Pi to trust the project. Pinned versions do 
 ## Common questions
 
 - **No sidebar:** Start Pi in fullscreen mode and widen the terminal if needed.
-- **Missing Thinking summary:** Enable Pi's native Thinking visibility and check the selected VIEW mode.
+- **Missing Thinking title:** Enable Pi's native Thinking visibility and check the selected VIEW mode.
 - **Uncertain MCP connection:** Open `/mcp` for diagnostics and sign-in.
 - **Unexpected Pi version:** Check `pi --version` and `pi list` to confirm the active version and installed packages.
 

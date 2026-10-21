@@ -201,7 +201,9 @@ test("one Thinking followed by multiple codemode calls preserves independent too
     const { transformThinkingText } = await import("./thinking.ts");
     initTheme("dark");
     const thinking = new AssistantMessageComponent(undefined, false, getMarkdownTheme(), "Thinking...", 1, [
-      (text, ctx) => transformThinkingText(text, ctx, "compact", () => ({ ms: 3000, approximate: false })),
+      (text, ctx) => transformThinkingText(text, ctx, "compact", () => ({
+        phase: "complete", duration: { ms: 3000, approximate: false },
+      })),
     ]);
     thinking.updateContent({
       role: "assistant", stopReason: "stop", content: [{ type: "thinking", thinking: "Private reasoning" }],
@@ -223,7 +225,7 @@ test("one Thinking followed by multiple codemode calls preserves independent too
       details: { calls: [{ status: "ok" }, { status: "ok" }] }, durationMs: 1900, isError: false,
     } as any, false);
     const combined = [thinking, first, second].map((c) => stripAnsi(c.render(110).join("\n"))).join("\n");
-    assert.equal((combined.match(/Thinking · 3s/g) ?? []).length, 1);
+    assert.equal((combined.match(/\+ Thought · 3\.0s/g) ?? []).length, 1);
     assert.equal((combined.match(/  ›  codemode/g) ?? []).length, 2);
     assert.match(combined, /1 call · 1 ok/);
     assert.match(combined, /2 calls · 2 ok/);

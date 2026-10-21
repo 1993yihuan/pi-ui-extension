@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { performance } from "node:perf_hooks";
 import type { MessageUpdateEvent } from "@earendil-works/pi-coding-agent";
+import type { ThinkingStatus } from "./thinking.ts";
 
 const MAX_COMPLETED = 256;
 const digest = (text: string) => createHash("sha256").update(text).digest("hex");
@@ -36,12 +37,15 @@ function runText(content: readonly ThinkingBlock[], index: number): { start: num
 export class ThinkingTiming {
   private active: ActiveRun | undefined;
   private completed = new Map<string, number | null>();
+  /** Runs whose explicit end arrived without a measurable start. Phase only. */
+  private ended = new Set<string>();
 
   constructor(private readonly now: () => number = () => performance.now()) {}
 
   reset(): void {
     this.active = undefined;
     this.completed.clear();
+    this.ended.clear();
   }
 
   endMessage(): void {
@@ -62,7 +66,14 @@ export class ThinkingTiming {
           startIndex: current.start, lastIndex: event.contentIndex,
           startedAt: time, text: current.text, ended: false,
         };
+      } else if (this.active.ended && event.contentIndex === this.active.lastIndex) {
+        // The same block started again after ending: a new run, new stopwatch.
+        this.active = {
+          startIndex: current.start, lastIndex: event.contentIndex,
+          startedAt: time, text: current.text, ended: false,
+        };
       } else {
+        // A further block of the same, still-open run keeps its first start.
         this.active.lastIndex = event.contentIndex;
         this.active.text = current.text;
         this.active.ended = false;
@@ -70,13 +81,23 @@ export class ThinkingTiming {
       return;
     }
     if (!this.active || this.active.startIndex !== current.start ||
-        this.active.lastIndex !== event.contentIndex || time < this.active.startedAt) return;
+        this.active.lastIndex !== event.contentIndex || time < this.active.startedAt) {
+      // An end event without a matching start still tells us the run finished,
+      // so the title settles instead of spinning forever; it stays timeless.
+      if (event.type === "thinking_end") this.rememberEnded(current.text);
+      return;
+    }
     this.active.text = current.text;
-    if (event.type !== "thinking_end" || !current.text) return;
+    if (event.type !== "thinking_end") return;
 
     this.active.ended = true;
+    // An empty run has nothing to time, but its phase is now complete.
+    if (!current.text) return;
     const ms = time - this.active.startedAt;
-    if (!Number.isFinite(ms) || ms < 0) return;
+    if (!Number.isFinite(ms) || ms < 0) {
+      this.rememberEnded(current.text);
+      return;
+    }
     const key = digest(current.text);
     if (this.completed.has(key)) {
       // Identical Thinking content from another response cannot be
@@ -88,6 +109,34 @@ export class ThinkingTiming {
         this.completed.delete(this.completed.keys().next().value!);
       }
     }
+  }
+
+  private rememberEnded(text: string): void {
+    if (!text) return;
+    const key = digest(text);
+    if (this.ended.has(key)) return;
+    this.ended.add(key);
+    if (this.ended.size > MAX_COMPLETED) this.ended.delete(this.ended.keys().next().value!);
+  }
+
+  /**
+   * Display phase for one Thinking run. Phase and timing trust are separate:
+   * an explicit thinking_end ends the run even while the assistant message
+   * keeps streaming, so the title settles before message_end, while an
+   * unmeasured or ambiguous run simply shows no time.
+   */
+  status(text: string, streaming: boolean): ThinkingStatus {
+    const active = this.active;
+    // A live run wins over any historical record for identical text.
+    if (streaming && active && !active.ended && active.text === text) return { phase: "streaming" };
+    const measured = this.completed.get(digest(text));
+    if (typeof measured === "number") {
+      return { phase: "complete", duration: { ms: measured, approximate: false } };
+    }
+    // null marks ambiguous duplicate content; ended marks an end seen without a start.
+    if (measured === null || this.ended.has(digest(text))) return { phase: "complete" };
+    if (active && active.text === text) return { phase: "complete" };
+    return { phase: streaming ? "streaming" : "complete" };
   }
 
   duration(text: string, streaming: boolean): { ms: number; approximate: boolean } | undefined {

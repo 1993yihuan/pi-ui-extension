@@ -15,7 +15,7 @@ import { TOOL_VIEW_MODES, isToolViewMode, type ToolViewMode } from "./types.ts";
 import { renderCodemodeCompactCall, renderCodemodeCompactResult, singleLine } from "./codemode-compact.ts";
 import { transformThinkingText } from "./thinking.ts";
 import { ThinkingTiming } from "./thinking-timing.ts";
-import { installThinkingClickGuard } from "./thinking-click-guard.ts";
+import { installCompactThinkingAdapter } from "./thinking-adapter.ts";
 import { createDialogUI } from "../dialogs/index.ts";
 import { compactCallPrefix, withCompactResultBranch, withNativeChevron } from "./chevron.ts";
 import { installCompactSpacingGuard, markCompactSpacingRenderer } from "./compact-spacing.ts";
@@ -191,7 +191,9 @@ export async function installToolViewController(
   const supportsThinking = typeof pi.registerMarkdownTransformer === "function";
   const thinkingTiming = new ThinkingTiming();
   // Undo the v1.2.8 in-memory click adapter when upgrading with Pi's /reload.
-  // Do not install any new mouse adapter or change Pi's native click handler.
+  // The current adapter owns only the Thinking region child of components built
+  // with this extension's transformer; every other component, including Pi's
+  // own Thinking click handler, keeps its native behavior.
   const legacyKey = Symbol.for("pi-ui-extension:thinking-click-adapter");
   const componentPrototype = AssistantMessageComponent.prototype as unknown as
     Record<symbol | "updateContent", any>;
@@ -202,13 +204,12 @@ export async function installToolViewController(
     componentPrototype.updateContent = legacy.original;
     delete componentPrototype[legacyKey];
   }
+  const thinkingStatus = (text: string, streaming: boolean) => thinkingTiming.status(text, streaming);
   const thinkingTransformer: Parameters<ExtensionAPI["registerMarkdownTransformer"]>[0] =
-    (markdown, context) => transformThinkingText(
-      markdown, context, mode, (text, streaming) => thinkingTiming.duration(text, streaming),
-    );
+    (markdown, context) => transformThinkingText(markdown, context, mode, thinkingStatus);
   if (supportsThinking) {
     pi.registerMarkdownTransformer(thinkingTransformer);
-    installThinkingClickGuard(() => mode, thinkingTransformer);
+    installCompactThinkingAdapter(() => mode, thinkingTransformer, { status: thinkingStatus });
   }
   let nativeThinkingWarningShown = false;
   const warnNativeThinkingHidden = (ctx: ExtensionContext): void => {

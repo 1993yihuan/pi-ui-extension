@@ -1,119 +1,228 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { visibleWidth } from "@earendil-works/pi-tui";
-import { transformThinkingText } from "./thinking.ts";
+import type { MarkdownTransformContext } from "@earendil-works/pi-coding-agent";
+import { stripTerminalSequences, visibleWidth, type Component, type TuiMouseEvent } from "@earendil-works/pi-tui";
+import { initTheme } from "../../node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/theme/theme.js";
+import {
+  decorateThinkingBody,
+  formatThinkingDuration,
+  renderThinkingHeader,
+  thinkingIndicatorFrame,
+  thinkingRuns,
+  ThinkingBlockView,
+  transformThinkingText,
+  type ThinkingColors,
+  type ThinkingStatus,
+} from "./thinking.ts";
 
-test("one Tool View mode controls both Thinking and tool transcript presentation", () => {
-  const source = [
-    "Old first line", "Old second line", "Older discarded text",
-    "Old fourth line", "Old fifth line",
-    "Recent first", "Recent second", "Recent third", "Recent fourth",
-    "Recent fifth", "Recent sixth", "Recent seventh",
-  ].join("\n");
-  const streaming = { messageType: "assistant-thinking", isStreaming: true, availableWidth: 30 } as const;
-  const done = { ...streaming, isStreaming: false };
+/** Identity styling keeps these expectations about text, not ANSI codes. */
+const PLAIN: ThinkingColors = {
+  accent: (text) => text,
+  indicator: (text) => text,
+  label: (text) => text,
+  bold: (text) => text,
+  bar: (text) => text,
+};
 
-  assert.equal(transformThinkingText(source, streaming, "normal"), source);
-  assert.equal(transformThinkingText(source, done, "normal"), source);
-  assert.equal(transformThinkingText(source, streaming, "hidden"), "Thinking…");
-  assert.equal(transformThinkingText(source, done, "hidden"), "Thinking");
-  const compact = transformThinkingText(source, streaming, "compact");
-  assert.doesNotMatch(compact, /Old first|Old second|Older discarded/);
-  assert.match(compact, /Recent first/);
-  assert.match(compact, /Recent seventh/);
-  assert.equal(compact.split("\n").length, 8, "status plus seven recent wrapped rows");
-  assert.equal(compact.split("\n").slice(1).length, 7);
-  assert.ok(compact.split("\n").every((line) => visibleWidth(line) <= 30));
-  assert.equal(transformThinkingText(source, done, "compact"), "Thinking");
-  assert.equal(transformThinkingText(source, { ...streaming, messageType: "assistant" }, "hidden"), source);
-  assert.equal(transformThinkingText(source, { ...streaming, messageType: "user" }, "compact"), source);
+const THINKING: MarkdownTransformContext = { messageType: "assistant-thinking", isStreaming: false, availableWidth: 48 };
+const LIVE: MarkdownTransformContext = { ...THINKING, isStreaming: true };
+const LIVE_TITLE = /^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏] Thinking$/;
+const STREAMING: ThinkingStatus = { phase: "streaming" };
+const measured = (ms: number): ThinkingStatus => ({ phase: "complete", duration: { ms, approximate: false } });
 
-  const long = "abcdef ".repeat(180);
-  const tail = transformThinkingText(long, { ...streaming, availableWidth: 15 }, "compact");
-  assert.equal(tail.split("\n").length, 8, "a long paragraph keeps seven terminal-wrapped rows plus the header");
-  assert.ok(tail.split("\n").every((line) => visibleWidth(line) <= 15));
-
-  const wrapped = "OLD_PRIVATE_START\n" + "word ".repeat(40) + "\nLAST_VISIBLE";
-  const narrow = transformThinkingText(wrapped, { ...streaming, availableWidth: 12 }, "compact");
-  assert.equal(narrow.split("\n").length, 8, "wrap boundaries, not original newlines, determine the last seven rows");
-  assert.doesNotMatch(narrow, /OLD_PRIVATE_START/);
-  assert.match(narrow, /LAST_VISIBLE$/);
-  assert.ok(narrow.split("\n").every((line) => visibleWidth(line) <= 12));
+test("consecutive Thinking blocks form one run and non-thinking blocks split runs", () => {
+  const runs = thinkingRuns([
+    { type: "thinking", thinking: "  first  " },
+    { type: "thinking", thinking: "second" },
+    { type: "text", text: "answer" },
+    { type: "thinking", thinking: "third" },
+    { type: "thinking", thinking: "   " },
+  ]);
+  assert.deepEqual(runs, [
+    { startIndex: 0, text: "first\n\nsecond" },
+    { startIndex: 3, text: "third" },
+  ]);
+  assert.deepEqual(thinkingRuns(undefined), []);
+  assert.deepEqual(thinkingRuns([{ type: "thinking", thinking: "" }]), []);
 });
 
-test("Thinking elapsed labels come from measured intervals and fit narrow terminals", () => {
-  const done = { messageType: "assistant-thinking", isStreaming: false, availableWidth: 48 } as const;
-  const live = { ...done, isStreaming: true };
-  const measured = () => ({ ms: 5149, approximate: false });
-  const inProgress = () => ({ ms: 5149, approximate: true });
-  assert.equal(transformThinkingText("private details", done, "compact", measured), "Thinking · 5s");
-  assert.equal(transformThinkingText("private details", done, "compact"), "Thinking");
-  assert.equal(transformThinkingText("private details", done, "normal", measured), "private details");
-  assert.equal(transformThinkingText("private details", done, "hidden", measured), "Thinking · 5s");
-  assert.equal(transformThinkingText("private details", done, "hidden"), "Thinking");
-  assert.equal(transformThinkingText("private details", live, "hidden", inProgress), "Thinking… · ~5s");
-  assert.equal(transformThinkingText("private details", live, "hidden"), "Thinking…");
-  const output = transformThinkingText("one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine", live, "compact", inProgress);
-  assert.match(output, /^Thinking… · ~5s\n/);
-  assert.doesNotMatch(output, /\none\n|\ntwo\n/);
-  assert.match(output, /nine$/);
-  assert.equal(output.split("\n").length, 8, "status plus seven thinking rows");
+test("Thinking time keeps one decimal under a minute and switches to m:ss above it", () => {
+  assert.equal(formatThinkingDuration({ ms: 1300, approximate: false }), "1.3s");
+  assert.equal(formatThinkingDuration({ ms: 540, approximate: false }), "0.5s");
+  assert.equal(formatThinkingDuration({ ms: 40, approximate: false }), "0.1s");
+  assert.equal(formatThinkingDuration({ ms: 9990, approximate: false }), "10.0s");
+  assert.equal(formatThinkingDuration({ ms: 59900, approximate: false }), "59.9s",
+    "the last full sub-minute value stays a decimal second");
+  assert.equal(formatThinkingDuration({ ms: 65000, approximate: false }), "1m05s");
+  assert.equal(formatThinkingDuration({ ms: 60000, approximate: false }), "1m00s");
+  assert.equal(formatThinkingDuration({ ms: Number.NaN, approximate: false }), "");
+  assert.equal(formatThinkingDuration({ ms: -1, approximate: false }), "");
+  assert.equal(formatThinkingDuration(undefined), "");
+});
 
-  assert.equal(transformThinkingText("private details", done, "compact", () => ({ ms: 540, approximate: false })),
-    "Thinking · 0.5s");
-  assert.equal(transformThinkingText("private details", done, "hidden", () => ({ ms: 540, approximate: false })),
-    "Thinking · 0.5s");
-  assert.equal(transformThinkingText("private details", done, "compact", () => ({ ms: 65000, approximate: false })),
-    "Thinking · 1m05s");
-  for (const width of [5, 8, 12, 16, 18, 24, 26, 27, 34, 72]) {
-    for (const ctx of [done, live]) {
-      for (const mode of ["compact", "hidden"] as const) {
-        const lines = transformThinkingText("a long sentence ".repeat(40), {
-          ...ctx, availableWidth: width,
-        }, mode, measured).split("\n");
-        assert.ok(lines.length <= (mode === "hidden" ? 1 : 8));
-        assert.ok(lines.every((line) => visibleWidth(line) <= width), `${mode} overflow at width ${width}`);
+test("Thinking titles cover the live and completed states", () => {
+  assert.equal(renderThinkingHeader({ status: STREAMING, colors: PLAIN, disclosure: true, now: 0 }), "⠋ Thinking");
+  assert.equal(renderThinkingHeader({ status: STREAMING, colors: PLAIN, disclosure: true, expanded: true, now: 0 }),
+    "⠋ Thinking", "an expanded live run keeps the indicator");
+  assert.notEqual(thinkingIndicatorFrame(0), thinkingIndicatorFrame(150), "the indicator follows the clock");
+  assert.equal(renderThinkingHeader({ status: measured(1300), colors: PLAIN, disclosure: true }), "+ Thought · 1.3s");
+  assert.equal(renderThinkingHeader({ status: measured(1300), colors: PLAIN, disclosure: true, expanded: true }),
+    "− Thought · 1.3s");
+  assert.equal(renderThinkingHeader({ status: measured(1300), colors: PLAIN }), "Thought · 1.3s",
+    "Hidden has no disclosure glyph");
+  assert.equal(renderThinkingHeader({ status: { phase: "complete" }, colors: PLAIN, disclosure: true }), "+ Thought",
+    "unmeasured history shows the label without a fabricated time");
+  const narrow = renderThinkingHeader({ status: measured(1300), colors: PLAIN, disclosure: true, width: 6 });
+  assert.ok(visibleWidth(narrow) <= 6);
+});
+
+test("expanded body rows carry a quote bar and keep paragraph breaks bare", () => {
+  const rows = decorateThinkingBody(["first row", "", "\u001b[31mthird row\u001b[0m", "   "], PLAIN);
+  assert.deepEqual(rows, ["│ first row", "", "│ \u001b[31mthird row\u001b[0m", ""]);
+});
+
+function fakeBody(rows: string[]): Component & { widths: number[] } {
+  const widths: number[] = [];
+  return {
+    widths,
+    render(width: number) {
+      widths.push(width);
+      return rows;
+    },
+    invalidate() {},
+  };
+}
+
+function click(y: number, x = 0, extra: Partial<TuiMouseEvent> = {}): TuiMouseEvent {
+  return {
+    type: "click", button: "left", x, y, screenX: x, screenY: y, width: 40, height: 5,
+    shift: false, alt: false, ctrl: false, ...extra,
+  };
+}
+
+test("Thinking block renders the title alone until it is expanded", () => {
+  const body = fakeBody(["body one", "", "body two"]);
+  let expanded = false;
+  const toggles: number[] = [];
+  const view = new ThinkingBlockView({
+    header: () => "+ Thought · 1.3s",
+    body,
+    colors: PLAIN,
+    expanded: () => expanded,
+    toggleable: () => true,
+    onToggle: () => {
+      toggles.push(1);
+      expanded = !expanded;
+    },
+  });
+  assert.deepEqual(view.render(40).map(stripTerminalSequences), ["+ Thought · 1.3s"]);
+  assert.deepEqual(body.widths, [], "a collapsed block never renders its body");
+
+  assert.deepEqual(view.handleMouse(click(0, 3)), { handled: true, render: true });
+  assert.equal(toggles.length, 1);
+  const open = view.render(40).map(stripTerminalSequences);
+  assert.deepEqual(open, ["+ Thought · 1.3s", "", "│ body one", "", "│ body two"]);
+  assert.deepEqual(body.widths, [38], "the body is rendered two columns narrower for the bar");
+
+  view.handleMouse(click(0, 3));
+  assert.equal(toggles.length, 2, "the title toggles both ways");
+});
+
+test("only the title row toggles a Thinking block", () => {
+  const body = fakeBody(["body one", "body two"]);
+  let toggles = 0;
+  const view = new ThinkingBlockView({
+    header: () => "+ Thought · 1.3s",
+    body,
+    colors: PLAIN,
+    expanded: () => false,
+    toggleable: () => true,
+    onToggle: () => toggles++,
+  });
+  view.render(40);
+  assert.equal(view.handleMouse(click(2, 3)), undefined, "a body click is not a toggle");
+  assert.equal(view.handleMouse(click(1, 0)), undefined, "the blank separator row is not a toggle");
+  assert.equal(view.handleMouse(click(0, 30)), undefined, "a click past the title text is not a toggle");
+  assert.equal(view.handleMouse(click(0, 3, { type: "wheel", wheelDelta: 2 })), undefined, "wheel scrolls");
+  assert.equal(view.handleMouse(click(0, 3, { button: "right" })), undefined, "other buttons are untouched");
+  assert.equal(toggles, 0);
+  const readOnly = new ThinkingBlockView({
+    header: () => "+ Thought",
+    body,
+    colors: PLAIN,
+    expanded: () => false,
+    toggleable: () => false,
+    onToggle: () => toggles++,
+  });
+  readOnly.render(40);
+  assert.equal(readOnly.handleMouse(click(0, 1)), undefined);
+  assert.equal(toggles, 0);
+});
+
+test("Thinking block keeps Pi's output padding for the title, the bar and its click target", () => {
+  const body = fakeBody(["first body row", "", "second body row"]);
+  let toggles = 0;
+  const view = new ThinkingBlockView({
+    header: () => "+ Thought · 1.3s",
+    outputPad: 3,
+    body,
+    colors: PLAIN,
+    expanded: () => true,
+    toggleable: () => true,
+    onToggle: () => toggles++,
+  });
+  const rows = view.render(40).map(stripTerminalSequences);
+  assert.equal(rows[0], "   + Thought · 1.3s", "the title starts on Pi's output padding");
+  assert.deepEqual(rows.slice(2), ["   │ first body row", "", "   │ second body row"],
+    "the quote bar sits on the padding column and body text clears it");
+  assert.deepEqual(body.widths, [40 - 3 * 2 - 2], "padding is reserved on both sides like native Markdown");
+
+  assert.equal(view.handleMouse(click(0, 0)), undefined, "left padding is not a click target");
+  assert.equal(view.handleMouse(click(0, 2)), undefined, "left padding is not a click target");
+  assert.equal(view.handleMouse(click(0, 3))?.handled, true, "the title glyph column toggles");
+  assert.equal(toggles, 1);
+});
+
+test("Thinking rows are clipped to the terminal at every narrow width", () => {
+  const source = ["😀😀😀😀😀😀", "用户想知道 pi-ui-extension 的版本 🚀", "", "```ts", "const a = 1;", "```"];
+  for (const pad of [0, 1, 3]) {
+    const view = new ThinkingBlockView({
+      header: () => "+ Thought · 1.3s",
+      outputPad: pad,
+      body: fakeBody(source),
+      colors: PLAIN,
+      expanded: () => true,
+      toggleable: () => true,
+      onToggle: () => {},
+    });
+    for (let width = 1; width <= 20; width++) {
+      for (const line of view.render(width)) {
+        assert.ok(visibleWidth(line) <= width, `pad ${pad} width ${width} overflowed: ${JSON.stringify(line)}`);
       }
     }
   }
 });
 
-test("real Pi assistant message component applies unified modes to existing and streaming Thinking", async () => {
-  const { initTheme, getMarkdownTheme } = await import(
-    "../../node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/theme/theme.js"
-  );
-  const { AssistantMessageComponent } = await import(
-    "../../node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/assistant-message.js"
-  );
+test("the fallback transformer keeps Compact collapsed to the title in every state", () => {
   initTheme("dark");
-  let mode: "normal" | "compact" | "hidden" = "compact";
-  const privateText = "OLD_PRIVATE_THINKING_TEXT_SHOULD_NOT_APPEAR";
-  const message = {
-    role: "assistant",
-    content: [{ type: "thinking", thinking: `${privateText}\nmore old notes\nold three\nold four\nold five\nrecent one\nrecent two\nrecent three\nrecent four\nrecent five\nrecent six\nrecent seven` }],
-    stopReason: "stop",
-  } as any;
-  const component = new AssistantMessageComponent(
-    undefined, false, getMarkdownTheme(), "Thinking...", 1,
-    [(text, context) => transformThinkingText(text, context, mode)],
-  );
-  const visible = () => component.render(48).join("\n").replace(/\x1b\[[0-9;]*m/g, "");
-
-  component.updateContent(message, true);
-  assert.doesNotMatch(visible(), /OLD_PRIVATE_THINKING_TEXT_SHOULD_NOT_APPEAR/);
-  assert.match(visible(), /recent seven/);
-  assert.doesNotMatch(visible(), /old five/);
-  component.updateContent(message, false);
-  assert.match(visible(), /Thinking/);
-  assert.doesNotMatch(visible(), /Thinking · Done/);
-  assert.doesNotMatch(visible(), /recent seven/);
-
-  mode = "normal";
-  component.setHiddenThinkingLabel("Thinking...");
-  assert.match(visible(), /OLD_PRIVATE_THINKING_TEXT_SHOULD_NOT_APPEAR/);
-  mode = "hidden";
-  component.setHiddenThinkingLabel("Thinking...");
-  assert.match(visible(), /Thinking/);
-  assert.doesNotMatch(visible(), /Thinking · Done/);
-  assert.doesNotMatch(visible(), /OLD_PRIVATE_THINKING_TEXT_SHOULD_NOT_APPEAR/);
+  const source = ["old one", "old two", "recent one", "recent two"].join("\n");
+  const status = () => measured(1300);
+  const transform = (markdown: string, context: MarkdownTransformContext, mode: "normal" | "compact" | "hidden",
+    getStatus?: () => ThinkingStatus) => stripTerminalSequences(transformThinkingText(markdown, context, mode, getStatus));
+  assert.equal(transform(source, THINKING, "normal", status), source);
+  assert.equal(transform(source, THINKING, "compact", status), "+ Thought · 1.3s");
+  assert.match(transform(source, LIVE, "compact", () => STREAMING), LIVE_TITLE);
+  assert.equal(transform(source, THINKING, "hidden", status), "Thought · 1.3s");
+  assert.equal(transform(source, THINKING, "hidden"), "Thought", "complete without a measured time");
+  assert.match(transform(source, LIVE, "hidden"), LIVE_TITLE);
+  assert.equal(transform(source, LIVE, "compact", () => STREAMING).includes("old one"), false,
+    "Compact never shows body rows");
+  assert.equal(transform(source, { ...THINKING, messageType: "assistant" }, "compact", status), source);
+  assert.equal(transform(source, { ...THINKING, messageType: "user" }, "hidden", status), source);
+  for (const width of [1, 3, 6, 9, 14, 22, 48]) {
+    for (const mode of ["compact", "hidden"] as const) {
+      const line = transformThinkingText("思考".repeat(40), { ...THINKING, availableWidth: width }, mode, status);
+      assert.ok(visibleWidth(line) <= width, `${mode} overflow at width ${width}`);
+    }
+  }
 });

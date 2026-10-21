@@ -4,6 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { AssistantMessageComponent } from "@earendil-works/pi-coding-agent";
+import { stripTerminalSequences } from "@earendil-works/pi-tui";
+import {
+  initTheme,
+} from "../../node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/theme/theme.js";
 import { installToolViewController } from "./controller.ts";
 
 type Handler = (event: any, ctx: any) => unknown;
@@ -91,11 +95,13 @@ test("the single Tool View mode controls Thinking, persists once, and refreshes 
     },
   } as any;
   const context = { messageType: "assistant-thinking", isStreaming: false, availableWidth: 40 };
+  initTheme("dark");
+  const transform = (markdown: string) => stripTerminalSequences(transformer(markdown, context));
   try {
     const controller = await installToolViewController(pi, { modeFile });
     assert.equal(controller.getMode(), "compact");
     assert.equal(typeof transformer, "function");
-    assert.equal(transformer("private thought", context), "Thinking");
+    assert.equal(transform("private thought"), "+ Thought", "unmeasured Thinking collapses to the title");
     for (const callback of handlers.get("session_start") ?? []) callback({}, ctx);
     assert.equal(handlers.has("message_update"), true, "registered stream timing observer");
     const partial = { role: "assistant", content: [{ type: "thinking", thinking: "private thought" }] };
@@ -104,14 +110,14 @@ test("the single Tool View mode controls Thinking, persists once, and refreshes 
         callback({ assistantMessageEvent: { type, contentIndex: 0, partial } }, ctx);
       }
     }
-    assert.match(transformer("private thought", context), /^Thinking · /);
+    assert.match(transform("private thought"), /^\+ Thought · \d\.\ds$/, "thinking_end supplies the measured time");
     for (const callback of handlers.get("message_end") ?? []) callback({ message: partial }, ctx);
-    assert.match(transformer("private thought", context), /^Thinking · /);
+    assert.match(transform("private thought"), /^\+ Thought · \d\.\ds$/, "the measured time survives message_end");
 
     await controller.setMode("normal", ctx);
     assert.equal(transformer("private thought", context), "private thought");
     await commands.get("tool-view").handler("hidden", ctx);
-    assert.match(transformer("private thought", context), /^Thinking · /);
+    assert.match(transform("private thought"), /^Thought · \d\.\ds$/, "Hidden has no disclosure glyph");
     assert.equal(controller.getMode(), "hidden");
     assert.deepEqual(JSON.parse(await readFile(modeFile, "utf8")), { mode: "hidden" });
     assert.equal(refreshed, 2, "one public refresh per mode change, including historical Thinking");
@@ -131,7 +137,7 @@ test("unified Tool View removes the earlier click adapter when reloaded", async 
   const prototype = AssistantMessageComponent.prototype;
   const original = prototype.updateContent;
   const symbol = Symbol.for("pi-ui-extension:thinking-click-adapter");
-  const guardSymbol = Symbol.for("pi-ui-extension:thinking-click-guard");
+  const guardSymbol = Symbol.for("pi-ui-extension:compact-thinking-adapter");
   const marker = prototype as unknown as Record<symbol, any>;
   const previousGuard = marker[guardSymbol];
   const patched: typeof original = function (this: AssistantMessageComponent, ...args) {
@@ -148,7 +154,9 @@ test("unified Tool View removes the earlier click adapter when reloaded", async 
     await installToolViewController(pi, { modeFile: join(directory, "mode.json") });
     assert.notEqual(prototype.updateContent, patched, "the old clickable-detail adapter is gone");
     assert.equal(marker[symbol], undefined);
-    assert.ok(marker[guardSymbol], "the compact-only native click guard replaces the old adapter");
+    assert.ok(marker[guardSymbol], "the Compact Thinking adapter replaces the old click adapter");
+    assert.equal(marker[Symbol.for("pi-ui-extension:thinking-click-guard")], undefined,
+      "the earlier click guard generation is no longer installed");
   } finally {
     prototype.updateContent = original;
     delete marker[symbol];
