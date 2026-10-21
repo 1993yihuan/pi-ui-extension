@@ -107,7 +107,7 @@ Compact 的 Thinking 默认折叠。点击标题即可展开或收起，思考�
 | 已完成，折叠 | `+ Thought · 1.3s` | 隐藏 |
 | 已完成，展开 | `− Thought · 1.3s` | 完整显示 |
 
-展开后的正文按终端宽度换行，带灰色竖线并保留段落空行。各段思考可以独立展开，展开状态在流式更新、终端缩放和思考完成后保持。点击正文、标题周围的空白、滚轮滚动和其他鼠标按钮都不会切换展开状态。
+展开后的正文紧接标题下一行，按终端宽度换行；灰色竖线贯穿正文和段落空行，正文末尾与首个工具调用之间保留一行空白。各段思考可以独立展开，展开状态在流式更新、终端缩放和思考完成后保持。点击正文、标题周围的空白、滚轮滚动和其他鼠标按钮都不会切换展开状态。
 
 耗时只计算思考阶段，不包含整条回复的其他用时。不足一分钟保留一位小数，更长的用时采用 `1m05s` 形式。恢复历史会话等无法可靠计时的情况下，标题省略耗时。尚无正文时也可显示进行中标题。Hidden 始终隐藏正文。
 
@@ -134,9 +134,9 @@ VIEW 下方按调用来源分组：
 | 操作 | 命令 |
 | --- | --- |
 | 安装最新 npm 版本 | `pi install npm:pi-ui-extension` |
-| 固定 v1.9.0 | `pi install npm:pi-ui-extension@1.9.0` |
+| 固定 v1.9.1 | `pi install npm:pi-ui-extension@1.9.1` |
 | 从 GitHub 安装 | `pi install git:github.com/1993yihuan/pi-ui-extension` |
-| 固定 Git tag | `pi install git:github.com/1993yihuan/pi-ui-extension@v1.9.0` |
+| 固定 Git tag | `pi install git:github.com/1993yihuan/pi-ui-extension@v1.9.1` |
 | 仅当前项目安装 | `pi install --local npm:pi-ui-extension` |
 | 更新非固定版本 | `pi update --extensions` |
 | 列出已配置扩展 | `pi list` |

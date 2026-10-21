@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import test, { type TestContext } from "node:test";
-import { AssistantMessageComponent, VERSION, type MarkdownTransformer } from "@earendil-works/pi-coding-agent";
-import { stripTerminalSequences, visibleWidth, type TuiMouseEvent } from "@earendil-works/pi-tui";
+import { AssistantMessageComponent, ToolExecutionComponent, VERSION, type MarkdownTransformer } from "@earendil-works/pi-coding-agent";
+import { Container, Text, stripTerminalSequences, visibleWidth, type TuiMouseEvent } from "@earendil-works/pi-tui";
 import {
   getMarkdownTheme,
   initTheme,
 } from "../../node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/theme/theme.js";
+import { installCompactSpacingGuard, markCompactSpacingRenderer } from "./compact-spacing.ts";
 import { installCompactThinkingAdapter } from "./thinking-adapter.ts";
 import { ThinkingTiming } from "./thinking-timing.ts";
 import { transformThinkingText, type ThinkingStatus } from "./thinking.ts";
@@ -15,8 +16,8 @@ const WIDTH = 64;
 const ADAPTER_KEY = Symbol.for("pi-ui-extension:compact-thinking-adapter");
 const PREVIOUS_KEY = Symbol.for("pi-ui-extension:thinking-click-guard");
 const INDICATOR = /[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/;
-/** Pi's message output padding, then the Thinking quote bar. */
-const BAR_ROW = /^ *│ /;
+/** Pi's message output padding, then the Thinking quote bar; a paragraph row keeps the bar alone. */
+const BAR_ROW = /^ *│ ?/;
 const stripBar = (line: string) => line.replace(BAR_ROW, "");
 type StatusFn = (text: string, streaming: boolean) => ThinkingStatus;
 
@@ -44,6 +45,14 @@ function lineIndex(component: AssistantMessageComponent, needle: RegExp | string
   return index;
 }
 
+function lastIndex(rows: string[], needle: RegExp | string): number {
+  for (let index = rows.length - 1; index >= 0; index--) {
+    const line = rows[index]!;
+    if (typeof needle === "string" ? line.includes(needle) : needle.test(line)) return index;
+  }
+  return -1;
+}
+
 function clickLine(
   component: AssistantMessageComponent,
   needle: RegExp | string,
@@ -55,7 +64,11 @@ function clickLine(
   return component.handleMouse?.(mouse(y, x, extra));
 }
 
-function harness(t: TestContext, providedStatus?: StatusFn) {
+/** Tool names this extension renders itself, so the spacing guard trims their gap. */
+const OWNED_TOOLS = new Set(["codemode", "bash", "read"]);
+const needsToolGap = (toolName: string) => OWNED_TOOLS.has(toolName);
+
+function harness(t: TestContext, providedStatus?: StatusFn, toolGap?: (toolName: string) => boolean) {
   initTheme("dark");
   const prototype = AssistantMessageComponent.prototype as unknown as Record<symbol | "updateContent", any>;
   const initial = prototype.updateContent;
@@ -63,7 +76,9 @@ function harness(t: TestContext, providedStatus?: StatusFn) {
   const status: StatusFn = providedStatus ??
     ((_text, streaming) => state.status ?? { phase: streaming ? "streaming" : "complete" });
   const transformer: MarkdownTransformer = (text, context) => transformThinkingText(text, context, state.mode, status);
-  const installed = installCompactThinkingAdapter(() => state.mode, transformer, { status });
+  const installed = installCompactThinkingAdapter(
+    () => state.mode, transformer, { status, needsToolGap: toolGap },
+  );
   t.after(() => {
     prototype.updateContent = initial;
     delete prototype[ADAPTER_KEY];
@@ -109,12 +124,11 @@ test("Compact Thinking streams a live title, expands to the full body, and settl
   assert.equal(toggled?.handled, true);
   const expanded = lines(component);
   assert.match(expanded[1]!, /Thinking$/, "the live title keeps its indicator when expanded");
-  assert.equal(expanded[2], "", "one blank row separates title and body");
-  const body = expanded.slice(3);
+  const body = expanded.slice(2);
   assert.ok(body.length > 1);
-  assert.ok(body.filter((line) => line.trim()).every((line) => BAR_ROW.test(line)),
-    "every populated body row carries the grey bar");
-  assert.ok(body.includes(""), "paragraph breaks stay bare");
+  assert.match(body[0]!, BAR_ROW, "the body starts on the row right below the title");
+  assert.ok(body.every((line) => BAR_ROW.test(line)),
+    "every body row carries the grey bar, paragraph breaks included");
   assert.ok(body.every((line) => visibleWidth(line) <= WIDTH));
   assert.deepEqual(
     body.filter((line) => line.trim()).map(stripBar).join(" ").replace(/\s+/g, " ").trim(),
@@ -128,7 +142,8 @@ test("Compact Thinking streams a live title, expands to the full body, and settl
     content: [{ type: "thinking", thinking: `${first}\n\n${second}\n\nA third paragraph arrives.` }],
   } as any, true);
   const grown = lines(component);
-  assert.ok(grown.slice(3).every((line) => BAR_ROW.test(line) || line === ""));
+  assert.ok(grown.slice(2).every((line) => BAR_ROW.test(line)),
+    "a growing body stays one continuous bar column");
   assert.match(grown.join(" "), /plugin version/);
   assert.match(grown.join(" "), /A third paragraph arrives\./);
 
@@ -403,6 +418,165 @@ test("Thinking titles, the quote bar and the reply share Pi's output padding", (
     assert.equal(bodyRow.indexOf("PADDED_BODY_TEXT"), pad + 2, "body text clears the padding and the bar");
     assert.ok(open.every((line) => visibleWidth(line) <= WIDTH), "padding never pushes a row past the terminal");
   }
+});
+
+/** This extension's own self-rendered tool, exactly as Compact renders it. */
+function ownedTool(name: string, id: string): ToolExecutionComponent {
+  const native = {
+    renderShell: "self" as const,
+    renderCall: () => new Text(`›  ${name}`, 0, 0),
+    renderResult: () => new Text("⎿  1 line", 0, 0),
+  };
+  const component = new ToolExecutionComponent(
+    name, id, {}, {}, markCompactSpacingRenderer(native) as any, { requestRender() {} } as any, ".",
+  );
+  component.updateResult({ content: [{ type: "text", text: "ok" }], isError: false, durationMs: 30 }, false);
+  return component;
+}
+
+/** A third-party or MCP tool: Pi's own layout, never marked by this extension. */
+function thirdPartyTool(name: string, id: string): ToolExecutionComponent {
+  const component = new ToolExecutionComponent(
+    name, id, {}, {},
+    { renderShell: "self", renderCall: () => new Text(`›  ${name}`, 0, 0), renderResult: () => new Text("⎿  1 line", 0, 0) } as any,
+    { requestRender() {} } as any, ".",
+  );
+  component.updateResult({ content: [{ type: "text", text: "ok" }], isError: false, durationMs: 30 }, false);
+  return component;
+}
+
+function installSpacingGuard(t: TestContext): void {
+  const prototype = ToolExecutionComponent.prototype as typeof ToolExecutionComponent.prototype & Record<symbol, unknown>;
+  const key = Symbol.for("pi-ui-extension:compact-spacing-guard");
+  const originalRender = prototype.render;
+  const originalMouse = prototype.handleMouse;
+  t.after(() => {
+    prototype.render = originalRender;
+    prototype.handleMouse = originalMouse;
+    delete prototype[key];
+  });
+  assert.equal(installCompactSpacingGuard(() => "compact"), true);
+}
+
+test("an expanded Thinking body is followed by exactly one blank row before the first tool", (t) => {
+  const { make } = harness(t, undefined, needsToolGap);
+  installSpacingGuard(t);
+  const component = make([
+    { type: "thinking", thinking: "First paragraph.\n\nSecond paragraph." },
+    { type: "toolCall", id: "1", name: "codemode", arguments: {} },
+  ], false);
+  const chat = new Container();
+  chat.addChild(component);
+  chat.addChild(ownedTool("codemode", "1"));
+  chat.addChild(ownedTool("bash", "2"));
+
+  const collapsed = chat.render(WIDTH).map(stripTerminalSequences);
+  assert.match(collapsed[1]!, /\+ Thought/);
+  assert.match(collapsed[2]!, /›  codemode/,
+    "a collapsed block keeps Pi's compact tool spacing with no extra row");
+
+  clickLine(component, /Thought/);
+  const rows = chat.render(WIDTH).map(stripTerminalSequences);
+  const title = rows.findIndex((line) => line.includes("− Thought"));
+  assert.ok(title >= 0, "the block expands");
+  const lastBody = lastIndex(rows, BAR_ROW);
+  assert.ok(lastBody > title);
+  assert.ok(rows.slice(title + 1, lastBody + 1).every((line) => BAR_ROW.test(line)),
+    "title down to the last body row is one unbroken bar column");
+  assert.equal(rows[lastBody + 1], "", "exactly one blank row follows the body");
+  assert.equal(rows.findIndex((line) => line.includes("›  codemode")), lastBody + 2,
+    "the first tool title starts right after that single blank row");
+  assert.deepEqual(rows.slice(lastBody + 2).map((line) => line.trimEnd()),
+    ["›  codemode", "⎿  1 line", "›  bash", "⎿  1 line"],
+    "consecutive tools keep their own spacing; only the first one follows the Thinking gap");
+  assert.ok(rows.every((line) => visibleWidth(line) <= WIDTH));
+});
+
+test("a third-party tool keeps its native leading blank row and gains no second gap", (t) => {
+  const { make } = harness(t, undefined, needsToolGap);
+  installSpacingGuard(t);
+  const component = make([
+    { type: "thinking", thinking: "Body text." },
+    { type: "toolCall", id: "1", name: "mcp__server__search", arguments: {} },
+    { type: "toolCall", id: "2", name: "codemode", arguments: {} },
+  ], false);
+  const chat = new Container();
+  chat.addChild(component);
+  chat.addChild(thirdPartyTool("mcp__server__search", "1"));
+  chat.addChild(ownedTool("codemode", "2"));
+
+  clickLine(component, /Thought/);
+  const rows = chat.render(WIDTH).map(stripTerminalSequences);
+  const lastBody = lastIndex(rows, BAR_ROW);
+  assert.ok(lastBody > 0);
+  assert.equal(rows[lastBody + 1], "", "the body adds no row of its own");
+  assert.deepEqual(rows.slice(lastBody + 1).map((line) => line.trimEnd()), [
+    "", "›  mcp__server__search", "⎿  1 line", "›  codemode", "⎿  1 line",
+  ], "the third-party tool's own leading blank row is the only gap, and the next own tool stays compact");
+});
+
+test("without a trimmed tool gap the Thinking body adds no row over the tool's own", (t) => {
+  // No needsToolGap option and no spacing guard: the adapter must stay passive.
+  const { make } = harness(t);
+  const component = make([
+    { type: "thinking", thinking: "Body text." },
+    { type: "toolCall", id: "1", name: "codemode", arguments: {} },
+  ], false);
+  const chat = new Container();
+  chat.addChild(component);
+  const tool = ownedTool("codemode", "1");
+  assert.equal(tool.render(WIDTH)[0], "", "Pi's native leading blank row is still there");
+  chat.addChild(tool);
+
+  clickLine(component, /Thought/);
+  const rows = chat.render(WIDTH).map(stripTerminalSequences);
+  const lastBody = lastIndex(rows, BAR_ROW);
+  assert.equal(rows[lastBody + 1], "", "the tool's own blank row is the gap");
+  assert.deepEqual(rows.slice(lastBody + 1).map((line) => line.trimEnd()),
+    ["", "›  codemode", "⎿  1 line"], "no second row is added");
+});
+
+test("the Thinking gap never doubles Pi's own spacing before text or an error", (t) => {
+  const { make } = harness(t);
+  installSpacingGuard(t);
+  const component = make([
+    { type: "thinking", thinking: "Body text." },
+    { type: "text", text: "Public answer" },
+    { type: "thinking", thinking: "Second body." },
+  ], false);
+  clickLine(component, /Thought/);
+  clickLine(component, /Thought/, {}, 1, true);
+  const rows = lines(component);
+  const answer = rows.findIndex((line) => line.includes("Public answer"));
+  assert.equal(rows[answer - 1], "", "Pi's native spacer is the only gap before the reply");
+  assert.match(rows[answer - 2]!, BAR_ROW);
+  const secondTitle = lastIndex(rows, "− Thought");
+  assert.match(rows[secondTitle - 1]!, /Public answer/,
+    "Pi's own layout between the reply and the next block is untouched");
+  assert.match(rows.at(-1)!, BAR_ROW, "a body with nothing after it adds no trailing gap");
+
+  const failed = make([{ type: "thinking", thinking: "Body text." }], false);
+  clickLine(failed, /Thought/);
+  failed.updateContent({
+    role: "assistant", stopReason: "error", errorMessage: "boom",
+    content: [{ type: "thinking", thinking: "Body text." }],
+  } as any, false);
+  const errorRows = lines(failed);
+  const errorBody = lastIndex(errorRows, BAR_ROW);
+  const errorLine = errorRows.findIndex((line) => line.includes("Error: boom"));
+  assert.equal(errorLine, errorBody + 2, "the native error spacer is not doubled");
+  assert.equal(errorRows[errorBody + 1], "");
+
+  const truncated = make([{ type: "thinking", thinking: "Body text." }], false);
+  clickLine(truncated, /Thought/);
+  truncated.updateContent({
+    role: "assistant", stopReason: "length",
+    content: [{ type: "thinking", thinking: "Body text." }],
+  } as any, false);
+  const lengthRows = lines(truncated);
+  const lengthBody = lastIndex(lengthRows, BAR_ROW);
+  assert.equal(lengthRows[lengthBody + 1], "", "Pi's own row before the truncation notice is the only gap");
+  assert.match(lengthRows[lengthBody + 2]!, /truncated before completion/);
 });
 
 test("widths 1 to 20 clip CJK, emoji, paragraphs and code without overflow", (t) => {

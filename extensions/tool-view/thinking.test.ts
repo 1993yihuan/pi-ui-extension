@@ -76,9 +76,14 @@ test("Thinking titles cover the live and completed states", () => {
   assert.ok(visibleWidth(narrow) <= 6);
 });
 
-test("expanded body rows carry a quote bar and keep paragraph breaks bare", () => {
+test("every expanded body row carries the quote bar, paragraph breaks included", () => {
   const rows = decorateThinkingBody(["first row", "", "\u001b[31mthird row\u001b[0m", "   "], PLAIN);
-  assert.deepEqual(rows, ["│ first row", "", "│ \u001b[31mthird row\u001b[0m", ""]);
+  assert.deepEqual(rows, ["│ first row", "│", "│ \u001b[31mthird row\u001b[0m", "│"],
+    "a paragraph break keeps its row height and still draws the bar");
+  assert.deepEqual(decorateThinkingBody([""], PLAIN, "  "), ["  │"],
+    "the bar follows the native output padding like every other row");
+  const colored = decorateThinkingBody(["", "text"], { ...PLAIN, bar: (text) => `<${text}>` });
+  assert.deepEqual(colored, ["<│>", "<│ >text"], "the bar never keeps trailing whitespace");
 });
 
 function fakeBody(rows: string[]): Component & { widths: number[] } {
@@ -121,7 +126,8 @@ test("Thinking block renders the title alone until it is expanded", () => {
   assert.deepEqual(view.handleMouse(click(0, 3)), { handled: true, render: true });
   assert.equal(toggles.length, 1);
   const open = view.render(40).map(stripTerminalSequences);
-  assert.deepEqual(open, ["+ Thought · 1.3s", "", "│ body one", "", "│ body two"]);
+  assert.deepEqual(open, ["+ Thought · 1.3s", "│ body one", "│", "│ body two"],
+    "the body starts on the row below the title and keeps paragraph height");
   assert.deepEqual(body.widths, [38], "the body is rendered two columns narrower for the bar");
 
   view.handleMouse(click(0, 3));
@@ -140,8 +146,8 @@ test("only the title row toggles a Thinking block", () => {
     onToggle: () => toggles++,
   });
   view.render(40);
-  assert.equal(view.handleMouse(click(2, 3)), undefined, "a body click is not a toggle");
-  assert.equal(view.handleMouse(click(1, 0)), undefined, "the blank separator row is not a toggle");
+  assert.equal(view.handleMouse(click(1, 3)), undefined, "a body click is not a toggle");
+  assert.equal(view.handleMouse(click(2, 0)), undefined, "a paragraph bar row is not a toggle");
   assert.equal(view.handleMouse(click(0, 30)), undefined, "a click past the title text is not a toggle");
   assert.equal(view.handleMouse(click(0, 3, { type: "wheel", wheelDelta: 2 })), undefined, "wheel scrolls");
   assert.equal(view.handleMouse(click(0, 3, { button: "right" })), undefined, "other buttons are untouched");
@@ -173,7 +179,7 @@ test("Thinking block keeps Pi's output padding for the title, the bar and its cl
   });
   const rows = view.render(40).map(stripTerminalSequences);
   assert.equal(rows[0], "   + Thought · 1.3s", "the title starts on Pi's output padding");
-  assert.deepEqual(rows.slice(2), ["   │ first body row", "", "   │ second body row"],
+  assert.deepEqual(rows.slice(1), ["   │ first body row", "   │", "   │ second body row"],
     "the quote bar sits on the padding column and body text clears it");
   assert.deepEqual(body.widths, [40 - 3 * 2 - 2], "padding is reserved on both sides like native Markdown");
 
@@ -181,6 +187,42 @@ test("Thinking block keeps Pi's output padding for the title, the bar and its cl
   assert.equal(view.handleMouse(click(0, 2)), undefined, "left padding is not a click target");
   assert.equal(view.handleMouse(click(0, 3))?.handled, true, "the title glyph column toggles");
   assert.equal(toggles, 1);
+});
+
+test("an expanded body ends with one blank row only when the layout asks for it", () => {
+  const build = (trailingBlank?: () => boolean, expanded = true) => new ThinkingBlockView({
+    header: () => "+ Thought · 1.3s",
+    body: fakeBody(["body one", "", "body two"]),
+    colors: PLAIN,
+    expanded: () => expanded,
+    toggleable: () => true,
+    onToggle: () => {},
+    trailingBlank,
+  });
+  assert.deepEqual(build(() => true).render(40), ["+ Thought · 1.3s", "│ body one", "│", "│ body two", ""]);
+  assert.deepEqual(build().render(40), ["+ Thought · 1.3s", "│ body one", "│", "│ body two"],
+    "without a request the body keeps no trailing blank");
+  assert.deepEqual(build(() => true, false).render(40), ["+ Thought · 1.3s"],
+    "a collapsed block never adds the trailing gap");
+  assert.deepEqual(build(() => false).render(40), ["+ Thought · 1.3s", "│ body one", "│", "│ body two"]);
+
+  let asks = false;
+  let toggles = 0;
+  const view = new ThinkingBlockView({
+    header: () => "+ Thought · 1.3s",
+    body: fakeBody(["body one"]),
+    colors: PLAIN,
+    expanded: () => true,
+    toggleable: () => true,
+    onToggle: () => toggles++,
+    trailingBlank: () => asks,
+  });
+  assert.deepEqual(view.render(40).length, 2);
+  asks = true;
+  assert.deepEqual(view.render(40), ["+ Thought · 1.3s", "│ body one", ""],
+    "the trailing gap follows the live layout on every render");
+  assert.equal(view.handleMouse(click(2, 0)), undefined, "the trailing blank row is not a click target");
+  assert.equal(toggles, 0);
 });
 
 test("Thinking rows are clipped to the terminal at every narrow width", () => {
@@ -194,6 +236,7 @@ test("Thinking rows are clipped to the terminal at every narrow width", () => {
       expanded: () => true,
       toggleable: () => true,
       onToggle: () => {},
+      trailingBlank: () => true,
     });
     for (let width = 1; width <= 20; width++) {
       for (const line of view.render(width)) {

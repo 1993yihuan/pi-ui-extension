@@ -3,9 +3,10 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { AssistantMessageComponent } from "@earendil-works/pi-coding-agent";
-import { stripTerminalSequences } from "@earendil-works/pi-tui";
+import { AssistantMessageComponent, ToolExecutionComponent } from "@earendil-works/pi-coding-agent";
+import { Container, Text, stripTerminalSequences } from "@earendil-works/pi-tui";
 import {
+  getMarkdownTheme,
   initTheme,
 } from "../../node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/theme/theme.js";
 import { installToolViewController } from "./controller.ts";
@@ -198,4 +199,117 @@ test("unified Tool View warns if Pi hides Thinking natively without breaking too
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+
+const THINKING_ADAPTER = Symbol.for("pi-ui-extension:compact-thinking-adapter");
+const PREVIOUS_ADAPTER = Symbol.for("pi-ui-extension:thinking-click-guard");
+const SPACING_GUARD = Symbol.for("pi-ui-extension:compact-spacing-guard");
+
+test("Compact Thinking supplies the tool gap only for a tool whose leading blank it trims", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "thinking-tool-gap-"));
+  const messages = AssistantMessageComponent.prototype as any;
+  const tools = ToolExecutionComponent.prototype as any;
+  // Deterministic start: unwind whatever an earlier test in this file installed.
+  for (const key of [THINKING_ADAPTER, PREVIOUS_ADAPTER]) {
+    if (typeof messages[key]?.original === "function") messages.updateContent = messages[key].original;
+    delete messages[key];
+  }
+  if (tools[SPACING_GUARD]) {
+    tools.render = tools[SPACING_GUARD].originalRender;
+    tools.handleMouse = tools[SPACING_GUARD].originalMouse;
+    delete tools[SPACING_GUARD];
+  }
+  const clean = { updateContent: messages.updateContent, render: tools.render, mouse: tools.handleMouse };
+  t.after(async () => {
+    messages.updateContent = clean.updateContent;
+    delete messages[THINKING_ADAPTER];
+    delete messages[PREVIOUS_ADAPTER];
+    tools.render = clean.render;
+    tools.handleMouse = clean.mouse;
+    delete tools[SPACING_GUARD];
+    await rm(directory, { recursive: true, force: true });
+  });
+
+  initTheme("dark");
+  let transformer: any;
+  let renderers: any;
+  const pi = {
+    registerToolRenderer(callback: any) { renderers = callback; },
+    registerMarkdownTransformer(callback: any) { transformer = callback; },
+    registerCommand() {},
+    registerShortcut() {},
+    getSettings: () => ({ hideThinkingBlock: false }),
+    getCommands: () => [],
+    on() {},
+  } as any;
+  const install = async () => {
+    await installToolViewController(pi, { modeFile: join(directory, "mode.json") });
+  };
+  const ownTool = (toolName: string) => {
+    const component = new ToolExecutionComponent(
+      toolName, "1", {}, {}, renderers(toolName, () => undefined),
+      { requestRender() {} } as any, ".",
+    );
+    component.updateResult({ content: [{ type: "text", text: "ok" }], isError: false, durationMs: 30 }, false);
+    return component;
+  };
+  const thirdPartyTool = () => {
+    const component = new ToolExecutionComponent(
+      "mcp__server__search", "1", {}, {},
+      { renderShell: "self", renderCall: () => new Text("›  mcp__server__search", 0, 0), renderResult: () => new Text("⎿  1 line", 0, 0) } as any,
+      { requestRender() {} } as any, ".",
+    );
+    component.updateResult({ content: [{ type: "text", text: "ok" }], isError: false, durationMs: 30 }, false);
+    return component;
+  };
+  // Expand the Thinking block of a message followed by the given tool, then render both.
+  const expand = (toolName: string, tool: ToolExecutionComponent): [string[], ToolExecutionComponent] => {
+    const message = new AssistantMessageComponent(undefined, false, getMarkdownTheme(), "Thinking...", 1, [transformer]);
+    message.updateContent({
+      role: "assistant", stopReason: "stop",
+      content: [{ type: "thinking", thinking: "Body text." }, { type: "toolCall", id: "1", name: toolName, arguments: {} }],
+    } as any, false);
+    const title = message.render(64).map(stripTerminalSequences).findIndex((line) => line.includes("Thought"));
+    assert.ok(title >= 0, "the Compact title renders");
+    message.handleMouse?.({
+      type: "click", button: "left", x: 1, y: title, screenX: 1, screenY: title,
+      width: 64, height: 64, shift: false, alt: false, ctrl: false,
+    } as any);
+    const chat = new Container();
+    chat.addChild(message);
+    chat.addChild(tool);
+    return [chat.render(64).map(stripTerminalSequences).map((line) => line.trimEnd()), tool];
+  };
+  /** Blank rows between the last body row and the tool's first row. */
+  const gapAfterBody = ([rows]: [string[], ToolExecutionComponent]) => {
+    let lastBody = rows.length - 1;
+    while (lastBody >= 0 && !rows[lastBody]!.includes("│")) lastBody--;
+    assert.ok(lastBody >= 0, "the expanded body rendered");
+    let blank = 0;
+    while (rows[lastBody + 1 + blank] === "") blank++;
+    return blank;
+  };
+
+  await install();
+  // A tool this extension renders: the guard trims its leading blank, so the
+  // open body supplies exactly one gap.
+  const own = expand("bash", ownTool("bash"));
+  assert.notEqual(own[1].render(64)[0], "", "the guard trims its own tool's leading blank");
+  assert.equal(gapAfterBody(own), 1, "the body supplies exactly one gap before its own tool");
+  assert.match(own[0].at(-1)!, /1 line/, "the compact tool still renders its result");
+  // A third-party tool keeps Pi's own leading blank; the body must not add one.
+  const foreign = expand("mcp__server__search", thirdPartyTool());
+  assert.equal(gapAfterBody(foreign), 1, "no second gap before a third-party tool");
+  assert.deepEqual(foreign[0].slice(-2), ["›  mcp__server__search", "⎿  1 line"]);
+
+  // The guard refuses an unfamiliar Pi layout: the predicate stays false.
+  tools.render = function () { return []; };
+  await install();
+  tools.render = clean.render;
+  tools.handleMouse = clean.mouse;
+  delete tools[SPACING_GUARD];
+  const untrimmed = expand("bash", ownTool("bash"));
+  assert.equal(untrimmed[1].render(64)[0], "", "the tool's native leading blank returns");
+  assert.equal(gapAfterBody(untrimmed), 1, "the tool's own blank row is the only gap");
 });

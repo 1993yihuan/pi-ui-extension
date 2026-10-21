@@ -153,9 +153,10 @@ export function renderThinkingHeader(options: ThinkingHeaderOptions): string {
 }
 
 /**
- * Prefix every non-blank body row with the grey quote bar, keeping paragraph
- * breaks bare. `indent` shifts the bar to the message's native output padding
- * so the bar lines up with the title and with Pi's own message text.
+ * Prefix every body row with the grey quote bar. Paragraph breaks keep their
+ * row and get the bar alone, so the column stays continuous. `indent` shifts
+ * the bar to the message's native output padding so the bar lines up with the
+ * title and with Pi's own message text.
  */
 export function decorateThinkingBody(
   lines: readonly string[],
@@ -163,7 +164,10 @@ export function decorateThinkingBody(
   indent = "",
 ): string[] {
   const bar = indent + BODY_BAR;
-  return lines.map((line) => (stripTerminalSequences(line).trim().length > 0 ? colors.bar(bar) + line : ""));
+  const bareBar = bar.trimEnd();
+  return lines.map((line) => (stripTerminalSequences(line).trim().length > 0
+    ? colors.bar(bar) + line
+    : colors.bar(bareBar)));
 }
 
 /** Native message output padding, read defensively from Pi's own Markdown child. */
@@ -208,8 +212,10 @@ export class ThinkingBlockView implements Component {
     const decorated = bodyWidth >= 1
       ? decorateThinkingBody(rows, this.options.colors, " ".repeat(pad))
       : rows.map((line) => (stripTerminalSequences(line).trim().length > 0 ? line : ""));
-    return [header, "", ...decorated].map((line) =>
-      visibleWidth(line) <= safeWidth ? line : truncateToWidth(line, safeWidth, ""));
+    // The body starts on the row below the title and, when the layout asks for
+    // it, ends with exactly one blank row before whatever follows.
+    const lines = this.options.trailingBlank?.() ? [header, ...decorated, ""] : [header, ...decorated];
+    return lines.map((line) => visibleWidth(line) <= safeWidth ? line : truncateToWidth(line, safeWidth, ""));
   }
 
   invalidate(): void {
@@ -235,6 +241,11 @@ export interface ThinkingBlockOptions {
   readonly expanded: () => boolean;
   readonly toggleable: () => boolean;
   readonly onToggle: () => void;
+  /**
+   * Whether an expanded body needs one blank row after its last line. Called at
+   * render time, because the surrounding layout can change while it is open.
+   */
+  readonly trailingBlank?: () => boolean;
 }
 
 /**

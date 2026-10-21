@@ -167,6 +167,11 @@ const COMPACT_SPECS: Record<string, CompactToolSpec> = {
   },
 };
 
+/** Tool names this extension renders itself, so Compact also trims their leading blank. */
+function ownsCompactTool(toolName: string): boolean {
+  return toolName === "codemode" || Object.hasOwn(COMPACT_SPECS, toolName);
+}
+
 export interface ToolViewController {
   getMode(): ToolViewMode;
   setMode(mode: ToolViewMode, ctx: ExtensionContext, notify?: boolean): Promise<void>;
@@ -183,6 +188,8 @@ export async function installToolViewController(
 ): Promise<ToolViewController> {
   const modeFile = options.modeFile ?? DEFAULT_MODE_FILE;
   let mode = await loadMode();
+  // Set once the spacing guard is active; the Thinking gap depends on it.
+  let compactSpacingActive = false;
   let skillRoots = new Set<string>();
   let activeSessionId: string | undefined;
   let sessionGeneration = 0;
@@ -209,7 +216,12 @@ export async function installToolViewController(
     (markdown, context) => transformThinkingText(markdown, context, mode, thinkingStatus);
   if (supportsThinking) {
     pi.registerMarkdownTransformer(thinkingTransformer);
-    installCompactThinkingAdapter(() => mode, thinkingTransformer, { status: thinkingStatus });
+    installCompactThinkingAdapter(() => mode, thinkingTransformer, {
+      status: thinkingStatus,
+      // Pi's own tool row keeps its leading blank row unless the spacing guard
+      // below trims it, so only then does an expanded body supply that row.
+      needsToolGap: (toolName) => compactSpacingActive && ownsCompactTool(toolName),
+    });
   }
   let nativeThinkingWarningShown = false;
   const warnNativeThinkingHidden = (ctx: ExtensionContext): void => {
@@ -454,7 +466,7 @@ export async function installToolViewController(
     throw new Error("Tool View requires Pi with registerToolRenderer(). Update Pi to use this extension.");
   }
   pi.registerToolRenderer((toolName, next) => {
-    if (toolName !== "codemode" && !Object.hasOwn(COMPACT_SPECS, toolName)) return next();
+    if (!ownsCompactTool(toolName)) return next();
     const nativeDefinition = next();
     // Keep compact summaries when collapsed; allow the host's native Codemode
     // script/nested-call/output details when the user expands that tool.
@@ -523,7 +535,7 @@ export async function installToolViewController(
       },
     });
   });
-  installCompactSpacingGuard(() => mode);
+  compactSpacingActive = installCompactSpacingGuard(() => mode);
 
   pi.registerCommand(MODE_COMMAND, {
     description: "Change Tool View mode: normal, compact, hidden, or status",

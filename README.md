@@ -107,7 +107,7 @@ Compact Thinking starts collapsed. Click the title to expand or collapse it whil
 | Finished, collapsed | `+ Thought · 1.3s` | Hidden |
 | Finished, expanded | `− Thought · 1.3s` | Complete text |
 
-Expanded text wraps to the terminal width with grey quote bars and paragraph spacing. Each block opens independently and stays open through streaming updates, terminal resizing, and completion. Clicking the body or surrounding padding, scrolling, and other mouse buttons do not toggle it.
+Expanded text starts directly below the title and wraps to the terminal width. Grey quote bars continue through paragraph breaks, and one blank row separates the body from the first tool call. Each block opens independently and stays open through streaming updates, terminal resizing, and completion. Clicking the body or surrounding padding, scrolling, and other mouse buttons do not toggle it.
 
 Elapsed time measures the Thinking phase, not the whole response. Values below a minute keep one decimal; longer values use `1m05s`. When timing is unavailable, such as in restored history, the title omits it. A live title can appear before the first text arrives. Hidden always keeps the body hidden.
 
@@ -134,9 +134,9 @@ A compact footer displays the current working directory and Git branch, when ava
 | Action | Command |
 | --- | --- |
 | Install latest npm release | `pi install npm:pi-ui-extension` |
-| Pin v1.9.0 | `pi install npm:pi-ui-extension@1.9.0` |
+| Pin v1.9.1 | `pi install npm:pi-ui-extension@1.9.1` |
 | Install from GitHub | `pi install git:github.com/1993yihuan/pi-ui-extension` |
-| Pin a Git tag | `pi install git:github.com/1993yihuan/pi-ui-extension@v1.9.0` |
+| Pin a Git tag | `pi install git:github.com/1993yihuan/pi-ui-extension@v1.9.1` |
 | Install only for the current project | `pi install --local npm:pi-ui-extension` |
 | Update unpinned packages | `pi update --extensions` |
 | List installed packages | `pi list` |

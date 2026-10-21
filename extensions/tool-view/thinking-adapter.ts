@@ -56,11 +56,17 @@ type MarkdownShape = {
   /** Pi's native horizontal padding for this message, when readable. */
   paddingX?: number;
 };
-type ThinkingBlockLike = { type: string; thinking?: string };
+type ThinkingBlockLike = { type: string; thinking?: string; text?: string; name?: string };
 
 export interface CompactThinkingOptions {
   /** Explicit thinking_end phase plus measured time for one Thinking run. */
   status: (text: string, streaming: boolean) => ThinkingStatus;
+  /**
+   * Whether a following tool call gets its native leading blank row trimmed, so
+   * an expanded body has to supply that row itself. The caller knows its own
+   * tools; anything else keeps Pi's own gap. Defaults to false.
+   */
+  needsToolGap?: (toolName: string) => boolean;
 }
 
 /**
@@ -142,6 +148,39 @@ function createBody(
   return new Markdown(text, 0, 0, shape.theme, style, transform ? { transform } : undefined);
 }
 
+/** Index of the last block of the Thinking run that starts at `startIndex`. */
+function runEndIndex(content: readonly ThinkingBlockLike[], startIndex: number): number {
+  let end = startIndex;
+  while (content[end + 1]?.type === "thinking") end++;
+  return end;
+}
+
+/**
+ * Pi inserts its own Spacer after a Thinking run as soon as another visible
+ * text/Thinking block follows, and a tool row supplies its own leading gap
+ * unless this extension's spacing guard trims it. So an expanded body supplies
+ * that single gap itself only before a tool call it knows the guard trims: an
+ * existing native spacer, a third-party tool row and the truncation notice
+ * already have one.
+ */
+function needsTrailingBlank(
+  content: readonly ThinkingBlockLike[],
+  startIndex: number,
+  stopReason: string | undefined,
+  options: CompactThinkingOptions,
+): boolean {
+  // Pi adds a Spacer before the truncation notice after the content loop.
+  if (stopReason === "length") return false;
+  const after = content.slice(runEndIndex(content, startIndex) + 1);
+  const visibleAfter = after.some((block) =>
+    (block.type === "text" && (block.text ?? "").trim()) ||
+    (block.type === "thinking" && (block.thinking ?? "").trim()));
+  if (visibleAfter) return false;
+  // Only the first following tool decides: a third-party tool keeps its own gap.
+  const firstTool = after.find((block) => block.type === "toolCall");
+  return firstTool !== undefined && (options.needsToolGap?.(firstTool.name ?? "") ?? false);
+}
+
 function decorateRegion(
   component: AssistantMessageComponent,
   region: ThinkingRegion,
@@ -151,6 +190,8 @@ function decorateRegion(
   streaming: boolean,
   transformer: MarkdownTransformer,
   options: CompactThinkingOptions,
+  content: readonly ThinkingBlockLike[],
+  stopReason: string | undefined,
 ): void {
   const child = region.child;
   // A native Text region means Pi already hides Thinking (hideThinkingBlock or
@@ -181,6 +222,7 @@ function decorateRegion(
     expanded: () => isExpanded(component, index),
     toggleable: () => mode === "compact",
     onToggle: () => toggleExpanded(component, index),
+    trailingBlank: () => needsTrailingBlank(content, run.startIndex, stopReason, options),
   });
   // The view handles title clicks itself; everything else must stay a no-op so
   // Pi's global Thinking override never replaces the Compact/Hidden title.
@@ -252,7 +294,7 @@ function decoratePendingRun(
 
 function decorate(
   component: AssistantMessageComponent,
-  message: { content?: readonly ThinkingBlockLike[] },
+  message: { content?: readonly ThinkingBlockLike[]; stopReason?: string },
   transformer: MarkdownTransformer,
   getMode: () => ToolViewMode,
   options: CompactThinkingOptions,
@@ -272,7 +314,10 @@ function decorate(
   if (regions.length !== runs.length) return;
   const streaming = internals.isStreaming === true;
   for (let index = 0; index < regions.length; index++) {
-    decorateRegion(component, regions[index]!, index, runs[index]!, mode, streaming, transformer, options);
+    decorateRegion(
+      component, regions[index]!, index, runs[index]!, mode, streaming, transformer, options,
+      content, message.stopReason,
+    );
   }
   decoratePendingRun(component, content, runs, mode, streaming, options);
 }
@@ -320,7 +365,8 @@ export function installCompactThinkingAdapter(
   const patched: typeof original = function (this: AssistantMessageComponent, ...args) {
     original.apply(this, args);
     try {
-      decorate(this, args[0] as { content?: readonly ThinkingBlockLike[] }, transformer, getMode, options);
+      decorate(this, args[0] as { content?: readonly ThinkingBlockLike[]; stopReason?: string },
+        transformer, getMode, options);
     } catch {
       // Display must never break the transcript.
     }
