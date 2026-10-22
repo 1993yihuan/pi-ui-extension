@@ -7,7 +7,7 @@ This document contains maintainer-level instructions for `pi-ui-extension`. User
 ## Prerequisites
 
 - Node.js **>= 22.19.0** and npm.
-- Pi Coding Agent with `registerToolRenderer()`. Development uses Pi SDK **1.4.0**; CI also verifies **1.3.0** and the minimum supported **1.2.0**.
+- Pi Coding Agent with `registerToolRenderer()`, **>= 1.3.0**. Development uses Pi SDK **1.4.0**; CI also verifies the minimum supported **1.3.0**. Pi 1.2.0 is no longer supported.
 - Pi fullscreen mode for the sidebar. The standard shell command may resolve to a Bun-global or npm-global Pi installation.
 
 ## Checkout and test
@@ -79,16 +79,16 @@ The `pi-package` keyword and declared package image make the published package e
 
 ## Supported test matrix
 
-The [CI workflow](../.github/workflows/ci.yml) validates all six combinations on pushes to `main` and pull requests that change code, dependencies, scripts, or configuration:
+The [CI workflow](../.github/workflows/ci.yml) validates all four combinations on pushes to `main` and pull requests that change code, dependencies, scripts, or configuration:
 
 | Node.js | Pi SDK |
 | --- | --- |
-| 22.19.0 | 1.2.0 |
 | 22.19.0 | 1.3.0 |
 | 22.19.0 | 1.4.0 |
-| 24 | 1.2.0 |
 | 24 | 1.3.0 |
 | 24 | 1.4.0 |
+
+The matrix, the release gate, and `package.json` must agree: `scripts/ci.mjs` holds the Node/Pi lists, and its tests fail if the workflow or the declared minimum supported SDK drifts from them.
 
 Each Pi SDK leg pins the entire `@earendil-works/pi-*` SDK family to the version under test so transitive semver ranges do not mix incompatible versions. The installed SDK versions are checked before running the complete test suite.
 
@@ -136,7 +136,7 @@ npm run check
 npm pack --dry-run
 ```
 
-Review the diff, commit only intended files, push to `main`, and wait for all six CI checks. Then create the matching annotated tag at the tested commit and push it:
+Review the diff, commit only intended files, push to `main`, and wait for all four CI checks. Then create the matching annotated tag at the tested commit and push it:
 
 ```bash
 git tag -a vX.Y.Z -m "vX.Y.Z"
@@ -145,7 +145,7 @@ git push origin vX.Y.Z
 
 Substitute the exact version for `X.Y.Z`. Avoid pushing a tag for an untested commit; never force-push release tags. The Release workflow performs:
 
-1. Validate tag, `main` ancestry, package name/version, and the latest `main` push CI run for that **exact commit SHA**. All six Node/Pi jobs must have succeeded; a documentation-only CI run is insufficient. It waits up to ten minutes for CI to finish.
+1. Validate tag, `main` ancestry, package name/version, and the latest `main` push CI run for that **exact commit SHA**. All four Node/Pi jobs must have succeeded; a documentation-only CI run is insufficient. It waits up to ten minutes for CI to finish.
 2. Check out the exact source SHA, install dependencies under Node.js 24 with pinned npm **11.21.0**, and run `npm run check`.
 3. Pack once, validate actual tarball contents, and record its SHA-512 integrity and source SHA. The packed manifest includes `gitHead`; the source manifest is restored afterward. The same artifact is passed between jobs and retained for 14 days.
 4. Look for an existing npm version. If its `gitHead` and integrity match, skip publication. Otherwise publish the validated tarball once with **npm Trusted Publishing (OIDC)**. New publication requires the matching tag event and cannot move npm `latest` backwards.

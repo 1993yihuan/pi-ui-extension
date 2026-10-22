@@ -10,7 +10,7 @@
 
 ## 快速开始
 
-需要 **Pi Coding Agent >= 1.2.0**、**Node.js >= 22.19.0** 和 **Pi fullscreen 模式**。
+需要 **Pi Coding Agent >= 1.3.0**、**Node.js >= 22.19.0** 和 **Pi fullscreen 模式**。
 
 ```bash
 pi install npm:pi-ui-extension

@@ -573,8 +573,8 @@ export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
     sidebar?.updatePanel(SESSION_PANEL_ID, undefined);
   };
   pi.on("before_agent_start", (_event) => {
-    // Pi 1.2 also emits this for idle custom triggerTurn runs. Both user and
-    // custom runs start a new usage exchange; never assume a prompt exists.
+    // Pi emits this for idle custom triggerTurn runs as well as user prompts.
+    // Both start a new usage exchange; never assume a prompt exists.
     contextEstimates.resetDelta();
     toolUsage?.startExchange();
     sidebar?.refresh();

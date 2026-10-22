@@ -1,22 +1,24 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { EXPECTED_CHECKS, aggregateResults, classifyEvent, docsOnly } from "./ci.mjs";
+import { EXPECTED_CHECKS, NODE_VERSIONS, PI_VERSIONS, aggregateResults, classifyEvent, docsOnly } from "./ci.mjs";
 
-test("the required matrix matches the workflow and the pinned development SDK", () => {
+test("the required matrix matches the workflow, the declared minimum and the pinned development SDK", () => {
   const read = (path) => readFileSync(new URL(path, import.meta.url), "utf8");
   const workflow = read("../.github/workflows/ci.yml");
-  const dev = JSON.parse(read("../package.json")).devDependencies["@earendil-works/pi-coding-agent"];
-  const listed = workflow.match(/pi-version: \[([^\]]*)\]/)[1].match(/\d+\.\d+\.\d+/g);
+  const manifest = JSON.parse(read("../package.json"));
+  const dev = manifest.devDependencies["@earendil-works/pi-coding-agent"];
+  const axis = key => [...workflow.match(new RegExp(`\n\\s*${key}: \\[([^\\]]*)\\]`))[1].matchAll(/'([^']+)'/g)].map(match => match[1]);
+  const nodes = axis("node-version"), listed = axis("pi-version");
+  assert.deepEqual(listed, PI_VERSIONS, "ci.yml and the release gate must list the same Pi versions");
+  assert.deepEqual(nodes, NODE_VERSIONS, "ci.yml and the release gate must list the same Node versions");
   assert.equal(listed.at(-1), dev, "the matrix must end with the pinned development SDK");
-  assert.ok(listed.includes("1.2.0"), "the minimum supported SDK stays covered");
+  // Whatever minimum the package declares to users must be a tested leg.
+  assert.equal(listed[0], manifest.peerDependencies["@earendil-works/pi-coding-agent"].replace(/^>=\s*/, ""),
+    "package.json peerDependencies must declare the lowest tested Pi SDK as the minimum supported version");
   assert.equal(workflow.includes(`if: matrix.pi-version != '${dev}'`), true,
     "only the leg that npm ci already installs skips the SDK pin step");
-  for (const node of ["22.19.0", "24"]) {
-    for (const pi of listed) assert.ok(EXPECTED_CHECKS.includes(`check (${node}, ${pi})`),
-      `the release gate must expect check (${node}, ${pi})`);
-  }
-  assert.equal(EXPECTED_CHECKS.length, 2 * listed.length, "no extra or missing matrix job");
+  assert.equal(EXPECTED_CHECKS.length, nodes.length * listed.length, "no extra or missing matrix job");
 });
 
 test("only known documentation changes skip the SDK matrix", () => {

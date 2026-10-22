@@ -114,7 +114,8 @@ test("CI gate rejects failed latest runs and docs-only successful runs", async (
   for (const conclusion of ["failure", "cancelled"]) {
     await assert.rejects(waitForCI(async () => ({ workflow_runs: [run({ id: 9 }), run({ conclusion })] }), sha, clock()), /did not succeed/);
   }
-  await assert.rejects(waitForCI(async path => path.includes("/jobs?") ? { jobs: [{ name: "docs", status: "completed", conclusion: "success" }] } : { workflow_runs: [run()] }, sha, clock()), /all four/);
+  await assert.rejects(waitForCI(async path => path.includes("/jobs?") ? { jobs: [{ name: "docs", status: "completed", conclusion: "success" }] } : { workflow_runs: [run()] }, sha, clock()),
+    new RegExp(`all ${EXPECTED_CHECKS.length} Node/Pi checks`));
 });
 
 test("CI gate paginates jobs rather than trusting only the first hundred", async () => {

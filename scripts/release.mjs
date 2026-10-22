@@ -123,7 +123,7 @@ export async function waitForCI(api, sha, options = {}) {
       jobs.push(...data.jobs);
       if (data.jobs.length < 100) break;
     }
-    if (!matrixPassed(jobs)) throw new Error("Release requires all four Node/Pi checks for this exact SHA; documentation-only CI is insufficient");
+    if (!matrixPassed(jobs)) throw new Error(`Release requires all ${EXPECTED_CHECKS.length} Node/Pi checks for this exact SHA; documentation-only CI is insufficient`);
     return run.id;
   }, { intervalMs: 10_000, ...options });
 }

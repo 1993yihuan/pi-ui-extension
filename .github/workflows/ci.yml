@@ -49,11 +49,14 @@ jobs:
     if: needs.changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # One list for the whole SDK family: install and verification cannot drift apart.
+    env:
+      PI_SDK_PACKAGES: pi-coding-agent pi-tui pi-agent-core pi-ai pi-codemode pi-mcp pi-telemetry
     strategy:
       fail-fast: false
       matrix:
         node-version: ['22.19.0', '24']
-        pi-version: ['1.2.0', '1.3.0', '1.4.0']
+        pi-version: ['1.3.0', '1.4.0']
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -72,21 +75,18 @@ jobs:
       # Pin the entire SDK family so transitive ranges cannot mix Pi versions.
       - name: Install Pi SDK under test
         if: matrix.pi-version != '1.4.0'
+        env:
+          PI_SDK_VERSION: ${{ matrix.pi-version }}
         run: |
-          npm install --no-save --package-lock=false --no-audit --no-fund \
-            @earendil-works/pi-coding-agent@${{ matrix.pi-version }} \
-            @earendil-works/pi-tui@${{ matrix.pi-version }} \
-            @earendil-works/pi-agent-core@${{ matrix.pi-version }} \
-            @earendil-works/pi-ai@${{ matrix.pi-version }} \
-            @earendil-works/pi-codemode@${{ matrix.pi-version }} \
-            @earendil-works/pi-mcp@${{ matrix.pi-version }} \
-            @earendil-works/pi-telemetry@${{ matrix.pi-version }}
+          packages=()
+          for name in $PI_SDK_PACKAGES; do packages+=("@earendil-works/$name@$PI_SDK_VERSION"); done
+          npm install --no-save --package-lock=false --no-audit --no-fund "${packages[@]}"
 
       - name: Verify Pi SDK versions
         env:
           PI_SDK_VERSION: ${{ matrix.pi-version }}
         run: |
-          node -e 'for (const name of ["pi-coding-agent", "pi-tui", "pi-agent-core", "pi-ai", "pi-codemode", "pi-mcp", "pi-telemetry"]) { const actual = require("./node_modules/@earendil-works/" + name + "/package.json").version; if (actual !== process.env.PI_SDK_VERSION) throw new Error(name + ": expected " + process.env.PI_SDK_VERSION + ", got " + actual); }'
+          node -e 'for (const name of process.env.PI_SDK_PACKAGES.split(" ")) { const actual = require("./node_modules/@earendil-works/" + name + "/package.json").version; if (actual !== process.env.PI_SDK_VERSION) throw new Error(name + ": expected " + process.env.PI_SDK_VERSION + ", got " + actual); }'
 
       - name: Validate
         run: npm run check

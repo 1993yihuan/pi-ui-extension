@@ -10,7 +10,7 @@ A fullscreen terminal UI extension for [Pi Coding Agent](https://github.com/eare
 
 ## Quick start
 
-Requires **Pi Coding Agent >= 1.2.0**, **Node.js >= 22.19.0**, and **Pi fullscreen mode**.
+Requires **Pi Coding Agent >= 1.3.0**, **Node.js >= 22.19.0**, and **Pi fullscreen mode**.
 
 ```bash
 pi install npm:pi-ui-extension

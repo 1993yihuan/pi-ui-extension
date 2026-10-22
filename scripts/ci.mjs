@@ -2,8 +2,11 @@ import { execFileSync } from "node:child_process";
 import { appendFileSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-export const EXPECTED_CHECKS = ["22.19.0", "24"].flatMap(node =>
-  ["1.2.0", "1.3.0", "1.4.0"].map(pi => `check (${node}, ${pi})`));
+// Single source for the supported matrix; ci.yml and the release gate are checked against it.
+export const NODE_VERSIONS = ["22.19.0", "24"];
+export const PI_VERSIONS = ["1.3.0", "1.4.0"];
+export const EXPECTED_CHECKS = NODE_VERSIONS.flatMap(node =>
+  PI_VERSIONS.map(pi => `check (${node}, ${pi})`));
 
 export function docsOnly(paths) {
   return paths.length > 0 && paths.every(path =>

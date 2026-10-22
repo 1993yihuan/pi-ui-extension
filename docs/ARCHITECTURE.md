@@ -50,7 +50,7 @@ Restoration uses the SDK's active session projection where available, including 
 
 To reduce redraw work, streaming token estimates are sampled at most once every **150 ms**, while the first valid token update is shown immediately. Unchanged estimates do not trigger redundant CTX redraws. The elapsed-time ticker runs only while an agent run is active and is cleaned up when it settles or the panel is disposed.
 
-Pi 1.2.0 can emit `before_agent_start` for user prompts and idle custom-triggered runs. Therefore, CTX deltas and Tool/MCP **RUN** counters reset for each agent run, not strictly for each user question. A cancelled/aborted run should not be reported as a tool failure.
+Pi emits `before_agent_start` for user prompts and idle custom-triggered runs. Therefore, CTX deltas and Tool/MCP **RUN** counters reset for each agent run, not strictly for each user question. A cancelled/aborted run should not be reported as a tool failure.
 
 ## Thinking display and measured duration
 
@@ -98,11 +98,11 @@ Output line counts use `line/lines` (or `out` as a narrow-screen fallback), whil
 
 Supported built-in tools, **including Codemode**, can be clicked to expand Pi's **native** details without leaving Compact. Collapsed Codemode shows just the tool name plus nested-call status/count, output size and duration. Its input script line count is intentionally omitted. An expanded Codemode shows the native script, nested tool calls and arguments, output and errors; clicking again restores the two-line Compact summary. The native renderer retains its own expanded state and display logic. Normal still uses Pi's full native rendering; Hidden removes transcript rows without cancelling execution or usage accounting.
 
-**Why a host UI adapter exists:** Pi 1.2.0, 1.3.0 and 1.4.0 self-rendered tool components insert a leading blank row before each tool. Public tool renderer APIs cannot control that space. Compact therefore uses a deliberately limited compatibility adapter to remove **exactly one expected blank row** for renderers owned by this extension, and adjusts the mouse y-coordinate so click expansion still targets the right row. It does not add or remove Thinking rows or change third-party, Normal or Hidden layouts; the expanded Thinking body only reads whether the guard is active to know if the tool row after it still supplies that blank.
+**Why a host UI adapter exists:** Pi 1.3.0 and 1.4.0 self-rendered tool components insert a leading blank row before each tool. Public tool renderer APIs cannot control that space. Compact therefore uses a deliberately limited compatibility adapter to remove **exactly one expected blank row** for renderers owned by this extension, and adjusts the mouse y-coordinate so click expansion still targets the right row. It does not add or remove Thinking rows or change third-party, Normal or Hidden layouts; the expanded Thinking body only reads whether the guard is active to know if the tool row after it still supplies that blank.
 
 The adapter:
 
-- Accepts compatible host method layouts, checked against Pi 1.2.0/1.3.0/1.4.0, without an exact-version whitelist.
+- Accepts compatible host method layouts, checked against Pi 1.3.0/1.4.0, without an exact-version whitelist.
 - Validates expected render/mouse method shape before patching; incompatible or previously patched shapes fail closed.
 - Accounts for the difference between unbundled SDK (`event.y - 1`) and the official minified Pi CLI (`event.y-1`). The bundled CLI may use a different class instance from the project SDK.
 - Marks extension-owned renderers to avoid rewriting every tool, offsets click coordinates, and avoids stacked wrappers across reloads.
@@ -136,6 +136,6 @@ MCP status UI never displays commands, raw endpoint URLs, headers, tokens, envir
 
 ## Dependency and release considerations
 
-The Pi coding-agent and TUI packages are peer dependencies to avoid bundling duplicate host instances. The code still protects against the real CLI's separately bundled UI runtime via explicit host shape checks. CI tests Node 22.19.0/24 × Pi SDK 1.2.0/1.3.0/1.4.0.
+The Pi coding-agent and TUI packages are peer dependencies to avoid bundling duplicate host instances. The code still protects against the real CLI's separately bundled UI runtime via explicit host shape checks. Pi **1.3.0** is the minimum supported version; CI tests Node 22.19.0/24 × Pi SDK 1.3.0/1.4.0.
 
 Published npm tarballs contain runtime TypeScript sources but not `*.test.ts`. The full test suite and release workflow are described in [Development](DEVELOPMENT.md); there is no need to ship these architecture notes in the npm tarball when the main README links to the GitHub copies.
