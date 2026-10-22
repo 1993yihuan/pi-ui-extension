@@ -154,7 +154,7 @@ Project-local installation requires Pi to trust the project. Pinned versions do 
 3. Install `pi install npm:pi-ui-extension@1.9.3` (add `--local` for a project installation), restart Pi, and run `pi --tui-mode fullscreen`. Check global and project package entries so an older pinned copy is not still loaded.
 4. Confirm the sidebar, Compact tool expansion and mouse alignment, Thinking expansion (with native Thinking visibility enabled), session switching, and Tool/MCP statistics.
 
-If you must stay on Pi 1.2.x, keep or reinstall `pi install npm:pi-ui-extension@1.9.2`, or pin the Git source to `@v1.9.2`; preserve the original global/project scope. Pinned versions do not upgrade automatically. A successful installation alone does not establish host compatibility.
+If you must stay on Pi 1.2.x, use `pi install` with the package source `npm:pi-ui-extension@1.9.2`, or pin the Git source to `@v1.9.2`; preserve the original global/project scope. Pinned versions do not upgrade automatically. A successful installation alone does not establish host compatibility.
 
 CI verifies Pi SDK **1.3.0 and 1.4.0** on Node.js **22.19.0 and 24**. The declared `>=1.3.0` range also permits other versions, but they are not individually verified by this matrix. This release adds no session/configuration format migration.
 
