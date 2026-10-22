@@ -7,7 +7,7 @@ import test from "node:test";
 import { EXPECTED_CHECKS } from "./ci.mjs";
 import {
   assertPublishedArtifact, compareVersions, ensureGithubRelease, matrixPassed,
-  poll, publishArtifact, readArtifact, requestJson, stableVersion, verifyArtifact, waitForCI,
+  npmRegistryRecord, poll, publishArtifact, readArtifact, requestJson, stableVersion, verifyArtifact, waitForCI,
 } from "./release.mjs";
 
 const sha = "a".repeat(40);
@@ -42,6 +42,22 @@ test("HTTP reads distinguish absent packages from authentication and server fail
   await assert.rejects(request(404, { method: "POST", body: {} }), error => !error.retryable);
   await assert.rejects(requestJson("https://registry.npmjs.org/example", { fetchImpl: async () => { throw Error("network down"); } }), error => error.retryable);
   await assert.rejects(requestJson("https://registry.npmjs.org/example", { fetchImpl: async () => new Response("invalid JSON") }), error => error.retryable);
+});
+
+test("npm CLI registry reads distinguish absent packages, auth errors, and valid metadata", () => {
+  let args;
+  const record = npmRegistryRecord("1.9.2", { run: (cmd, argv) => {
+    assert.equal(cmd, "npm");
+    args = argv;
+    return JSON.stringify({ name: "pi-ui-extension", version: "1.9.2" });
+  } });
+  assert.equal(record.version, "1.9.2");
+  assert.ok(args.includes("--prefer-online"));
+  assert.ok(args.includes("--fetch-retries=0"));
+  assert.equal(npmRegistryRecord("1.9.2", { run: () => { throw Object.assign(Error(), { status: 1, stderr: "npm error code E404" }); } }), undefined);
+  assert.throws(() => npmRegistryRecord("1.9.2", { run: () => { throw Object.assign(Error(), { status: 1, stderr: "npm error code E401" }); } }), error => !error.retryable);
+  assert.throws(() => npmRegistryRecord("1.9.2", { run: () => { throw Error("timeout"); } }), error => error.retryable);
+  assert.throws(() => npmRegistryRecord("1.9.2", { run: () => JSON.stringify({ name: "wrong", version: "1.9.2" }) }), error => error.retryable);
 });
 
 test("polling handles indexing delays and temporary HTTP failures within one deadline", async () => {
@@ -130,6 +146,16 @@ test("new publication requires a matching tag event and cannot move latest backw
   assert.equal(calls, 0);
   assert.equal(await publishArtifact(metadata, options), "published");
   assert.equal(calls, 1);
+});
+
+test("verified manual dispatch can publish only with explicit opt-in", async () => {
+  let uploads = 0;
+  const options = { lookup: async () => undefined, latest: async () => undefined,
+    ref: "refs/heads/main", sha: "b".repeat(40), publish: async () => { uploads++; } };
+  await assert.rejects(publishArtifact(metadata, options), /matching tag/);
+  assert.equal(uploads, 0);
+  assert.equal(await publishArtifact(metadata, { ...options, manualDispatch: true }), "published");
+  assert.equal(uploads, 1);
 });
 
 test("an uncertain npm upload failure is never automatically retried", async () => {

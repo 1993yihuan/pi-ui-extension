@@ -53,6 +53,29 @@ export async function requestJson(url, { token, method = "GET", body, timeoutMs 
   catch { throw new RequestError("Registry/API returned invalid JSON", true); }
 }
 
+
+/** npm CLI shares network/proxy settings with npm ci and npm publish. */
+export function npmRegistryRecord(version, { run = execFileSync, timeoutMs = 20_000 } = {}) {
+  if (version !== "latest" && !STABLE.test(version)) throw new Error("Invalid npm version lookup");
+  const budget = Math.max(1, Math.min(20_000, timeoutMs));
+  try {
+    const raw = run("npm", ["view", `${PACKAGE}@${version}`, "--json", `--registry=${REGISTRY}`,
+      `--fetch-timeout=${budget}`, "--fetch-retries=0", "--prefer-online"],
+    { encoding: "utf8", timeout: budget + 1_000, maxBuffer: 4 * 1024 * 1024 });
+    const record = JSON.parse(raw);
+    if (!record || Array.isArray(record) || record.name !== PACKAGE || !STABLE.test(record.version)) {
+      throw new RequestError("Registry returned invalid package metadata", true);
+    }
+    return record;
+  } catch (error) {
+    if (error instanceof RequestError) throw error;
+    const detail = String(error.stderr ?? "");
+    if (error.status === 1 && /\bE404\b/.test(detail)) return undefined;
+    if (/\b(?:E401|E403)\b/.test(detail)) throw new RequestError("Registry rejected npm credentials", false);
+    throw new RequestError("npm registry lookup failed or timed out", true);
+  }
+}
+
 /** The deadline includes HTTP time, retries and sleeps; credentials/errors never become a false 404. */
 export async function poll(read, { timeoutMs = 600_000, intervalMs = 20_000, now = Date.now, delay = sleep, log = console.log } = {}) {
   const deadline = now() + timeoutMs;
@@ -152,10 +175,10 @@ export function readArtifact(directory, { tag, sha, expectedIntegrity } = {}) {
 }
 
 /** Never retry npm publish itself. Existing versions must match both source and bytes. */
-export async function publishArtifact(metadata, { lookup, latest, publish, ref, sha }) {
+export async function publishArtifact(metadata, { lookup, latest, publish, ref, sha, manualDispatch = false }) {
   const existing = await lookup();
   if (existing) { assertPublishedArtifact(existing, metadata); return "already-published"; }
-  if (ref !== `refs/tags/${metadata.tag}` || sha !== metadata.sha) throw new Error("New publication must run from the matching tag; use recovery mode for an existing package");
+  if (!manualDispatch && (ref !== `refs/tags/${metadata.tag}` || sha !== metadata.sha)) throw new Error("New publication must run from the matching tag or verified main dispatch; use recovery mode for an existing package");
   const current = await latest();
   if (current && compareVersions(current.version, metadata.version) > 0) throw new Error("Refusing to move npm latest backwards");
   await publish();
@@ -163,11 +186,14 @@ export async function publishArtifact(metadata, { lookup, latest, publish, ref, 
 }
 
 async function publish(metadata, directory) {
-  const lookup = path => poll(timeoutMs => requestJson(`${REGISTRY}/${PACKAGE}/${path}`, { timeoutMs }).then(record => ({ record })), { timeoutMs: 60_000 }).then(value => value.record);
+  const lookup = path => poll(timeoutMs => Promise.resolve({ record: npmRegistryRecord(path, { timeoutMs }) }), { timeoutMs: 60_000 }).then(value => value.record);
   try {
     const result = await publishArtifact(metadata, {
       lookup: () => lookup(metadata.version), latest: () => lookup("latest"),
       ref: process.env.GITHUB_REF, sha: process.env.GITHUB_SHA,
+      manualDispatch: process.env.GITHUB_EVENT_NAME === "workflow_dispatch" &&
+        process.env.GITHUB_REF === "refs/heads/main" && process.env.RELEASE_MODE === "release" &&
+        process.env.RELEASE_TAG === metadata.tag && process.env.RELEASE_SHA === metadata.sha,
       publish: () => execFileSync("npm", ["publish", join(directory, "package.tgz"), "--access", "public", "--tag", "latest", "--ignore-scripts", `--registry=${REGISTRY}`, "--fetch-timeout=20000", "--fetch-retries=0"], { stdio: "inherit", timeout: 120_000 }),
     });
     console.log(result);
@@ -213,8 +239,8 @@ async function main(command) {
   if (command === "publish") return publish(metadata, directory);
   if (command === "verify") {
     const { latest } = await verifyArtifact(metadata,
-      timeoutMs => requestJson(`${REGISTRY}/${PACKAGE}/${metadata.version}`, { timeoutMs }),
-      { readLatest: timeoutMs => requestJson(`${REGISTRY}/${PACKAGE}/latest`, { timeoutMs }) });
+      timeoutMs => Promise.resolve(npmRegistryRecord(metadata.version, { timeoutMs })),
+      { readLatest: timeoutMs => Promise.resolve(npmRegistryRecord("latest", { timeoutMs })) });
     console.log(`Verified ${metadata.tag}, commit ${metadata.sha}, integrity and npm latest=${latest.version}`);
     return;
   }
