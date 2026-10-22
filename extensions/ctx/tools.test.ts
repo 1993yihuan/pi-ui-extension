@@ -34,7 +34,7 @@ test("tracker filters active tools, refreshes dynamic schemas, caches reads and 
   getActiveTools:()=>{if(fail) throw new Error("unavailable");return active;},
   getAllTools:()=>{reads++;return all;},
  } as any, ()=>{});
- const ctx = {sessionManager:{buildContextEntries:()=>[]},getSystemPrompt:()=>""};
+ const ctx = {sessionManager:{buildSessionProjection:()=>({messages:[]})},getSystemPrompt:()=>""};
  handlers.get("session_start")!({},ctx);
  assert.equal(toolsCategory(tracker.getSnapshot()).tokens, expected);
  const cached = tracker.getSnapshot(); const priorReads = reads;

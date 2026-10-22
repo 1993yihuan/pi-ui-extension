@@ -12,6 +12,8 @@ test("the required matrix matches the workflow, the declared minimum and the pin
   const nodes = axis("node-version"), listed = axis("pi-version");
   assert.deepEqual(listed, PI_VERSIONS, "ci.yml and the release gate must list the same Pi versions");
   assert.deepEqual(nodes, NODE_VERSIONS, "ci.yml and the release gate must list the same Node versions");
+  assert.equal(manifest.engines.node, `>=${nodes[0]}`,
+    `package.json must declare the lowest tested Node version as its runtime minimum`);
   assert.equal(listed.at(-1), dev, "the matrix must end with the pinned development SDK");
   // Whatever minimum the package declares to users must be a tested leg.
   for (const name of ["pi-coding-agent", "pi-tui"]) {

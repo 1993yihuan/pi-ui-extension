@@ -195,7 +195,6 @@ export async function installToolViewController(
   let sessionGeneration = 0;
   let modeChangeQueue = Promise.resolve();
   const modeListeners = new Set<(mode: ToolViewMode) => void>();
-  const supportsThinking = typeof pi.registerMarkdownTransformer === "function";
   const thinkingTiming = new ThinkingTiming();
   // Undo the v1.2.8 in-memory click adapter when upgrading with Pi's /reload.
   // The current adapter owns only the Thinking region child of components built
@@ -214,19 +213,17 @@ export async function installToolViewController(
   const thinkingStatus = (text: string, streaming: boolean) => thinkingTiming.status(text, streaming);
   const thinkingTransformer: Parameters<ExtensionAPI["registerMarkdownTransformer"]>[0] =
     (markdown, context) => transformThinkingText(markdown, context, mode, thinkingStatus);
-  if (supportsThinking) {
-    pi.registerMarkdownTransformer(thinkingTransformer);
-    installCompactThinkingAdapter(() => mode, thinkingTransformer, {
-      status: thinkingStatus,
-      // Pi's own tool row keeps its leading blank row unless the spacing guard
-      // below trims it, so only then does an expanded body supply that row.
-      needsToolGap: (toolName) => compactSpacingActive && ownsCompactTool(toolName),
-    });
-  }
+  pi.registerMarkdownTransformer(thinkingTransformer);
+  installCompactThinkingAdapter(() => mode, thinkingTransformer, {
+    status: thinkingStatus,
+    // Pi's own tool row keeps its leading blank row unless the spacing guard
+    // below trims it, so only then does an expanded body supply that row.
+    needsToolGap: (toolName) => compactSpacingActive && ownsCompactTool(toolName),
+  });
   let nativeThinkingWarningShown = false;
   const warnNativeThinkingHidden = (ctx: ExtensionContext): void => {
     if (ctx.mode !== "tui" || nativeThinkingWarningShown || mode === "hidden" ||
-        pi.getSettings?.().hideThinkingBlock !== true) return;
+        pi.getSettings().hideThinkingBlock !== true) return;
     nativeThinkingWarningShown = true;
     ctx.ui.notify(
       "Pi is hiding Thinking natively. Set hideThinkingBlock: false (or use Ctrl+T) to apply Tool View to Thinking.",
@@ -321,8 +318,7 @@ export async function installToolViewController(
       requestTranscriptRerender(ctx);
       // Refresh Pi's existing assistant-message Markdown components (including
       // the active stream) through the official UI API, without patching internals.
-      ctx.ui.setHiddenThinkingLabel?.();
-      if (!supportsThinking) ctx.ui.notify("This Pi version cannot transform Thinking display.", "warning");
+      ctx.ui.setHiddenThinkingLabel();
       warnNativeThinkingHidden(ctx);
       if (notify) ctx.ui.notify(`Tool View: ${modeLabel(mode)}`, "info");
     });

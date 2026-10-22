@@ -24,11 +24,14 @@ test("Codemode uses compact summaries until clicked, native details when expande
     notify() {},
     getToolsExpanded: () => expanded,
     setToolsExpanded(next: boolean) { expanded = next; expansions.push(next); },
+    setHiddenThinkingLabel() {},
   };
   const ctx = { mode: "tui", ui, sessionManager: { getSessionId: () => "session" }, cwd: directory } as any;
   const pi = {
     registerTool() { registered++; throw new Error("Tool execution must remain with Pi"); },
     registerToolRenderer(resolver: ToolRendererResolver) { renderers.push(resolver); },
+    registerMarkdownTransformer() {},
+    getSettings: () => ({}),
     registerCommand() {},
     registerShortcut() {},
     getCommands: () => [],
@@ -185,6 +188,7 @@ test("one Thinking followed by multiple codemode calls preserves independent too
   let resolver: ToolRendererResolver | undefined;
   const pi = {
     registerToolRenderer(cb: ToolRendererResolver) { resolver = cb; },
+    registerMarkdownTransformer() {},
     registerCommand() {}, registerShortcut() {}, on() {},
   } as any;
   try {
@@ -243,6 +247,7 @@ test("Codemode Compact estimates live elapsed time and stops ticking after compl
   let resolver: ToolRendererResolver | undefined;
   const pi = {
     registerToolRenderer(callback: ToolRendererResolver) { resolver = callback; },
+    registerMarkdownTransformer() {},
     registerCommand() {}, registerShortcut() {}, on() {},
   } as any;
   try {
@@ -284,6 +289,7 @@ test("Codemode Compact handles missing, malformed, or very large metadata withou
   let resolver: ToolRendererResolver | undefined;
   const pi = {
     registerToolRenderer(cb: ToolRendererResolver) { resolver = cb; },
+    registerMarkdownTransformer() {},
     registerCommand() {}, registerShortcut() {}, on() {},
   } as any;
   try {
@@ -311,6 +317,7 @@ test("Codemode Compact keeps each styled row to one terminal line and prioritize
   let resolver: ToolRendererResolver | undefined;
   const pi = {
     registerToolRenderer(cb: ToolRendererResolver) { resolver = cb; },
+    registerMarkdownTransformer() {},
     registerCommand() {}, registerShortcut() {}, on() {},
   } as any;
   try {
@@ -354,6 +361,7 @@ test("Codemode output count falls back from lines to out only on narrow rows; du
   let resolver: ToolRendererResolver | undefined;
   const pi = {
     registerToolRenderer(cb: ToolRendererResolver) { resolver = cb; },
+    registerMarkdownTransformer() {},
     registerCommand() {}, registerShortcut() {}, on() {},
   } as any;
   const applied: Array<{ name: string; value: string }> = [];

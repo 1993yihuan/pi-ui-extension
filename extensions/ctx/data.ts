@@ -134,18 +134,6 @@ export function estimateContext(
   };
 }
 
-/** Only compaction-applied active entries; never reads JSONL or tool details. */
-export function messagesFromContextEntries(entries: readonly unknown[]): unknown[] {
-  return entries.flatMap((value): unknown[] => {
-    const entry = record(value);
-    if (entry.type === "message") return [entry.message];
-    if (entry.type === "compaction") return [{ role: "compactionSummary", summary: entry.summary }];
-    if (entry.type === "branch_summary") return [{ role: "branchSummary", summary: entry.summary }];
-    if (entry.type === "custom_message") return [{ role: "custom", content: entry.content }];
-    return [];
-  });
-}
-
 export function installContextEstimates(pi: ExtensionAPI, onChange: () => void): {
   getSnapshot(): ContextEstimate;
   getDelta(): number | undefined;
@@ -163,9 +151,8 @@ export function installContextEstimates(pi: ExtensionAPI, onChange: () => void):
     }
     // Pi's projection applies branch-local context edits and compaction before
     // estimating. System messages are already represented by getSystemPrompt().
-    const messages = typeof ctx.sessionManager.buildSessionProjection === "function"
-      ? ctx.sessionManager.buildSessionProjection().messages.filter(message => message.role !== "system")
-      : messagesFromContextEntries(ctx.sessionManager.buildContextEntries());
+    const messages = ctx.sessionManager.buildSessionProjection().messages
+      .filter(message => message.role !== "system");
     snapshot = estimateContext(messages, ctx.getSystemPrompt(), "active branch", activeToolDefinitions(pi), latestProviderImagesWire);
     if (keepProviderMeasurement && latestProviderToolsTokens !== undefined) {
       const categories = snapshot.categories.map((category) =>

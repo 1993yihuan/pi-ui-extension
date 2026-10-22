@@ -247,7 +247,7 @@ export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
   let activeLeaseHealthy = true;
   const updateActiveLease = (ctx: ExtensionContext): void => {
     try {
-      activeLease.update(ctx.sessionManager.getSessionId(), ctx.sessionManager.getSessionFile?.());
+      activeLease.update(ctx.sessionManager.getSessionId(), ctx.sessionManager.getSessionFile());
       activeLeaseHealthy = true;
     } catch (error) {
       activeLeaseHealthy = false;
@@ -657,7 +657,7 @@ export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
     updateActiveLease(ctx);
     mcpCwd = ctx.cwd;
     mcpTrusted = ctx.isProjectTrusted();
-    registeredServers = typeof pi.getMcpServers === "function" ? pi.getMcpServers() : [];
+    registeredServers = pi.getMcpServers();
     updateMcpStatus();
     toolViewMode = toolView.getMode();
     getCurrentBranch = () => ctx.sessionManager.getBranch();

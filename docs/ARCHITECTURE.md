@@ -46,7 +46,7 @@ CTX shows the active model and Thinking level, context size and usage, current-r
 
 The `System`, `Tools`, `Messages`, `Tool Results`, `Summary`, and `Other` breakdown uses **local heuristic token estimates**. It is for composition and trend analysis, **not provider-exact tokenization or billing**. For tools, prefer the actual observable provider-request tool payload; before a provider request is available, estimate Pi's enabled tool schemas instead.
 
-Restoration uses the SDK's active session projection where available, including context edits and compaction. Removed or replaced content is not reintroduced when a run settles; system messages are accounted for separately through the effective system prompt.
+Restoration uses the SDK's active session projection, including context edits and compaction. Removed or replaced content is not reintroduced when a run settles; system messages are accounted for separately through the effective system prompt.
 
 To reduce redraw work, streaming token estimates are sampled at most once every **150 ms**, while the first valid token update is shown immediately. Unchanged estimates do not trigger redundant CTX redraws. The elapsed-time ticker runs only while an agent run is active and is cleaned up when it settles or the panel is disposed.
 

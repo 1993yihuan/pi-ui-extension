@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createReadTool, SessionManager } from "@earendil-works/pi-coding-agent";
-import { estimateContext, installContextEstimates, messagesFromContextEntries } from "./data.ts";
+import { estimateContext, installContextEstimates } from "./data.ts";
 
 const result = (n: number) => ({ role: "toolResult", toolName: "sample_runner", toolCallId: String(n), content: [{ type: "text", text: "x".repeat(n * 4) }], details: { fullOutput: "x".repeat(100000), operations: [{ toolName: "read" }] } });
 const tool = { name: "sample_runner", description: "Execute TypeScript", parameters: createReadTool(process.cwd()).parameters };
@@ -60,13 +60,22 @@ test("delta tracks the previous settled run and resets", () => {
   assert.equal(tracker.getDelta(), undefined);
   assert.equal(tracker.getSnapshot().total, 1100);
 });
-test("converts custom context entries", () => {
-  assert.equal(messagesFromContextEntries([{type:"custom_message",content:"ok"}]).length, 1);
+test("the active branch projection includes custom context entries", () => {
+  const handlers = new Map<string, Function>();
+  const tracker = installContextEstimates({
+    on: (name: string, fn: Function) => handlers.set(name, fn),
+    getActiveTools: () => [], getAllTools: () => [],
+  } as any, () => {});
+  const session = SessionManager.inMemory();
+  session.appendCustomMessageEntry("automation", "custom body", false);
+  handlers.get("session_start")!({}, { sessionManager: session, getSystemPrompt: () => "" });
+  assert.ok(tracker.getSnapshot().categories.find(c => c.name === "Other")!.tokens! > 0,
+    "a custom message is estimated from the SDK projection");
 });
 
-test("restoring CTX respects SDK context removals, replacements and branch changes", (t) => {
+test("restoring CTX respects SDK context removals, replacements and branch changes", () => {
   const session = SessionManager.inMemory();
-  if (typeof session.appendContextEdit !== "function") { t.skip("context edits require Pi 1.3"); return; }
+  assert.equal(typeof session.appendContextEdit, "function", "context edits need the supported SDK API");
   const handlers = new Map<string, Function>();
   const tracker = installContextEstimates({
     on: (name: string, fn: Function) => handlers.set(name, fn),

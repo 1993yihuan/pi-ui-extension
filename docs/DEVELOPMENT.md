@@ -6,7 +6,7 @@ This document contains maintainer-level instructions for `pi-ui-extension`. User
 
 ## Prerequisites
 
-- Node.js **>= 22.19.0** and npm.
+- Node.js **>= 22.19.0** and npm. `@types/node` stays on the Node 22 series (the same baseline as the Pi SDK's own development types) to prevent type checking from drifting to a newer major API surface; it does not pin the exact patch level, so CI still verifies the declared minimum 22.19.0 itself. Dependabot ignores major bumps of that package.
 - Pi Coding Agent with `registerToolRenderer()`, **>= 1.3.0**. Development uses Pi SDK **1.4.0**; CI also verifies the minimum supported **1.3.0**. Pi 1.2.0 is no longer supported.
 - Pi fullscreen mode for the sidebar. The standard shell command may resolve to a Bun-global or npm-global Pi installation.
 
@@ -88,7 +88,7 @@ The [CI workflow](../.github/workflows/ci.yml) validates all four combinations o
 | 24 | 1.3.0 |
 | 24 | 1.4.0 |
 
-The matrix, the release gate, and `package.json` must agree: `scripts/ci.mjs` holds the Node/Pi lists, and its tests fail if the workflow or the declared minimum supported SDK drifts from them.
+The matrix, the release gate, and `package.json` must agree: `scripts/ci.mjs` holds the Node/Pi lists, and its tests fail if the workflow, the declared `engines.node`, or the declared minimum supported SDK drifts from them. `scripts/check-docs.mjs` additionally requires both root READMEs to state that Node minimum, and rejects any document whose explicit Node minimum differs from `engines.node`.
 
 Each Pi SDK leg pins the entire `@earendil-works/pi-*` SDK family to the version under test so transitive semver ranges do not mix incompatible versions. The installed SDK versions are checked before running the complete test suite.
 
@@ -99,7 +99,7 @@ Configure branch protection to require **`CI result`**. This check runs for both
 When editing workflow helpers, their focused regression checks can be run without installing the SDK:
 
 ```bash
-node --test scripts/ci.test.mjs scripts/release.test.mjs
+node --test scripts/ci.test.mjs scripts/check-docs.test.mjs scripts/release.test.mjs
 ```
 
 For workflow syntax checks with `actionlint` 1.7.12, ignore only its unsupported `concurrency.queue` key diagnostic; the queue itself follows the GitHub specification linked below:

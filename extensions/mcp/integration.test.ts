@@ -24,14 +24,18 @@ test("entry wires early/late MCP status into restored and live usage without dou
   const pi: any = {
     registerTool() { throw new Error("Tool View must not register tools"); }, registerToolRenderer() {}, registerCommand(name: string, options: any) { commands.set(name, options); }, registerShortcut() {},
     getCommands: () => [], getActiveTools: () => [], getAllTools: () => [], getThinkingLevel: () => "off",
+    registerMarkdownTransformer() {}, getSettings: () => ({}),
     getMcpServers: () => registrations,
     on(name: string, fn: any) { handlers.set(name, [...(handlers.get(name) ?? []), fn]); },
     events: { on(name: string, fn: any) { bus.set(name, fn); return () => bus.delete(name); } },
   };
   const ctx: any = {
     mode: "tui", cwd: directory, isIdle: () => idle, isProjectTrusted: () => true, getSystemPrompt: () => "", getContextUsage: () => undefined,
-    sessionManager: { getBranch: () => branch, buildContextEntries: () => [], getSessionId: () => "test", getSessionDir: () => directory },
-    ui: { setStatus() {}, notify(message: string) { notices.push(message); }, setFooter(factory: any) { footer?.dispose(); footer = factory?.(tui, theme, { onBranchChange: () => () => {}, getGitBranch: () => null }); } },
+    sessionManager: {
+      getBranch: () => branch, getSessionId: () => "test", getSessionDir: () => directory,
+      getSessionFile: () => undefined, buildSessionProjection: () => ({ messages: [] }),
+    },
+    ui: { setStatus() {}, setHiddenThinkingLabel() {}, notify(message: string) { notices.push(message); }, setFooter(factory: any) { footer?.dispose(); footer = factory?.(tui, theme, { onBranchChange: () => () => {}, getGitBranch: () => null }); } },
   };
   const emit = async (name: string, event: any = {}) => { for (const fn of handlers.get(name) ?? []) await fn(event, ctx); };
   const status = (names: string[]) => bus.get("pi-mcp-adapter/status/v1")({ version: 1, servers: names.map(name => ({ name })) });

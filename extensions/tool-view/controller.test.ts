@@ -26,6 +26,8 @@ test("applies a mode change from another context wrapper in the active session",
   const pi = {
     registerTool() { throw new Error("Tool View must not register tools"); },
     registerToolRenderer() {},
+    registerMarkdownTransformer() {},
+    getSettings: () => ({}),
     registerCommand() {},
     registerShortcut() {},
     getCommands: () => [],
@@ -41,6 +43,7 @@ test("applies a mode change from another context wrapper in the active session",
       toolsExpanded = value;
       expandedValues.push(value);
     },
+    setHiddenThinkingLabel() {},
   };
 
   try {
@@ -173,6 +176,7 @@ test("unified Tool View warns if Pi hides Thinking natively without breaking too
   const notices: string[] = [];
   const pi = {
     registerToolRenderer() {},
+    registerMarkdownTransformer() {},
     registerCommand() {},
     registerShortcut() {},
     getSettings: () => ({ hideThinkingBlock: true }),
@@ -187,6 +191,7 @@ test("unified Tool View warns if Pi hides Thinking natively without breaking too
       notify(message: string) { notices.push(message); },
       getToolsExpanded: () => false,
       setToolsExpanded() {},
+      setHiddenThinkingLabel() {},
     },
   } as any;
   try {
@@ -195,7 +200,8 @@ test("unified Tool View warns if Pi hides Thinking natively without breaking too
     await controller.setMode("normal", ctx);
     assert.equal(controller.getMode(), "normal");
     assert.match(notices.join("\n"), /hideThinkingBlock: false/);
-    assert.match(notices.join("\n"), /cannot transform Thinking display/);
+    assert.doesNotMatch(notices.join("\n"), /cannot transform Thinking display/,
+      "the supported Pi SDK always supplies the transformer");
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

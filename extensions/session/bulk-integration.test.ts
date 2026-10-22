@@ -36,6 +36,7 @@ test("bulk cleanup rechecks active leases and files changed during confirmation"
     registerCommand(name: string, command: any) { commands.set(name, command); },
     getCommands: () => [], getActiveTools: () => [], getAllTools: () => [],
     getMcpServers: () => [], getThinkingLevel: () => "off",
+    registerMarkdownTransformer() {}, getSettings: () => ({}),
     events: { on: () => () => {} },
     on(name: string, callback: (event: any, ctx: any) => unknown) {
       events.set(name, [...(events.get(name) ?? []), callback]);

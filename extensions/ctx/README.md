@@ -8,7 +8,7 @@
 - 六类为 System、Tools、Messages、Tool Results、Summary、Other。百分比分母是已覆盖分类的估算 token 合计，不是模型窗口；pi usage 单独展示，不校准分类。
 - System 使用 ctx.getSystemPrompt() 的可观测字符串；无法取得时 unknown。Tools 通过 pi.getActiveTools()/getAllTools() 仅选取当前启用的工具，逐工具序列化 `{name, description, parameters}`，按 UTF-16 长度 / 4 向上取整后合计，并纳入分类百分比分母。不计 sourceInfo、执行函数及已归入 System 的 promptGuidelines；未直接启用的工具不重复计入。无启用工具为 0；API 不可用、启用工具缺少定义或 schema 无法序列化时保持 unknown，避免显示不完整合计。工具定义在每次现有快照事件刷新时重新读取（包括动态启用/禁用），不在 render 中读取；空闲时注册工具将在下一次快照事件反映。
 - Tools 在 `before_provider_request` 事件后优先统计 provider-specific payload 的 `tools` 字段序列化文本（仍按 UTF-16 长度 / 4 估算）；请求发出前未观察到 payload 时，回退到当前启用工具 schema 的本地估算。它仍不是模型 tokenizer、HTTP 字节数或计费 token，也不包含 headers；如果后续扩展继续改写 payload，面板值可能是本扩展处理时观察到的版本。Images 仅统计图片块数量，不序列化请求或计算未展示的字节数；在 `before_provider_request` 可取得最终 provider payload 时优先统计该 payload，否则统计当前 context 消息；未能观测时显示 `not observed`。
-- context 事件提供调用前的消息快照；session_start/tree/compact、turn_end、agent_settled 使用 buildContextEntries() 重建 compaction-applied active branch。后者显示 active branch，前者显示 context hook。事件之外只读取缓存，不在 render 中扫描历史。
+- context 事件提供调用前的消息快照；session_start/tree/compact、turn_end、agent_settled 使用 buildSessionProjection() 重建 compaction-applied active branch（含 context 编辑）。后者显示 active branch，前者显示 context hook。事件之外只读取缓存，不在 render 中扫描历史。
 - Messages 包括 user/assistant 文本、thinking 和 tool call 名称/参数；Tool Results 仅计 content；Summary 包括 compaction/branch summary；Other 包括可发送 custom message 和非排除的用户 bash。
 - Tool Results 按当前快照工具结果文本估算。每条 Tool Result 的 content 只计一次，不遍历内部操作；不读 details、全量 JSONL、沙箱、截断前原始输出或被压缩结果。已返回 content 内的截断提示本身仍属于可发送文本。
 
@@ -16,7 +16,7 @@ Composition 的 token 估算使用 `~` 前缀及 K/M 紧凑缩写（四舍五入
 
 ## 本次运行增量
 
-以一次运行（`before_agent_start` 到 `agent_settled`，包括 Pi 1.2 自定义消息触发的运行）为单位：基线是上一次运行结束后的分类估算总量，`turn_end` 只重算快照、不推进基线，因此增量在运行过程中实时增长，`agent_settled` 后定格。数值是净增长，压缩造成的下降显示为负。`session_start`、`session_tree`、`session_compact` 会把基线重置为当前总量，此时不显示增量。
+以一次 agent 运行（`before_agent_start` 到 `agent_settled`，包括自定义消息触发的运行）为单位：基线是上一次运行结束后的分类估算总量，`turn_end` 只重算快照、不推进基线，因此增量在运行过程中实时增长，`agent_settled` 后定格。数值是净增长，压缩造成的下降显示为负。`session_start`、`session_tree`、`session_compact` 会把基线重置为当前总量，此时不显示增量。
 
 进度条最右侧的 accent 段是增量在窗口中的份额，宽度为 `round(内容宽 × 增量 / contextWindow)`，向上至少 1 格，且不会超出已用段，所以条的总长度不变。增量文字显示在 `已用%/窗口` 之后：正增量用 accent，负增量用 warning。增量为 0、基准未建立或窗口未知时，既不留文字也不画段。增量与分类估算同源（本地启发式），不含 `~` 前缀。
 

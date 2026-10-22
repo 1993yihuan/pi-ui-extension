@@ -15,7 +15,8 @@ const theme = {
 
 test("reports an actionable compatibility error on Pi without the renderer API", async () => {
   await assert.rejects(
-    installToolViewController({} as any, { modeFile: join(tmpdir(), "pi-ui-missing-renderer-test.json") }),
+    installToolViewController({ registerMarkdownTransformer() {} } as any,
+      { modeFile: join(tmpdir(), "pi-ui-missing-renderer-test.json") }),
     /Update Pi.*this extension/,
   );
 });
@@ -37,11 +38,14 @@ test("uses one official renderer resolver without replacing or executing Pi tool
       notify() {},
       getToolsExpanded: () => expanded,
       setToolsExpanded(value: boolean) { expanded = value; expandedChanges.push(value); },
+      setHiddenThinkingLabel() {},
     },
   } as any;
   const pi = {
     registerTool() { counters.registered++; throw new Error("Must not shadow Pi tool"); },
     registerToolRenderer(resolver: ToolRendererResolver) { resolvers.push(resolver); },
+    registerMarkdownTransformer() {},
+    getSettings: () => ({}),
     registerCommand(name: string, data: any) { commands.set(name, data); },
     registerShortcut() {},
     getCommands: () => [],
