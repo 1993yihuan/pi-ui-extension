@@ -14,8 +14,13 @@ test("the required matrix matches the workflow, the declared minimum and the pin
   assert.deepEqual(nodes, NODE_VERSIONS, "ci.yml and the release gate must list the same Node versions");
   assert.equal(listed.at(-1), dev, "the matrix must end with the pinned development SDK");
   // Whatever minimum the package declares to users must be a tested leg.
-  assert.equal(listed[0], manifest.peerDependencies["@earendil-works/pi-coding-agent"].replace(/^>=\s*/, ""),
-    "package.json peerDependencies must declare the lowest tested Pi SDK as the minimum supported version");
+  for (const name of ["pi-coding-agent", "pi-tui"]) {
+    const dependency = `@earendil-works/${name}`;
+    assert.equal(manifest.peerDependencies[dependency], `>=${listed[0]}`,
+      `${dependency} must declare the lowest tested Pi SDK as the minimum supported version`);
+    assert.equal(manifest.devDependencies[dependency], listed.at(-1),
+      `${dependency} development version must match the highest tested Pi SDK`);
+  }
   assert.equal(workflow.includes(`if: matrix.pi-version != '${dev}'`), true,
     "only the leg that npm ci already installs skips the SDK pin step");
   assert.equal(EXPECTED_CHECKS.length, nodes.length * listed.length, "no extra or missing matrix job");

@@ -145,6 +145,19 @@ VIEW 下方按调用来源分组：
 
 项目级安装需要 Pi 信任当前项目。固定版本不会自动升级到后续版本。
 
+### 从 v1.9.2 升级到 v1.9.3
+
+**兼容性变更：** v1.9.3 停止支持 Pi 1.2.x。请**先将 Pi Coding Agent 升级到 >= 1.3.0，再更新本扩展**；Pi TUI 运行时也必须 >= 1.3.0。Node.js >= 22.19.0 和 fullscreen 模式的要求保持不变。
+
+1. 检查 `command -v pi`、`pi --version`、`node --version` 和 `pi list`。若 npm-global 与 Bun-global 安装并存，请升级实际提供当前 `pi` 命令的安装。
+2. 使用对应安装渠道的包管理器升级 Pi，再次确认当前执行的版本。
+3. 执行 `pi install npm:pi-ui-extension@1.9.3`（项目级安装添加 `--local`），重启 Pi，并以 `pi --tui-mode fullscreen` 启动。检查全局和项目级配置，避免仍加载旧的固定版本。
+4. 确认边栏、Compact 工具展开及鼠标点击位置、Thinking 展开（需开启原生 Thinking 可见性）、会话切换和 Tool/MCP 统计正常。
+
+如果必须保留 Pi 1.2.x，请继续使用或重新安装 `pi install npm:pi-ui-extension@1.9.2`，或将 Git 来源固定到 `@v1.9.2`；保持原来的全局或项目安装范围。固定版本不会自动升级。安装成功本身不能证明宿主兼容。
+
+CI 验证的是 Node.js **22.19.0 / 24** 与 Pi SDK **1.3.0 / 1.4.0** 的组合。`>=1.3.0` 声明允许其他版本，但矩阵未逐一验证。本版本未新增会话或配置格式迁移。
+
 ## 常见问题
 
 - **边栏不显示：** 以 fullscreen 模式启动 Pi；必要时增大终端宽度。

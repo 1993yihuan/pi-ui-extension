@@ -148,7 +148,7 @@ Substitute the exact version for `X.Y.Z`. Avoid pushing a tag for an untested co
 1. Validate tag, `main` ancestry, package name/version, and the latest `main` push CI run for that **exact commit SHA**. All four Node/Pi jobs must have succeeded; a documentation-only CI run is insufficient. It waits up to ten minutes for CI to finish.
 2. Check out the exact source SHA, install dependencies under Node.js 24 with pinned npm **11.21.0**, and run `npm run check`.
 3. Pack once, validate actual tarball contents, and record its SHA-512 integrity and source SHA. The packed manifest includes `gitHead`; the source manifest is restored afterward. The same artifact is passed between jobs and retained for 14 days.
-4. Look for an existing npm version. If its `gitHead` and integrity match, skip publication. Otherwise publish the validated tarball once with **npm Trusted Publishing (OIDC)**. New publication requires the matching tag event and cannot move npm `latest` backwards.
+4. Look for an existing npm version. If its `gitHead` and integrity match, skip publication. Otherwise publish the validated tarball once with **npm Trusted Publishing (OIDC)**. New publication requires the matching tag event or an explicitly requested `release` dispatch from `main` for a verified existing stable tag, and cannot move npm `latest` backwards.
 5. Verify registry `gitHead`, tarball integrity, and visibility of `latest` within one **ten-minute deadline**. Each HTTP request is limited to 20 seconds; 404 indexing delays, network errors, 429, and server errors may retry. Authentication failures and mismatched artifacts fail immediately. `npm publish` itself is never automatically retried.
 6. Recheck the remote tag SHA, then create or complete the official GitHub Release. Recovery preserves existing release notes and does not mark an older release as latest.
 
@@ -162,13 +162,16 @@ The manual workflow entry accepts an existing stable `tag` and an `operation`:
 # Validate the tag, exact-commit CI and package without publishing or changing Releases.
 gh workflow run release.yml --ref main -f tag=vX.Y.Z -f operation=validate
 
+# Publish an existing verified stable tag after confirming the version is absent from npm.
+gh workflow run release.yml --ref main -f tag=vX.Y.Z -f operation=release
+
 # Verify an already uploaded package and create/complete its GitHub Release.
 gh workflow run release.yml --ref main -f tag=vX.Y.Z -f operation=recover
 ```
 
 `recover` never runs `npm publish`. Use it when npm accepted the upload but indexing or GitHub Release creation failed. It rebuilds the artifact from the tag with the pinned npm version and requires the same SHA and bytes as the registry. Legacy packages or packaging changes that produce different bytes fail verification without overwriting anything.
 
-If publication never reached npm, rerun the original **tag-triggered** workflow after resolving the error; a manual run does not initiate a new publication. When rerunning failed jobs, the workflow reuses the successful packaging job's artifact name. If its 14-day artifact retention has expired, rerun all jobs to rebuild and verify the package.
+If publication never reached npm, rerun the original **tag-triggered** workflow after resolving the error, or explicitly select `operation=release` on `main` for the existing stable tag. The manual release path still validates tag/main ancestry, package version, and the complete CI matrix for the exact source SHA before publication. `validate` never publishes; `recover` only verifies an existing upload. When rerunning failed jobs, the workflow reuses the successful packaging job's artifact name. If its 14-day artifact retention has expired, rerun all jobs to rebuild and verify the package.
 
 Before announcing a successful release, independently verify:
 
@@ -181,6 +184,10 @@ git rev-list -n1 vX.Y.Z
 ```
 
 If registry verification times out, inspect npm first and use `recover` for an accepted upload. npm versions are immutable, and publication may have succeeded even though indexing is delayed.
+
+## Compatibility changes
+
+Raising the minimum supported Pi version affects existing users even when runtime code is unchanged. Announce the affected versions and migration/rollback path prominently in both README languages and GitHub Release notes; plan future support removals as breaking changes rather than ordinary patch releases. For v1.9.3, Pi 1.2.x users must upgrade Pi first or pin this extension to v1.9.2. The declared peer range is broader than the exact CI-tested versions.
 
 ## Documentation conventions
 
