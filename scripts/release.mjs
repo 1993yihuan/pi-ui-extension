@@ -194,7 +194,7 @@ async function publish(metadata, directory) {
       manualDispatch: process.env.GITHUB_EVENT_NAME === "workflow_dispatch" &&
         process.env.GITHUB_REF === "refs/heads/main" && process.env.RELEASE_MODE === "release" &&
         process.env.RELEASE_TAG === metadata.tag && process.env.RELEASE_SHA === metadata.sha,
-      publish: () => execFileSync("npm", ["publish", join(directory, "package.tgz"), "--access", "public", "--tag", "latest", "--ignore-scripts", `--registry=${REGISTRY}`, "--fetch-timeout=20000", "--fetch-retries=0"], { stdio: "inherit", timeout: 120_000 }),
+      publish: () => execFileSync("npm", ["publish", join(directory, "package.tgz"), "--access", "public", "--tag", "latest", "--ignore-scripts", `--registry=${REGISTRY}`, "--fetch-timeout=120000", "--fetch-retries=0"], { stdio: "inherit", timeout: 180_000 }),
     });
     console.log(result);
   } catch (error) {
