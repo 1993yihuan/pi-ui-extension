@@ -134,9 +134,9 @@ A compact footer displays the current working directory and Git branch, when ava
 | Action | Command |
 | --- | --- |
 | Install latest npm release | `pi install npm:pi-ui-extension` |
-| Pin v1.9.2 | `pi install npm:pi-ui-extension@1.9.2` |
+| Pin v1.9.3 | `pi install npm:pi-ui-extension@1.9.3` |
 | Install from GitHub | `pi install git:github.com/1993yihuan/pi-ui-extension` |
-| Pin a Git tag | `pi install git:github.com/1993yihuan/pi-ui-extension@v1.9.2` |
+| Pin a Git tag | `pi install git:github.com/1993yihuan/pi-ui-extension@v1.9.3` |
 | Install only for the current project | `pi install --local npm:pi-ui-extension` |
 | Update unpinned packages | `pi update --extensions` |
 | List installed packages | `pi list` |

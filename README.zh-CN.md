@@ -134,9 +134,9 @@ VIEW 下方按调用来源分组：
 | 操作 | 命令 |
 | --- | --- |
 | 安装最新 npm 版本 | `pi install npm:pi-ui-extension` |
-| 固定 v1.9.2 | `pi install npm:pi-ui-extension@1.9.2` |
+| 固定 v1.9.3 | `pi install npm:pi-ui-extension@1.9.3` |
 | 从 GitHub 安装 | `pi install git:github.com/1993yihuan/pi-ui-extension` |
-| 固定 Git tag | `pi install git:github.com/1993yihuan/pi-ui-extension@v1.9.2` |
+| 固定 Git tag | `pi install git:github.com/1993yihuan/pi-ui-extension@v1.9.3` |
 | 仅当前项目安装 | `pi install --local npm:pi-ui-extension` |
 | 更新非固定版本 | `pi update --extensions` |
 | 列出已配置扩展 | `pi list` |

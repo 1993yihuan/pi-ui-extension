@@ -9,6 +9,7 @@ function documents(directory) {
     return entry.isDirectory() ? documents(path) : entry.name.endsWith(".md") ? [path] : [];
   });
 }
+const { name: packageName, version } = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 const files = [
   ...readdirSync(root).filter(name => /^README(?:\.[\w-]+)?\.md$/.test(name)).map(name => join(root, name)),
   ...documents(join(root, "docs")),
@@ -16,6 +17,15 @@ const files = [
 for (const file of files) {
   const content = new TextDecoder("utf-8", { fatal: true }).decode(readFileSync(file));
   if (!content.endsWith("\n") || /^(<<<<<<< |=======\s*$|>>>>>>> )/m.test(content)) throw new Error(`Invalid Markdown formatting: ${file}`);
+  // Keep pinned installation examples aligned with the package being released.
+  for (const [pattern, expected] of [
+    [/pi install npm:pi-ui-extension@([^\s\x60]+)/g, version],
+    [/pi install git:github\.com\/1993yihuan\/pi-ui-extension@([^\s\x60]+)/g, `v${version}`],
+  ]) {
+    for (const match of content.matchAll(pattern)) {
+      if (match[1] !== expected) throw new Error(`Outdated installation version in ${file}: ${match[1]} (expected ${expected} for ${packageName})`);
+    }
+  }
   // Fenced examples are not document links. External links are not fetched in CI.
   const prose = content.replace(/^(`{3,}|~{3,}).*\n[\s\S]*?^\1\s*$/gm, "");
   for (const match of prose.matchAll(/!?\[[^\]]*\]\((?:<([^>]+)>|([^\s)]+))(?:\s+"[^"]*")?\)/g)) {
