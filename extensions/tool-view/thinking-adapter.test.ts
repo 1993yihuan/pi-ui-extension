@@ -107,7 +107,8 @@ function harness(t: TestContext, providedStatus?: StatusFn, toolGap?: (toolName:
 }
 
 test("Compact Thinking streams a live title, expands to the full body, and settles on Thought", (t) => {
-  assert.ok(["1.2.0", "1.3.0"].includes(VERSION), `compatibility check required for Pi ${VERSION}`);
+  assert.equal(typeof AssistantMessageComponent.prototype.setHiddenThinkingLabel, "function",
+    `Pi ${VERSION} must keep the Thinking component shape this adapter decorates`);
   const { state, make, installed } = harness(t);
   assert.equal(installed, true);
   const first = "The user asks about the plugin version and where it is published.";
@@ -624,6 +625,41 @@ test("a foreign patch on top of our marker makes installation fail closed", (t) 
   prototype.updateContent = ourOld;
   assert.equal(install(), true, "once our patch is on top again the install succeeds");
   assert.equal(prototype[ADAPTER_KEY].original, initial, "it unwrapped down to Pi's native method");
+});
+
+test("installation is gated by Pi's component shape, not by an exact version list", (t) => {
+  const { prototype, initial, transformer } = harness(t);
+  const install = () => installCompactThinkingAdapter(() => "compact", transformer, {
+    status: () => ({ phase: "complete" }),
+  });
+  const restore = () => {
+    prototype.updateContent = initial;
+    delete prototype[ADAPTER_KEY];
+    delete prototype[PREVIOUS_KEY];
+  };
+
+  restore();
+  assert.equal(install(), true,
+    `Pi ${VERSION} keeps the Thinking layout this adapter decorates, so any Pi version may install`);
+
+  restore();
+  const host = prototype as unknown as Record<string, unknown>;
+  const label = host.setHiddenThinkingLabel;
+  host.setHiddenThinkingLabel = undefined;
+  try {
+    assert.equal(install(), false, "a host without setHiddenThinkingLabel fails closed");
+  } finally {
+    host.setHiddenThinkingLabel = label;
+  }
+
+  restore();
+  const update = host.updateContent;
+  host.updateContent = undefined;
+  try {
+    assert.equal(install(), false, "a host without updateContent fails closed");
+  } finally {
+    host.updateContent = update;
+  }
 });
 
 test("an older click-guard generation is unwrapped on upgrade", (t) => {

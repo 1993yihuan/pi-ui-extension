@@ -49,7 +49,8 @@ test("Pi bundle and local SDK both match the supported tool spacing layout", asy
 });
 
 test("Compact removes only the native leading tool gap; clicks still expand and collapse", () => {
-  assert.ok(["1.2.0", "1.3.0"].includes(VERSION), `verify Pi internals for ${VERSION}`);
+  assert.ok(hasCompatibleSelfToolLayout(ToolExecutionComponent.prototype),
+    `verify Pi ${VERSION} keeps the tool layout this guard trims`);
   initTheme("dark");
   const prototype = ToolExecutionComponent.prototype;
   const originalRender = prototype.render;

@@ -1,11 +1,9 @@
 import {
   ToolExecutionComponent,
-  VERSION,
   type ToolRenderers,
 } from "@earendil-works/pi-coding-agent";
 import type { ToolViewMode } from "./types.ts";
 
-const VERIFIED_PI_VERSIONS = new Set(["1.2.0", "1.3.0"]);
 const OWNER_KEY = Symbol.for("pi-ui-extension:compact-spacing-owned-renderer");
 const GUARD_KEY = Symbol.for("pi-ui-extension:compact-spacing-guard");
 
@@ -44,17 +42,19 @@ export function markCompactSpacingRenderer<T extends ToolRenderers>(renderer: T)
 }
 
 /**
- * Pi 1.2/1.3's ToolExecutionComponent.render() inserts exactly one empty line
- * before every self-rendered tool. Public renderers cannot remove that line.
- * Trim it only for this extension's Compact tools, then offset the mouse y
- * coordinate back to Pi's original layout. Keep native spacing everywhere else.
+ * Pi's ToolExecutionComponent.render() inserts exactly one empty line before
+ * every self-rendered tool. Public renderers cannot remove that line. Trim it
+ * only for this extension's Compact tools, then offset the mouse y coordinate
+ * back to Pi's original layout. Keep native spacing everywhere else.
  *
- * This compatibility adapter fails closed if Pi's output shape changes.
+ * This compatibility adapter fails closed: `hasCompatibleSelfToolLayout`
+ * inspects the live host methods on every install, which is the layout contract
+ * it depends on. No exact-version whitelist is used, because Pi 1.4.0 keeps this
+ * layout unchanged and a version update must not silently disable Compact spacing.
  */
 export function installCompactSpacingGuard(getMode: () => ToolViewMode): boolean {
   const prototype = ToolExecutionComponent.prototype as ToolPrototype;
-  if (!VERIFIED_PI_VERSIONS.has(VERSION) ||
-      typeof prototype.render !== "function" ||
+  if (typeof prototype.render !== "function" ||
       typeof prototype.handleMouse !== "function") return false;
 
   const previous = prototype[GUARD_KEY];

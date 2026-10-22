@@ -3,7 +3,7 @@ import { appendFileSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 export const EXPECTED_CHECKS = ["22.19.0", "24"].flatMap(node =>
-  ["1.2.0", "1.3.0"].map(pi => `check (${node}, ${pi})`));
+  ["1.2.0", "1.3.0", "1.4.0"].map(pi => `check (${node}, ${pi})`));
 
 export function docsOnly(paths) {
   return paths.length > 0 && paths.every(path =>

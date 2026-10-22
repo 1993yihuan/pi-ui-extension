@@ -1,6 +1,5 @@
 import {
   AssistantMessageComponent,
-  VERSION,
   type MarkdownTransformContext,
   type MarkdownTransformer,
 } from "@earendil-works/pi-coding-agent";
@@ -27,7 +26,6 @@ import {
 } from "./thinking.ts";
 import type { ToolViewMode } from "./types.ts";
 
-const VERIFIED_PI_VERSIONS = new Set(["1.2.0", "1.3.0"]);
 const ADAPTER_KEY = Symbol.for("pi-ui-extension:compact-thinking-adapter");
 /** A /reload must also unwrap the earlier click-guard generation. */
 const PREVIOUS_ADAPTER_KEYS = [Symbol.for("pi-ui-extension:thinking-click-guard")];
@@ -346,9 +344,13 @@ function unwrapPreviousAdapters(prototype: AdapterPrototype): boolean {
 }
 
 /**
- * Version- and shape-gated adapter: it replaces the native Thinking region
- * child of components that use this extension's transformer with a title-only
- * block that expands on a title click. Unknown Pi builds keep native behavior.
+ * Shape-gated adapter: it replaces the native Thinking region child of
+ * components that use this extension's transformer with a title-only block
+ * that expands on a title click. `decorate()` re-checks Pi's layout on every
+ * render (region count, Markdown shape, transformer identity) and keeps native
+ * behavior on an unknown shape, so no exact-version whitelist is needed. A
+ * version list would only mean that a Pi version update such as 1.4.0 silently
+ * disables Thinking clicks instead of failing shut on a real layout change.
  */
 export function installCompactThinkingAdapter(
   getMode: () => ToolViewMode,
@@ -356,8 +358,7 @@ export function installCompactThinkingAdapter(
   options: CompactThinkingOptions,
 ): boolean {
   const prototype = AssistantMessageComponent.prototype as AdapterPrototype;
-  if (!VERIFIED_PI_VERSIONS.has(VERSION) ||
-      typeof prototype.updateContent !== "function" ||
+  if (typeof prototype.updateContent !== "function" ||
       typeof prototype.setHiddenThinkingLabel !== "function") return false;
 
   if (!unwrapPreviousAdapters(prototype)) return false;
