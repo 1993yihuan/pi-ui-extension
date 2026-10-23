@@ -105,6 +105,8 @@ The adapter:
 - Accepts compatible host method layouts, checked against Pi 1.3.0/1.4.0, without an exact-version whitelist.
 - Validates expected render/mouse method shape before patching; incompatible or previously patched shapes fail closed.
 - Accounts for the difference between unbundled SDK (`event.y - 1`) and the official minified Pi CLI (`event.y-1`). The bundled CLI may use a different class instance from the project SDK.
+- Resolves the **running** official `dist/bundle/cli.js` executable and patches the classes exported by its sibling `dist/bundle/index.js`, which shares runtime chunks with the CLI. Also patches the SDK classes if distinct. Unknown executable layouts keep their native behavior.
+- The Thinking adapter checks the native region's structure rather than relying on `instanceof` across separately bundled Pi TUI classes.
 - Marks extension-owned renderers to avoid rewriting every tool, offsets click coordinates, and avoids stacked wrappers across reloads.
 - Is covered by real Pi component tests and bundled/unbundled layout checks. Unsupported hosts keep Pi's original spacing.
 

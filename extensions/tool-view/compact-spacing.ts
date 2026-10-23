@@ -52,8 +52,10 @@ export function markCompactSpacingRenderer<T extends ToolRenderers>(renderer: T)
  * it depends on. No exact-version whitelist is used, because Pi 1.4.0 keeps this
  * layout unchanged and a version update must not silently disable Compact spacing.
  */
-export function installCompactSpacingGuard(getMode: () => ToolViewMode): boolean {
-  const prototype = ToolExecutionComponent.prototype as ToolPrototype;
+export function installCompactSpacingGuard(
+  getMode: () => ToolViewMode,
+  prototype: ToolPrototype = ToolExecutionComponent.prototype as ToolPrototype,
+): boolean {
   if (typeof prototype.render !== "function" ||
       typeof prototype.handleMouse !== "function") return false;
 

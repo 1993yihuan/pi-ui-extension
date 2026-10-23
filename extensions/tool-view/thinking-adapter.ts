@@ -5,7 +5,6 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import {
   Markdown,
-  MouseRegion,
   type Component,
   type DefaultTextStyle,
   type MarkdownTheme,
@@ -84,11 +83,13 @@ function toggleExpanded(component: AssistantMessageComponent, index: number): vo
 }
 
 function isThinkingRegion(child: unknown): child is ThinkingRegion {
-  return child instanceof MouseRegion &&
-    typeof (child as unknown as { onMouse?: unknown }).onMouse === "function";
+  // Bundled Pi CLI and the extension's SDK can load distinct TUI classes.
+  // Native MouseRegion identity is not stable across that boundary.
+  return !!child && typeof child === "object" && "child" in child &&
+    typeof (child as { onMouse?: unknown }).onMouse === "function";
 }
 
-function readMarkdownShape(child: Markdown): MarkdownShape | undefined {
+function readMarkdownShape(child: unknown): MarkdownShape | undefined {
   const internals = child as unknown as {
     theme?: MarkdownTheme;
     defaultTextStyle?: DefaultTextStyle;
@@ -194,7 +195,6 @@ function decorateRegion(
   const child = region.child;
   // A native Text region means Pi already hides Thinking (hideThinkingBlock or
   // a per-run override); it keeps its native read-only behavior.
-  if (!(child instanceof Markdown)) return;
   const shape = readMarkdownShape(child);
   if (!shape) return;
   const colors: ThinkingColors = markdownThinkingColors(shape.theme, shape.defaultTextStyle?.color);
@@ -356,8 +356,9 @@ export function installCompactThinkingAdapter(
   getMode: () => ToolViewMode,
   transformer: MarkdownTransformer,
   options: CompactThinkingOptions,
+  hostPrototype: typeof AssistantMessageComponent.prototype = AssistantMessageComponent.prototype,
 ): boolean {
-  const prototype = AssistantMessageComponent.prototype as AdapterPrototype;
+  const prototype = hostPrototype as AdapterPrototype;
   if (typeof prototype.updateContent !== "function" ||
       typeof prototype.setHiddenThinkingLabel !== "function") return false;
 

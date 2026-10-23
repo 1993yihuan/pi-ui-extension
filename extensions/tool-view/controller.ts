@@ -15,10 +15,11 @@ import { TOOL_VIEW_MODES, isToolViewMode, type ToolViewMode } from "./types.ts";
 import { renderCodemodeCompactCall, renderCodemodeCompactResult, singleLine } from "./codemode-compact.ts";
 import { transformThinkingText } from "./thinking.ts";
 import { ThinkingTiming } from "./thinking-timing.ts";
-import { installCompactThinkingAdapter } from "./thinking-adapter.ts";
+import { installCompactThinkingAdapter, type CompactThinkingOptions } from "./thinking-adapter.ts";
 import { createDialogUI } from "../dialogs/index.ts";
 import { compactCallPrefix, withCompactResultBranch, withNativeChevron } from "./chevron.ts";
 import { installCompactSpacingGuard, markCompactSpacingRenderer } from "./compact-spacing.ts";
+import { loadActivePiBundle } from "./host-bundle.ts";
 
 const DEFAULT_MODE_FILE = resolve(getAgentDir(), "tool-view-mode.json");
 const MODE_STATUS_ID = "pi-ui-extension:tool-view";
@@ -214,12 +215,19 @@ export async function installToolViewController(
   const thinkingTransformer: Parameters<ExtensionAPI["registerMarkdownTransformer"]>[0] =
     (markdown, context) => transformThinkingText(markdown, context, mode, thinkingStatus);
   pi.registerMarkdownTransformer(thinkingTransformer);
-  installCompactThinkingAdapter(() => mode, thinkingTransformer, {
+  const hostBundle = await loadActivePiBundle();
+  const thinkingOptions: CompactThinkingOptions = {
     status: thinkingStatus,
     // Pi's own tool row keeps its leading blank row unless the spacing guard
     // below trims it, so only then does an expanded body supply that row.
     needsToolGap: (toolName) => compactSpacingActive && ownsCompactTool(toolName),
-  });
+  };
+  installCompactThinkingAdapter(() => mode, thinkingTransformer, thinkingOptions);
+  if (hostBundle && hostBundle.AssistantMessageComponent !== AssistantMessageComponent) {
+    installCompactThinkingAdapter(
+      () => mode, thinkingTransformer, thinkingOptions, hostBundle.AssistantMessageComponent.prototype,
+    );
+  }
   let nativeThinkingWarningShown = false;
   const warnNativeThinkingHidden = (ctx: ExtensionContext): void => {
     if (ctx.mode !== "tui" || nativeThinkingWarningShown || mode === "hidden" ||
@@ -532,6 +540,12 @@ export async function installToolViewController(
     });
   });
   compactSpacingActive = installCompactSpacingGuard(() => mode);
+  if (hostBundle) {
+    // Both SDK and active CLI can own transcript components in the same process.
+    // The gap is trimmed only when the active host guard passes its shape check.
+    const hostSpacingActive = installCompactSpacingGuard(() => mode, hostBundle.ToolExecutionComponent.prototype);
+    compactSpacingActive = hostSpacingActive;
+  }
 
   pi.registerCommand(MODE_COMMAND, {
     description: "Change Tool View mode: normal, compact, hidden, or status",

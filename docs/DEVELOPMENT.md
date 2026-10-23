@@ -108,7 +108,7 @@ For workflow syntax checks with `actionlint` 1.7.12, ignore only its unsupported
 actionlint -ignore '^unexpected key "queue" for "concurrency" section\.'
 ```
 
-**Do not rely on local SDK-only tests for host UI compatibility.** Global Pi distributions may run a separately bundled class instance with different minified method text. The Compact spacing regression tests cover both the unbundled SDK and bundled CLI; also validate actual `pi -e` behavior when changing guarded host UI interactions. See [Architecture](ARCHITECTURE.md).
+**Do not rely on local SDK-only tests for host UI compatibility.** Global Pi distributions may run a separately bundled class instance with different minified method text. `extensions/tool-view/host-bundle.test.ts` verifies that the real bundled CLI classes (not the unbundled SDK copies) receive the spacing and Thinking patches, with tool-click and Thinking expansion assertions. The CI matrix runs these tests with both Pi 1.3.0 and 1.4.0. Also smoke-test the actual `pi -e` fullscreen UI with an isolated `PI_CODING_AGENT_DIR`, no saved session, and explicit `-e ./extensions/index.ts` when changing guarded host UI interactions. See [Architecture](ARCHITECTURE.md).
 
 ## Multiple Pi installations
 
