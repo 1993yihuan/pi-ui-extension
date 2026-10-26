@@ -17,7 +17,7 @@ test("Tools counts schema JSON only and contributes to totals and percentages", 
  assert.equal(toolsCategory(estimateContext([], "", "active branch", [])).tokens, 0);
  assert.equal(toolsCategory(estimateContext([])).tokens, undefined);
  assert.equal(estimateProviderToolsTokens({ tools: [tool] }), Math.ceil(JSON.stringify([tool]).length / 4));
- assert.equal(estimateProviderToolsTokens({}), 0);
+ assert.equal(estimateProviderToolsTokens({}), undefined);
  assert.equal(estimateProviderToolsTokens(undefined), undefined);
  const cyclic: any = {type:"object"}; cyclic.self = cyclic;
  assert.equal(toolsCategory(estimateContext([], "", "active branch", [tool, {...tool,parameters:cyclic}])).tokens, undefined);

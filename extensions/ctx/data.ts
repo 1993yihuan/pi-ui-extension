@@ -19,8 +19,10 @@ type RecordValue = Record<string, unknown>;
 const record = (value: unknown): RecordValue => value !== null && typeof value === "object" ? value as RecordValue : {};
 const text = (value: unknown): string => typeof value === "string" ? value : "";
 
-function isImageNode(value: RecordValue): boolean {
-  return value.type === "image" || value.type === "image_url" || value.type === "input_image";
+function isImageNode(value: RecordValue, providerPayload: boolean): boolean {
+  return value.type === "image" || value.type === "image_url" || value.type === "input_image"
+    || (providerPayload && (text(record(value.inlineData).mimeType).startsWith("image/")
+      || (typeof record(value.image).format === "string" && record(value.image).source !== undefined)));
 }
 
 function countImages(value: unknown, source: "message" | "provider payload"): ImagesWireEstimate {
@@ -30,7 +32,7 @@ function countImages(value: unknown, source: "message" | "provider payload"): Im
   const visit = (node: unknown): void => {
     if (node === null || typeof node !== "object" || seen.has(node)) return;
     seen.add(node);
-    if (isImageNode(record(node))) images++;
+    if (isImageNode(record(node), source === "provider payload")) images++;
     else for (const child of Object.values(node)) visit(child);
     seen.delete(node);
   };
@@ -72,11 +74,31 @@ function estimateToolTokens(tools: readonly ToolDefinition[] | undefined): numbe
   }
 }
 
-/** Estimate the serialized tools field from the provider-specific request payload. */
+/** Recognize SDK request envelopes before interpreting an absent field as zero. */
+function providerFields(payload: unknown): { tools: unknown; content: unknown } | undefined {
+  if (payload === null || typeof payload !== "object" || Array.isArray(payload)) return undefined;
+  const request = record(payload);
+  const config = record(request.config);
+  const toolConfig = record(request.toolConfig);
+  if (Array.isArray(request.contents) || Object.hasOwn(config, "tools")) {
+    return { tools: config.tools, content: Array.isArray(request.contents) ? request.contents : undefined };
+  }
+  if ((typeof request.modelId === "string" && Array.isArray(request.messages)) || Object.hasOwn(toolConfig, "tools")) {
+    return { tools: toolConfig.tools, content: Array.isArray(request.messages) ? request.messages : undefined };
+  }
+  // Anthropic/OpenAI chat use messages; OpenAI Responses uses input.
+  const content = Array.isArray(request.messages) ? request.messages
+    : Array.isArray(request.input) || typeof request.input === "string" ? request.input : undefined;
+  if (content !== undefined || Object.hasOwn(request, "tools")) return { tools: request.tools, content };
+  return undefined;
+}
+
+/** Unknown envelopes retain the context fallback; known empty tool lists cost zero. */
 export function estimateProviderToolsTokens(payload: unknown): number | undefined {
-  if (payload === null || typeof payload !== "object") return undefined;
-  const tools = (payload as Record<string, unknown>).tools;
-  if (tools === undefined) return 0;
+  const fields = providerFields(payload);
+  if (!fields) return undefined;
+  const tools = fields.tools;
+  if (tools === undefined || tools === null || (Array.isArray(tools) && tools.length === 0)) return 0;
   try {
     const serialized = JSON.stringify(tools);
     return serialized === undefined ? undefined : estimateTextTokens(serialized);
@@ -140,6 +162,7 @@ export function installContextEstimates(pi: ExtensionAPI, onChange: () => void):
   resetDelta(): void;
 } {
   let snapshot = estimateContext(undefined);
+  let contextFallback = snapshot;
   let settledTotal: number | undefined;
   let delta: number | undefined;
   let latestProviderImagesWire: ImagesWireEstimate | undefined;
@@ -153,7 +176,9 @@ export function installContextEstimates(pi: ExtensionAPI, onChange: () => void):
     // estimating. System messages are already represented by getSystemPrompt().
     const messages = ctx.sessionManager.buildSessionProjection().messages
       .filter(message => message.role !== "system");
-    snapshot = estimateContext(messages, ctx.getSystemPrompt(), "active branch", activeToolDefinitions(pi), latestProviderImagesWire);
+    contextFallback = estimateContext(messages, ctx.getSystemPrompt(), "active branch", activeToolDefinitions(pi));
+    snapshot = latestProviderImagesWire === undefined ? contextFallback
+      : { ...contextFallback, imagesWire: latestProviderImagesWire };
     if (keepProviderMeasurement && latestProviderToolsTokens !== undefined) {
       const categories = snapshot.categories.map((category) =>
         category.name === "Tools" ? { ...category, tokens: latestProviderToolsTokens } : category,
@@ -185,14 +210,16 @@ export function installContextEstimates(pi: ExtensionAPI, onChange: () => void):
     latestProviderImagesWire = undefined;
     latestProviderToolsTokens = undefined;
     snapshot = estimateContext(event.messages, ctx.getSystemPrompt(), "context hook", activeToolDefinitions(pi));
+    contextFallback = snapshot;
     onChange();
   });
   pi.on("before_provider_request", (event) => {
-    latestProviderImagesWire = countImages(event.payload, "provider payload");
+    const content = providerFields(event.payload)?.content;
+    latestProviderImagesWire = content === undefined ? undefined : countImages(content, "provider payload");
     const tools = estimateProviderToolsTokens(event.payload);
     latestProviderToolsTokens = tools;
     const categories = snapshot.categories.map((category) =>
-      category.name === "Tools" ? { ...category, tokens: tools } : category,
+      category.name === "Tools" ? { ...category, tokens: tools ?? contextFallback.categories.find(item => item.name === "Tools")?.tokens } : category,
     );
     const total = categories.reduce((sum, category) => sum + (category.tokens ?? 0), 0);
     const percent = (tokens: number | undefined): number | undefined =>
@@ -201,7 +228,7 @@ export function installContextEstimates(pi: ExtensionAPI, onChange: () => void):
       ...snapshot,
       total,
       categories: categories.map((category) => ({ ...category, percent: percent(category.tokens) })),
-      imagesWire: latestProviderImagesWire,
+      imagesWire: latestProviderImagesWire ?? contextFallback.imagesWire,
     };
     onChange();
   });
@@ -214,6 +241,7 @@ export function installContextEstimates(pi: ExtensionAPI, onChange: () => void):
     latestProviderImagesWire = undefined;
     latestProviderToolsTokens = undefined;
     snapshot = estimateContext(undefined);
+    contextFallback = snapshot;
     settledTotal = undefined;
     delta = undefined;
   });

@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { validNativeMcpServer } from "./config-validation.ts";
 
 export type McpConnectionState =
   | "unknown" | "connecting" | "connected" | "disconnected" | "needs-auth" | "failed";
@@ -45,10 +46,13 @@ function readConfig(path: string, warnings: string[], scope: "global" | "project
     return { servers: new Map() };
   }
   try {
-    const config = record(JSON.parse(raw));
+    const config = record(JSON.parse(raw.startsWith("\uFEFF") ? raw.slice(1) : raw));
     if (!config) throw new Error("invalid configuration shape");
     const servers = config.mcpServers === undefined ? {} : record(config.mcpServers);
     if (!servers) throw new Error("invalid server map");
+    if (config.autoEnableCodemode !== undefined && typeof config.autoEnableCodemode !== "boolean") {
+      warnings.push(`Invalid setting in ${scope} MCP configuration`);
+    }
     const entries = new Map<string, Record<string, unknown>>();
     for (const [name, value] of Object.entries(servers)) {
       const server = record(value);
@@ -73,23 +77,34 @@ export function configuredMcpServers(
   const warnings: string[] = [];
   const global = readConfig(join(agentDir, "mcp.json"), warnings, "global");
   const entries = new Map<string, ConfigServer>();
-  for (const [name, value] of global.servers) {
-    entries.set(name, { name, source: "global", enabled: isEnabled(value) });
-  }
-  if (trusted) {
-    const project = readConfig(join(cwd, ".pi", "mcp.json"), warnings, "project");
-    for (const [name, value] of project.servers) {
-      const overridesGlobal = entries.has(name) &&
-        !("command" in value || "url" in value || "type" in value);
-      const previous = entries.get(name);
-      // Pi permits project-only enabled/exposure overrides of global servers.
+  const configs = new Map<string, Record<string, unknown>>();
+  const apply = (parsed: ParsedConfig, scope: "global" | "project") => {
+    for (const [name, value] of parsed.servers) {
+      const override = scope === "project" &&
+        value.command === undefined && value.url === undefined && value.type === undefined;
+      const base = configs.get(name);
+      if (override && (!base || Object.keys(value).some((key) => !["enabled", "exposure", "toolExposure"].includes(key)))) {
+        warnings.push(`Invalid server override in ${scope} MCP configuration`);
+        continue;
+      }
+      const config = override ? { ...base, ...value } : value;
+      const clash = [...entries.keys()].some((other) => other !== name && other.replace(/-/g, "_") === name.replace(/-/g, "_"));
+      if (!validNativeMcpServer(config) || (!override && (clash ||
+        (scope === "project" && "url" in config && config.auth)))) {
+        warnings.push(`Invalid server entry in ${scope} MCP configuration`);
+        continue;
+      }
+      configs.set(name, config);
       entries.set(name, {
         name,
-        source: overridesGlobal ? "project override" : "project",
-        enabled: overridesGlobal && value.enabled === undefined && value.disabled === undefined
-          ? previous!.enabled : isEnabled(value),
+        source: override ? "project override" : scope,
+        enabled: config.enabled !== false,
       });
     }
+  };
+  apply(global, "global");
+  if (trusted) {
+    apply(readConfig(join(cwd, ".pi", "mcp.json"), warnings, "project"), "project");
   }
   return { servers: [...entries.values()], warnings };
 }
