@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
 import test from "node:test";
-import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync, statSync } from "node:fs";
+import {
+  existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -141,4 +144,412 @@ test("manager searches and sorts, then delegates session deletion to the central
   assert.equal(deleted, "b");
   assert.match(viewed[3]!.title, /1\/3/);
   assert.ok(!viewed[3]!.choices.some((value) => value.includes("gamma")));
+});
+
+test("the pin entry limit rejects the write and keeps the file, while unpinning at the limit still works", () => {
+  const root = mkdtempSync(join(tmpdir(), "pi-session-pin-limit-"));
+  const path = join(root, "pins.json");
+  try {
+    const ids = Array.from({ length: 2000 }, (_, index) => `id-${index}`);
+    writeFileSync(path, JSON.stringify(ids));
+    const before = readFileSync(path, "utf8");
+    assert.throws(() => toggleSessionPin(path, "one-more"), /cannot exceed 2000 entries/);
+    assert.equal(readFileSync(path, "utf8"), before, "a rejected write must not touch the file");
+    assert.equal(toggleSessionPin(path, "id-1999"), false);
+    assert.equal(readSessionPins(path).size, 1999);
+    assert.equal(toggleSessionPin(path, "one-more"), true);
+    assert.equal(readSessionPins(path).size, 2000);
+    assert.deepEqual(readdirSync(root), ["pins.json"], "no lock or temporary file is left behind");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("the serialized size limit rejects an over-long write while unpinning at the limit still works", () => {
+  const root = mkdtempSync(join(tmpdir(), "pi-session-pin-bytes-"));
+  const path = join(root, "pins.json");
+  // 977 ids of 128 valid characters serialize to exactly 127986 characters: inside 128000.
+  const ids = Array.from({ length: 977 }, (_, index) => "a".repeat(124) + String(index).padStart(4, "0"));
+  const fixture = JSON.stringify(ids);
+  try {
+    assert.ok(fixture.length <= 128_000, "the fixture sits inside the size limit");
+    assert.ok(JSON.stringify([...ids, "b".repeat(128)]).length > 128_000, "one more id would exceed it");
+    writeFileSync(path, fixture);
+    assert.equal(readSessionPins(path).size, 977);
+    const before = readFileSync(path, "utf8");
+    assert.throws(() => toggleSessionPin(path, "b".repeat(128)), /cannot exceed 128000 characters/,
+      "the serialized result, not only the entry count, is checked before writing");
+    assert.equal(readFileSync(path, "utf8"), before, "a rejected write leaves the file untouched");
+    assert.deepEqual(readdirSync(root), ["pins.json"], "a rejected write leaves no lock or temporary file");
+    assert.equal(toggleSessionPin(path, ids[0]!), false, "unpinning stays possible at the limit");
+    assert.equal(readFileSync(path, "utf8"), JSON.stringify(ids.slice(1)));
+    assert.equal(toggleSessionPin(path, ids[0]!), true, "re-pinning the same id fits again");
+    assert.equal(readSessionPins(path).size, 977);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("an unreadable pins path releases the lock it took and writes nothing", () => {
+  const root = mkdtempSync(join(tmpdir(), "pi-session-pin-readerror-"));
+  const path = join(root, "pins.json");
+  // A directory cannot be read as a file, so the read fails after the lock was taken.
+  mkdirSync(path);
+  try {
+    assert.throws(() => toggleSessionPin(path, "some-id"), (error: NodeJS.ErrnoException) => error.code === "EISDIR");
+    assert.equal(existsSync(`${path}.lock`), false, "the writer releases only the lock it created");
+    assert.deepEqual(readdirSync(root), ["pins.json"], "no temporary file is left behind");
+    assert.ok(statSync(path).isDirectory(), "the unreadable path is never overwritten");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a live pin lock makes the writer fail clearly instead of dropping an update", () => {
+  const root = mkdtempSync(join(tmpdir(), "pi-session-pin-lock-"));
+  const path = join(root, "pins.json");
+  const lock = `${path}.lock`;
+  try {
+    mkdirSync(lock, { mode: 0o700 });
+    writeFileSync(join(lock, "owner.json"), JSON.stringify({ pid: process.pid }));
+    assert.throws(() => toggleSessionPin(path, "some-id"), /locked by another process; retry shortly/);
+    assert.deepEqual([...readSessionPins(path)], [], "a blocked writer writes nothing");
+    // Even an aged lock is kept while its recorded owner is still running.
+    const past = new Date(Date.now() - 10 * 60_000);
+    utimesSync(lock, past, past);
+    assert.throws(() => toggleSessionPin(path, "some-id"), /locked by another process/);
+    assert.ok(existsSync(lock), "a lock with a live owner is never removed");
+    assert.deepEqual(readdirSync(root).filter((name) => name.endsWith(".tmp")), []);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("any existing pin lock blocks the write and is never removed by the writer", () => {
+  const root = mkdtempSync(join(tmpdir(), "pi-session-pin-stale-"));
+  const path = join(root, "pins.json");
+  const lock = `${path}.lock`;
+  const past = new Date(Date.now() - 10 * 60_000);
+  // Crash between mkdir and the owner file, a corrupt owner file, a dead pid, a live pid.
+  const leftovers: ReadonlyArray<() => void> = [
+    () => {},
+    () => writeFileSync(join(lock, "owner.json"), "{broken"),
+    () => writeFileSync(join(lock, "owner.json"), JSON.stringify({ pid: 999_999 })),
+    () => writeFileSync(join(lock, "owner.json"), JSON.stringify({ pid: process.pid })),
+  ];
+  writeFileSync(path, JSON.stringify(["kept"]));
+  try {
+    for (const prepare of leftovers) {
+      rmSync(lock, { recursive: true, force: true });
+      mkdirSync(lock, { mode: 0o700 });
+      prepare();
+      utimesSync(lock, past, past);
+      assert.throws(() => toggleSessionPin(path, "some-id"), /locked by another process; retry shortly/,
+        "an unverifiable lock is reported for a human to check, never reclaimed automatically");
+      assert.ok(existsSync(lock), "another writer's lock directory is left untouched");
+      assert.deepEqual([...readSessionPins(path)], ["kept"], "a blocked writer keeps the file as it was");
+    }
+    assert.deepEqual(readdirSync(root).sort(), ["pins.json", "pins.json.lock"], "no temporary file is left behind");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("concurrent writers in separate processes never lose a pin", async () => {
+  const root = mkdtempSync(join(tmpdir(), "pi-session-pin-processes-"));
+  const path = join(root, "pins.json");
+  const moduleUrl = new URL("./manager.ts", import.meta.url).href;
+  const script = `
+const { toggleSessionPin } = await import(${JSON.stringify(moduleUrl)});
+const [path, id] = process.argv.slice(-2);
+for (let attempt = 0; attempt < 400; attempt++) {
+  try { toggleSessionPin(path, id); process.exit(0); }
+  catch (error) {
+    if (!/locked by another process/.test(error.message)) { console.error(error.message); process.exit(2); }
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+}
+process.exit(1);
+`;
+  const run = (id: string) => new Promise<number | null>((resolve, reject) => {
+    const child = spawn(process.execPath, ["--import", "tsx", "--input-type=module", "--eval", script, path, id],
+      { cwd: process.cwd(), stdio: ["ignore", "ignore", "pipe"] });
+    let stderr = "";
+    child.stderr.on("data", (chunk) => { stderr += chunk; });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code !== 0) console.error(id, stderr);
+      resolve(code);
+    });
+  });
+  try {
+    const ids = Array.from({ length: 6 }, (_, index) => `worker-${index}`);
+    assert.deepEqual(await Promise.all(ids.map(run)), ids.map(() => 0));
+    assert.deepEqual([...readSessionPins(path)].sort(), [...ids].sort(), "every concurrent pin survived");
+    assert.deepEqual(readdirSync(root), ["pins.json"], "no lock or temporary file is left behind");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a failed initial load is reported with a retry entry and never looks like an empty list", async () => {
+  const names = [session("a", 1, "alpha")];
+  let attempts = 0;
+  const { ui, viewed, notices } = scriptedUI([
+    (_title, choices) => choices.find((item) => item === "↻ 刷新列表"),
+    (_title, choices) => choices.find((item) => item === "关闭"),
+  ]);
+  await openSessionManager({
+    ui,
+    loadSessions: async () => {
+      attempts++;
+      if (attempts === 1) throw new Error("directory unreadable");
+      return names;
+    },
+    togglePin: () => false, onPinChanged() {}, onSwitch() {}, onRename() {}, onDelete() {},
+  });
+  assert.equal(attempts, 2);
+  assert.match(notices[0]!, /刷新会话列表失败：directory unreadable/);
+  assert.match(viewed[0]!.title, /⚠ 加载失败：directory unreadable/);
+  assert.equal(viewed[0]!.choices.filter((item) => /^\d+\. /.test(item)).length, 0);
+  assert.deepEqual(viewed[1]!.choices.filter((item) => /^\d+\. /.test(item)), ["1. alpha · 1 次提问"]);
+  assert.doesNotMatch(viewed[1]!.title, /加载失败/);
+});
+
+test("a failed reload inside the manager keeps the list, search, sort and page", async () => {
+  const all = Array.from({ length: 21 }, (_, index) => session(`id-${index}`, index * 1000, `Branch ${index}`));
+  const { ui, viewed, notices } = scriptedUI([
+    (_title, choices) => choices.find((item) => item.startsWith("⌕ ")),
+    (_title, choices) => choices.find((item) => item === "↻ 刷新列表"),
+    (_title, choices) => choices.find((item) => item === "关闭"),
+  ]);
+  ui.input = async () => "BRANCH";
+  let loads = 0;
+  await openSessionManager({
+    ui,
+    loadSessions: async () => {
+      loads++;
+      if (loads > 1) throw new Error("disk busy");
+      return all;
+    },
+    togglePin: () => false, onPinChanged() {}, onSwitch() {}, onRename() {}, onDelete() {},
+  });
+  assert.equal(loads, 2);
+  assert.match(notices[0]!, /刷新会话列表失败：disk busy/);
+  assert.match(viewed[2]!.title, /搜索：BRANCH/);
+  assert.match(viewed[2]!.title, /⚠ 加载失败：disk busy/);
+  assert.equal(viewed[2]!.choices.filter((item) => /^\d+\. /.test(item)).length, 8, "retained rows stay clickable");
+  assert.ok(viewed[2]!.choices.includes("下一页 →"), "paging survives a failed reload");
+});
+
+test("a failed reload keeps the real sort order and the page the user reached", async () => {
+  const all = Array.from({ length: 21 }, (_, index) => session(`id-${index}`, index * 1000, `Branch ${index}`));
+  let loads = 0;
+  const { ui, viewed, notices } = scriptedUI([
+    (_title, choices) => choices.find((item) => item.startsWith("↕ ")),
+    (_title, choices) => choices.find((item) => item.includes("会话标题")),
+    (_title, choices) => choices.find((item) => item === "下一页 →"),
+    (_title, choices) => choices.find((item) => item === "↻ 刷新列表"),
+    (_title, choices) => choices.find((item) => item === "关闭"),
+  ]);
+  await openSessionManager({
+    ui,
+    loadSessions: async () => {
+      loads++;
+      if (loads > 1) throw new Error("disk busy");
+      return all;
+    },
+    togglePin: () => false, onPinChanged() {}, onSwitch() {}, onRename() {}, onDelete() {},
+  });
+  assert.equal(loads, 2);
+  assert.match(notices[0]!, /刷新会话列表失败：disk busy/);
+  const rows = (index: number) => viewed[index]!.choices.filter((item) => /^\d+\. /.test(item));
+  assert.deepEqual(rows(2).slice(0, 3).map((row) => row.replace(/^\d+\. /, "")),
+    ["● Branch 0 · 1 次提问", "Branch 1 · 1 次提问", "Branch 10 · 1 次提问"],
+    "the list is title-sorted, not in the default recent order");
+  assert.equal(viewed[2]!.choices.includes("↕ 排序：会话标题"), true);
+  assert.match(rows(3)[0]!, /Branch 16/, "the second page of the title sort is what the user reached");
+  assert.deepEqual(rows(4), rows(3), "the rows the user reached survive the failed reload");
+  assert.match(viewed[4]!.title, /2\/3/, "the page number survives the failed reload");
+  assert.match(viewed[4]!.title, /⚠ 加载失败：disk busy/);
+  assert.equal(viewed[4]!.choices.includes("↕ 排序：会话标题"), true, "the non-default sort survives");
+});
+
+test("a pin saved before a failed reload reports success and stays visible", async () => {
+  const names = [session("a", 1, "alpha"), session("b", 2, "beta")];
+  let loads = 0;
+  const { ui, viewed, notices } = scriptedUI([
+    (_title, choices) => choices.find((item) => item.startsWith("1. ")),
+    (_title, choices) => choices.find((item) => item === "置顶会话"),
+    (_title, choices) => choices.find((item) => item === "关闭"),
+  ]);
+  await openSessionManager({
+    ui,
+    loadSessions: async () => {
+      loads++;
+      if (loads > 1) throw new Error("disk busy");
+      return names;
+    },
+    togglePin: () => true, onPinChanged() {}, onSwitch() {}, onRename() {}, onDelete() {},
+  });
+  assert.deepEqual(notices, ["刷新会话列表失败：disk busy", "会话已置顶"]);
+  assert.match(viewed[2]!.choices[0]!, /^1\. ★ beta · 1 次提问$/, "the saved pin is shown without a reload");
+});
+
+test("a failed pin write still reports an error and leaves the list untouched", async () => {
+  const names = [session("a", 1, "alpha")];
+  const { ui, viewed, notices } = scriptedUI([
+    (_title, choices) => choices.find((item) => item.startsWith("1. ")),
+    (_title, choices) => choices.find((item) => item === "置顶会话"),
+    (_title, choices) => choices.find((item) => item === "关闭"),
+  ]);
+  await openSessionManager({
+    ui,
+    loadSessions: async () => names,
+    togglePin: () => { throw new Error("locked by another process"); },
+    onPinChanged() {}, onSwitch() {}, onRename() {}, onDelete() {},
+  });
+  assert.deepEqual(notices, ["保存置顶失败：locked by another process"]);
+  assert.doesNotMatch(viewed[2]!.choices[0]!, /★/);
+});
+
+
+function runInjectedWriter(mode: string, path: string): Promise<{ code: number | null; stdout: string; stderr: string }> {
+  const moduleUrl = new URL("./manager.ts", import.meta.url).href;
+  const script = `
+import fs from "node:fs";
+import { syncBuiltinESMExports } from "node:module";
+const [mode, path, moduleUrl] = process.argv.slice(-3);
+const realOpen = fs.openSync;
+const realWrite = fs.writeFileSync;
+let foreign = null;
+if (mode === "eexist") {
+  fs.openSync = (target, flags, fileMode) => {
+    if (flags === "wx") {
+      realWrite(target, "foreign", { mode: 0o600 });
+      foreign = target;
+      const error = new Error("EEXIST: file already exists");
+      error.code = "EEXIST";
+      throw error;
+    }
+    return realOpen(target, flags, fileMode);
+  };
+} else if (mode === "partial-write") {
+  fs.writeFileSync = (target, data, options) => {
+    if (typeof target === "number") {
+      realWrite(target, String(data).slice(0, 3));
+      const error = new Error("EIO: partial write");
+      error.code = "EIO";
+      throw error;
+    }
+    return realWrite(target, data, options);
+  };
+} else if (mode === "rename") {
+  fs.renameSync = () => {
+    const error = new Error("EIO: rename failed");
+    error.code = "EIO";
+    throw error;
+  };
+}
+syncBuiltinESMExports();
+const { toggleSessionPin } = await import(moduleUrl);
+try {
+  toggleSessionPin(path, "some-id");
+  console.log(JSON.stringify({ error: "", foreign }));
+} catch (error) {
+  console.log(JSON.stringify({ error: error.code ?? "", message: error.message, foreign }));
+}
+`;
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath,
+      ["--import", "tsx", "--input-type=module", "--eval", script, mode, path, moduleUrl],
+      { cwd: process.cwd(), stdio: ["ignore", "pipe", "pipe"] });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => { stdout += chunk; });
+    child.stderr.on("data", (chunk) => { stderr += chunk; });
+    child.on("error", reject);
+    child.on("close", (code) => resolve({ code, stdout, stderr }));
+  });
+}
+
+test("a temporary file already owned by another process is never deleted", async () => {
+  const root = mkdtempSync(join(tmpdir(), "pi-session-pin-eexist-"));
+  const path = join(root, "pins.json");
+  try {
+    writeFileSync(path, JSON.stringify(["kept"]));
+    const result = await runInjectedWriter("eexist", path);
+    assert.equal(result.code, 0, result.stderr);
+    const out = JSON.parse(result.stdout.trim()) as { error: string; message: string; foreign: string | null };
+    assert.equal(out.error, "EEXIST", out.message);
+    assert.ok(out.foreign, "the injected writer claimed a temporary name first");
+    assert.equal(readFileSync(out.foreign!, "utf8"), "foreign", "the other process's file is left alone");
+    assert.equal(readFileSync(path, "utf8"), JSON.stringify(["kept"]), "the pins file stays untouched");
+    assert.equal(readdirSync(root).filter((name) => name.endsWith(".tmp")).length, 1, "only the foreign file remains");
+    assert.equal(existsSync(`${path}.lock`), false, "the lock is released");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a partial write or a failed rename cleans up its own temporary file and keeps the pins", async () => {
+  const root = mkdtempSync(join(tmpdir(), "pi-session-pin-faults-"));
+  const path = join(root, "pins.json");
+  try {
+    writeFileSync(path, JSON.stringify(["kept"]));
+    for (const mode of ["partial-write", "rename"]) {
+      const result = await runInjectedWriter(mode, path);
+      assert.equal(result.code, 0, result.stderr);
+      const out = JSON.parse(result.stdout.trim()) as { error: string };
+      assert.equal(out.error, "EIO", mode + " surfaces the failure");
+      assert.equal(readFileSync(path, "utf8"), JSON.stringify(["kept"]), mode + " keeps the pins file");
+      assert.deepEqual(readdirSync(root), ["pins.json"], mode + " leaves no temporary file or lock behind");
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a blank load failure message is still reported as a failure", async () => {
+  const names = [session("a", 1, "alpha")];
+  let attempts = 0;
+  const { ui, viewed, notices } = scriptedUI([
+    (_title, choices) => choices.find((item) => item === "↻ 刷新列表"),
+    (_title, choices) => choices.find((item) => item === "关闭"),
+  ]);
+  await openSessionManager({
+    ui,
+    loadSessions: async () => {
+      attempts++;
+      if (attempts === 1) throw new Error("");
+      return names;
+    },
+    togglePin: () => false, onPinChanged() {}, onSwitch() {}, onRename() {}, onDelete() {},
+  });
+  assert.equal(attempts, 2);
+  assert.match(notices[0]!, /刷新会话列表失败：Unknown error/);
+  assert.match(viewed[0]!.title, /⚠ 加载失败：Unknown error/);
+  assert.equal(viewed[0]!.choices.filter((item) => /^\d+\. /.test(item)).length, 0,
+    "an empty message never renders as an empty list");
+});
+
+test("a throwing pin-change callback never turns a saved pin into a save failure", async () => {
+  const names = [session("a", 1, "alpha")];
+  let loads = 0;
+  const { ui, viewed, notices } = scriptedUI([
+    (_title, choices) => choices.find((item) => item.startsWith("1. ")),
+    (_title, choices) => choices.find((item) => item === "置顶会话"),
+    (_title, choices) => choices.find((item) => item === "关闭"),
+  ]);
+  await openSessionManager({
+    ui,
+    loadSessions: async () => { loads++; return names; },
+    togglePin: () => true,
+    onPinChanged() { throw new Error("sidebar gone"); },
+    onSwitch() {}, onRename() {}, onDelete() {},
+  });
+  assert.deepEqual(notices, ["刷新侧边栏失败：sidebar gone", "会话已置顶"],
+    "the callback failure is a refresh failure, the pin still reports success");
+  assert.equal(loads, 2, "the manager keeps working and reloads after the callback failed");
+  assert.equal(viewed.length, 3);
 });

@@ -172,6 +172,7 @@ export class SessionPanel implements Component {
 
   private sessions: readonly SessionListItem[] = [];
   private loading = true;
+  private error: string | undefined;
   private disposed = false;
   private loadInFlight = false;
   private refreshPending = false;
@@ -192,10 +193,17 @@ export class SessionPanel implements Component {
     return root ? findLayoutBox(root, this) : undefined;
   }
 
+  /** Rows actually drawn: the failure hint takes one slot, so hit-testing uses the same set. */
+  private visibleSessions(): readonly SessionListItem[] {
+    return this.error ? this.sessions.slice(0, MAX_VISIBLE_SESSIONS - 1) : this.sessions;
+  }
+
   private sessionAt(box: LayoutBox, x: number, y: number): SessionListItem | undefined {
     if (!contains(box.clip, x, y) || !contains(box.rect, x, y)) return undefined;
     const row = y - box.rect.y - 1;
-    return row >= 0 && row < this.sessions.length ? this.sessions[row] : undefined;
+    const rows = this.visibleSessions();
+    // A row with no session (the failure hint) must never select, pin, rename or delete.
+    return row >= 0 && row < rows.length ? rows[row] : undefined;
   }
 
   /** Buttons row sits after the session list: title(1) + up to 5 rows + spacing. */
@@ -446,15 +454,25 @@ export class SessionPanel implements Component {
     this.loadInFlight = true;
     if (this.sessions.length === 0) this.loading = true;
     this.options.tui.requestRender();
-    void this.options.loadSessions()
+    // A synchronous throw from loadSessions must follow the same failed-refresh path.
+    let loading: Promise<readonly SessionListItem[]>;
+    try {
+      loading = Promise.resolve(this.options.loadSessions());
+    } catch (error) {
+      loading = Promise.reject(error);
+    }
+    void loading
       .then((sessions) => {
         if (this.disposed) return;
         this.sessions = sessions.slice(0, MAX_VISIBLE_SESSIONS);
+        this.error = undefined;
         this.loading = false;
       })
-      .catch(() => {
+      .catch((error) => {
         if (this.disposed) return;
-        this.sessions = [];
+        // Keep the last good list: a failed refresh must not look like "no sessions".
+        // A blank message must still render as a failure, not as "No saved sessions".
+        this.error = (error instanceof Error ? error.message : String(error)).trim() || "Unknown error";
         this.loading = false;
       })
       .finally(() => {
@@ -472,8 +490,9 @@ export class SessionPanel implements Component {
     const renderWidth = Math.max(1, Math.min(width, this.options.getDesiredWidth()));
     const contentWidth = Math.max(1, renderWidth - 4);
     const now = this.options.now?.() ?? Date.now();
-    const body = this.sessions.length > 0
-      ? this.sessions.map((session) => panelContent(
+    const rows = this.visibleSessions();
+    const body: string[] = rows.length > 0
+      ? rows.map((session) => panelContent(
           this.theme,
           formatSessionRow(session, contentWidth, now, Boolean(this.options.onTogglePin)),
           this.pressedTarget?.session.id === session.id
@@ -483,12 +502,16 @@ export class SessionPanel implements Component {
               : "dim",
           contentWidth,
         ))
-      : [panelContent(
+      : this.error ? [] : [panelContent(
           this.theme,
           this.loading ? "Loading sessions…" : "No saved sessions",
           "dim",
           contentWidth,
         )];
+    // Sits under the retained rows, so row hit-testing keeps its index mapping.
+    if (this.error) {
+      body.push(panelContent(this.theme, `⚠ 刷新失败，点标题重试：${this.error}`, "warning", contentWidth));
+    }
 
     const contentWidthButtons = Math.max(1, renderWidth - 4);
     const baseWidth = Math.floor(contentWidthButtons / RESOURCE_BUTTONS.length);
@@ -506,7 +529,7 @@ export class SessionPanel implements Component {
 
     const divider = this.theme.fg("dim", `├${"─".repeat(Math.max(1, renderWidth - 2))}┤`);
     return [
-      renderSessionTitleRow(this.theme, this.loading || this.loadInFlight ? "SESSIONS …" : "SESSIONS ↻", renderWidth, this.clearPressed, this.managePressed, Boolean(this.options.onOpenManager)),
+      renderSessionTitleRow(this.theme, this.loading || this.loadInFlight ? "SESSIONS …" : this.error ? "SESSIONS ⚠" : "SESSIONS ↻", renderWidth, this.clearPressed, this.managePressed, Boolean(this.options.onOpenManager)),
       ...body,
       divider,
       resourceRow,

@@ -1,10 +1,15 @@
-import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { closeSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { stripTerminalSequences, truncateToWidth } from "@earendil-works/pi-tui";
 import type { SessionListItem } from "./panel.ts";
 
 export type SessionSort = "recent" | "oldest" | "prompts" | "title";
 export const SESSION_PAGE_SIZE = 8;
+
+const MAX_PINS = 2000;
+const MAX_PINS_BYTES = 128_000;
+const PIN_ID = /^[a-zA-Z0-9._-]{1,128}$/;
 
 /** Store only opaque session ids; session contents and titles never leave Pi. */
 export function readSessionPins(path: string): ReadonlySet<string> {
@@ -15,31 +20,86 @@ export function readSessionPins(path: string): ReadonlySet<string> {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return new Set();
     throw error;
   }
-  if (text.length > 128_000) throw new Error("Session pins file is too large");
+  if (text.length > MAX_PINS_BYTES) throw new Error("Session pins file is too large");
   const parsed: unknown = JSON.parse(text);
-  if (!Array.isArray(parsed) || parsed.length > 2000 ||
-      !parsed.every((id) => typeof id === "string" && /^[a-zA-Z0-9._-]{1,128}$/.test(id))) {
+  if (!Array.isArray(parsed) || parsed.length > MAX_PINS ||
+      !parsed.every((id) => typeof id === "string" && PIN_ID.test(id))) {
     throw new Error("Invalid session pins file");
   }
   return new Set(parsed as string[]);
 }
 
+/** The reader and the writer share one count and size limit, checked before anything is written. */
+function serializeSessionPins(pins: ReadonlySet<string>): string {
+  const ids = [...pins];
+  if (ids.length > MAX_PINS) throw new Error(`Session pins cannot exceed ${MAX_PINS} entries`);
+  const text = JSON.stringify(ids);
+  if (text.length > MAX_PINS_BYTES) throw new Error(`Session pins cannot exceed ${MAX_PINS_BYTES} characters`);
+  return text;
+}
+
 /** Atomic, user-private persistence. Never write back a corrupt pins file. */
-export function toggleSessionPin(path: string, id: string): boolean {
-  if (!/^[a-zA-Z0-9._-]{1,128}$/.test(id)) throw new Error("Invalid session identifier");
-  const pins = new Set(readSessionPins(path));
-  const pinned = !pins.has(id);
-  if (pinned) pins.add(id);
-  else pins.delete(id);
+function writeSessionPins(path: string, text: string): void {
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-  const temporary = `${path}.${process.pid}.${Date.now()}.tmp`;
+  const temporary = `${path}.${process.pid}.${randomUUID()}.tmp`;
+  // "wx" claims the temporary name exclusively. Ownership starts at open, so a partial
+  // write that throws still cleans up its own file, while EEXIST never touches a foreign one.
+  const fd = openSync(temporary, "wx", 0o600);
+  let opened = true;
   try {
-    writeFileSync(temporary, JSON.stringify([...pins]), { encoding: "utf8", mode: 0o600 });
+    writeFileSync(fd, text, { encoding: "utf8" });
+    closeSync(fd);
+    opened = false;
     renameSync(temporary, path);
   } finally {
+    if (opened) { try { closeSync(fd); } catch { /* keep the original failure */ } }
     rmSync(temporary, { force: true });
   }
-  return pinned;
+}
+
+function lockOwnerFile(lock: string): string {
+  return `${lock}/owner.json`;
+}
+
+/**
+ * An existing lock always fails the write: two processes can both judge an old lock dead,
+ * and the later one would delete the lock its peer just took. Only a human removes leftovers.
+ */
+function acquirePinsLock(lock: string): void {
+  mkdirSync(dirname(lock), { recursive: true, mode: 0o700 });
+  try {
+    mkdirSync(lock, { mode: 0o700 });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+      throw new Error(
+        `Session pins are locked by another process; retry shortly (leftover lock: ${lockOwnerFile(lock)})`,
+      );
+    }
+    throw error;
+  }
+  try {
+    writeFileSync(lockOwnerFile(lock), JSON.stringify({ pid: process.pid }), { encoding: "utf8", mode: 0o600 });
+  } catch (error) {
+    rmSync(lock, { recursive: true, force: true });
+    throw error;
+  }
+}
+
+/** Pins are read-modify-written under a per-file lock so concurrent processes never drop an update. */
+export function toggleSessionPin(path: string, id: string): boolean {
+  if (!PIN_ID.test(id)) throw new Error("Invalid session identifier");
+  const lock = `${path}.lock`;
+  acquirePinsLock(lock);
+  try {
+    const pins = new Set(readSessionPins(path));
+    const pinned = !pins.has(id);
+    if (pinned) pins.add(id);
+    else pins.delete(id);
+    writeSessionPins(path, serializeSessionPins(pins));
+    return pinned;
+  } finally {
+    rmSync(lock, { recursive: true, force: true });
+  }
 }
 
 export function sortedSessions(sessions: readonly SessionListItem[], sort: SessionSort): SessionListItem[] {
@@ -93,6 +153,10 @@ export type SessionManagerOptions = {
   readonly onDelete: (session: SessionListItem) => void;
 };
 
+function errorText(error: unknown): string {
+  return (error instanceof Error ? error.message : String(error)).trim() || "Unknown error";
+}
+
 const SORT_CHOICES: ReadonlyArray<{ sort: SessionSort; label: string }> = [
   { sort: "recent", label: "最近更新" },
   { sort: "oldest", label: "最早更新" },
@@ -112,7 +176,20 @@ export async function openSessionManager(options: SessionManagerOptions): Promis
   let query = "";
   let sort: SessionSort = "recent";
   let page = 0;
-  let sessions = await options.loadSessions();
+  let sessions: readonly SessionListItem[] = [];
+  let loadError: string | undefined;
+  /** Keeps the last good list, sort, filter and page when a load fails. */
+  const reload = async (): Promise<void> => {
+    try {
+      sessions = await options.loadSessions();
+      loadError = undefined;
+    } catch (error) {
+      // A blank message must still read as a failure, never as an empty list.
+      loadError = errorText(error);
+      ui.notify(`刷新会话列表失败：${loadError}`, "warning");
+    }
+  };
+  await reload();
   for (;;) {
     const current = getSessionPage(sessions, query, sort, page);
     page = current.page;
@@ -128,7 +205,8 @@ export async function openSessionManager(options: SessionManagerOptions): Promis
       "关闭",
     ];
     const choice = await ui.select(
-      `Sessions · ${current.total}/${sessions.length} · ${page + 1}/${current.pages}${query ? ` · 搜索：${safeLabel(query)}` : ""}`,
+      `Sessions · ${current.total}/${sessions.length} · ${page + 1}/${current.pages}${query ? ` · 搜索：${safeLabel(query)}` : ""}` +
+        (loadError ? ` · ⚠ 加载失败：${safeLabel(loadError)}` : ""),
       [...labels, ...actions],
     );
     if (!choice || choice === "关闭") return;
@@ -145,7 +223,7 @@ export async function openSessionManager(options: SessionManagerOptions): Promis
     } else if (choice === "下一页 →") {
       page++;
     } else if (choice === "↻ 刷新列表") {
-      sessions = await options.loadSessions();
+      await reload();
     } else {
       const index = labels.indexOf(choice);
       const session = current.items[index];
@@ -159,15 +237,24 @@ export async function openSessionManager(options: SessionManagerOptions): Promis
       ];
       const action = await ui.select(`${safeLabel(session.title)} · 管理`, menu);
       if (action === "置顶会话" || action === "取消置顶") {
+        let pinned: boolean;
         try {
-          const pinned = options.togglePin(session.id);
-          ui.notify(pinned ? "会话已置顶" : "已取消置顶", "info");
-          options.onPinChanged();
-          sessions = await options.loadSessions();
-          page = 0;
+          pinned = options.togglePin(session.id);
         } catch (error) {
           ui.notify(`保存置顶失败：${error instanceof Error ? error.message : String(error)}`, "error");
+          continue;
         }
+        // Already persisted: show it even if the reload below fails.
+        sessions = sessions.map((item) => (item.id === session.id ? { ...item, pinned } : item));
+        try {
+          options.onPinChanged();
+        } catch (error) {
+          // The pin is already saved: a sidebar refresh failure is not a save failure.
+          ui.notify(`刷新侧边栏失败：${errorText(error)}`, "warning");
+        }
+        page = 0;
+        await reload();
+        ui.notify(pinned ? "会话已置顶" : "已取消置顶", "info");
       } else if (action === "移到回收站") {
         // The central delete command owns the final confirmation for both
         // the sidebar and this manager. Never present two successive prompts.

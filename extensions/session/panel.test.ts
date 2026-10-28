@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { stripTerminalSequences, type TuiInputListener } from "@earendil-works/pi-tui";
+import { stripTerminalSequences, visibleWidth, type TuiInputListener } from "@earendil-works/pi-tui";
 import { SessionPanel, type SessionListItem } from "./panel.ts";
 
 const theme = { fg: (_color: string, text: string) => text } as any;
@@ -447,5 +447,227 @@ test("narrow sidebar keeps prior rename/delete actions without showing a truncat
   assert.deepEqual(listener?.(`\u001b[<0;${pencilX};4m`), { consume: true }, `release at ${pencilX}: ${line}`);
   await flushAsync();
   assert.deepEqual(actions, ["rename"]);
+  panel.dispose();
+});
+
+function deferredLoader() {
+  const pending: Array<{ resolve: (rows: readonly SessionListItem[]) => void; reject: (error: Error) => void }> = [];
+  let loads = 0;
+  return {
+    loads: () => loads,
+    loadSessions: () => {
+      loads++;
+      return new Promise<readonly SessionListItem[]>((resolve, reject) => { pending.push({ resolve, reject }); });
+    },
+    settle: (index: number, rows: readonly SessionListItem[]) => pending[index]!.resolve(rows),
+    fail: (index: number, message: string) => pending[index]!.reject(new Error(message)),
+  };
+}
+
+function panelHarness(options: { width: number; loadSessions: () => Promise<readonly SessionListItem[]>; onTogglePin?: () => void }) {
+  let listener: TuiInputListener | undefined;
+  const tui = {
+    addInputListener(next: TuiInputListener) { listener = next; return () => {}; },
+    requestRender() {},
+    currentLayout: undefined as any,
+  } as any;
+  const panel = new SessionPanel(theme, {
+    tui,
+    getDesiredWidth: () => options.width,
+    loadSessions: options.loadSessions,
+    onSelect() {}, onRename() {}, onDelete() {},
+    onTogglePin: options.onTogglePin,
+    onDeleteOthers() {}, onOpenResources() {}, now: () => 0,
+  });
+  tui.currentLayout = {
+    root: {
+      component: panel, rect: { x: 10, y: 5, width: options.width, height: 7 },
+      clip: { x: 10, y: 5, width: options.width, height: 7 }, children: [],
+    },
+  };
+  return { panel, press: (x: number, y: number) => {
+    listener?.(`\u001b[<0;${x};${y}M`);
+    listener?.(`\u001b[<0;${x};${y}m`);
+  } };
+}
+
+test("a failed first load shows a retry hint instead of No saved sessions", async () => {
+  const loader = deferredLoader();
+  const { panel, press } = panelHarness({ width: 40, loadSessions: loader.loadSessions });
+  panel.refresh();
+  loader.fail(0, "offline");
+  await flushAsync();
+
+  const output = panel.render(40).join("\n");
+  assert.doesNotMatch(output, /No saved sessions/);
+  assert.match(output, /刷新失败，点标题重试：offline/);
+  assert.match(panel.render(40)[0]!, /SESSIONS ⚠/);
+  assert.match(panel.render(40)[0]!, /SESSIONS ⚠/, "the header flags the failure on the retry target itself");
+
+  press(20, 6);
+  await flushAsync();
+  assert.equal(loader.loads(), 2, "clicking the title retries the load");
+  loader.settle(1, [session("one", "One session")]);
+  await flushAsync();
+
+  const recovered = panel.render(40).join("\n");
+  assert.match(recovered, /One session/);
+  assert.doesNotMatch(recovered, /刷新失败/);
+  assert.match(panel.render(40)[0]!, /SESSIONS ↻/);
+  panel.dispose();
+});
+
+test("a failed refresh keeps the last good list and the hint fits a narrow panel", async () => {
+  const loader = deferredLoader();
+  const { panel, press } = panelHarness({ width: 44, loadSessions: loader.loadSessions });
+  panel.refresh();
+  loader.settle(0, [session("one", "First session"), session("two", "Second session")]);
+  await flushAsync();
+  press(24, 6);
+  await flushAsync();
+  loader.fail(1, "permission denied on a long error message");
+  await flushAsync();
+
+  const lines = panel.render(44);
+  const output = lines.join("\n");
+  assert.match(output, /First session/);
+  assert.match(output, /Second session/);
+  assert.match(output, /刷新失败，点标题重试/);
+  assert.doesNotMatch(output, /No saved sessions/);
+  assert.ok(lines.every((line) => visibleWidth(line) <= 44), "failure hint stays inside the panel width");
+  assert.match(stripTerminalSequences(lines[3]!), /⚠ 刷新失败，点标题重试：permission/, "the long reason is truncated, not wrapped");
+  panel.dispose();
+});
+
+test("a refresh requested during an in-flight load runs once, and dispose stops queued work", async () => {
+  const loader = deferredLoader();
+  const { panel } = panelHarness({ width: 40, loadSessions: loader.loadSessions });
+
+  panel.refresh();
+  panel.refresh();
+  assert.equal(loader.loads(), 1, "a second click is queued, not started");
+  assert.match(panel.render(40)[0]!, /SESSIONS …/);
+
+  loader.settle(0, [session("old", "Old session")]);
+  await flushAsync();
+  assert.equal(loader.loads(), 2, "the queued refresh runs after the first load");
+  loader.settle(1, [session("new", "New session")]);
+  await flushAsync();
+  assert.match(panel.render(40).join("\n"), /New session/);
+
+  panel.refresh();
+  assert.equal(loader.loads(), 3);
+  panel.dispose();
+  loader.settle(2, [session("late", "Late session")]);
+  await flushAsync();
+  assert.equal(loader.loads(), 3, "dispose stops further loads");
+  assert.doesNotMatch(panel.render(40).join("\n"), /Late session/);
+});
+
+test("after a failed refresh the error hint row triggers no session action, and drawn rows still work", async () => {
+  const loader = deferredLoader();
+  const calls: string[] = [];
+  let opened: string | undefined;
+  let listener: TuiInputListener | undefined;
+  const tui = {
+    addInputListener(next: TuiInputListener) { listener = next; return () => {}; },
+    requestRender() {},
+    currentLayout: undefined as any,
+  } as any;
+  const five = Array.from({ length: 5 }, (_, index) => session(`row-${index}`, `Row ${index}`));
+  const panel = new SessionPanel(theme, {
+    tui, getDesiredWidth: () => 40,
+    loadSessions: loader.loadSessions,
+    onSelect(item) { calls.push(`select:${item.id}`); },
+    onRename(item) { calls.push(`rename:${item.id}`); },
+    onDelete(item) { calls.push(`delete:${item.id}`); },
+    onTogglePin(item) { calls.push(`pin:${item.id}`); },
+    onDeleteOthers() { calls.push("clear"); },
+    onOpenResources(button) { opened = button; },
+    now: () => 0,
+  });
+  // Title(1) + four drawn rows + hint + divider + buttons + bottom = 9 lines.
+  tui.currentLayout = {
+    root: {
+      component: panel, rect: { x: 10, y: 5, width: 40, height: 9 },
+      clip: { x: 10, y: 5, width: 40, height: 9 }, children: [],
+    },
+  };
+  const press = (x: number, y: number) => {
+    listener?.(`\u001b[<0;${x};${y}M`);
+    listener?.(`\u001b[<0;${x};${y}m`);
+  };
+
+  panel.refresh();
+  loader.settle(0, five);
+  await flushAsync();
+  press(24, 6);
+  await flushAsync();
+  assert.equal(loader.loads(), 2);
+  loader.fail(1, "boom");
+  await flushAsync();
+
+  const lines = panel.render(40);
+  assert.match(stripTerminalSequences(lines[4]!), /Row 3/, "only four rows fit beside the hint");
+  assert.match(stripTerminalSequences(lines[5]!), /刷新失败，点标题重试：boom/);
+
+  // The hint sits on the row the hidden fifth session used to occupy.
+  // Content columns start at rect.x + 2, and SGR x is one-based.
+  for (const column of [0, 31, 32, 34, 35]) press(13 + column, 11);
+  await flushAsync();
+  assert.deepEqual(calls, [], "the error hint row never selects, pins, renames or deletes");
+
+  press(13, 7);
+  await flushAsync();
+  assert.deepEqual(calls, ["select:row-0"], "a drawn row is still clickable");
+
+  press(44, 13);
+  await flushAsync();
+  assert.equal(opened, "mcp", "resource buttons keep working next to the hint");
+  panel.dispose();
+});
+
+
+test("a blank failure message still shows the retry hint instead of No saved sessions", async () => {
+  const loader = deferredLoader();
+  const { panel, press } = panelHarness({ width: 40, loadSessions: loader.loadSessions });
+  panel.refresh();
+  loader.fail(0, "");
+  await flushAsync();
+
+  const output = panel.render(40).join("\n");
+  assert.doesNotMatch(output, /No saved sessions/);
+  assert.match(output, /刷新失败，点标题重试：Unknown/);
+  assert.match(panel.render(40)[0]!, /SESSIONS ⚠/);
+
+  press(20, 6);
+  await flushAsync();
+  loader.settle(1, [session("one", "One session")]);
+  await flushAsync();
+  const recovered = panel.render(40).join("\n");
+  assert.match(recovered, /One session/);
+  assert.doesNotMatch(recovered, /刷新失败/);
+  panel.dispose();
+});
+
+test("a synchronously throwing load reports the failure and the title click retries it", async () => {
+  let calls = 0;
+  const { panel, press } = panelHarness({ width: 40, loadSessions: () => {
+    calls++;
+    if (calls === 1) throw new Error("sync boom");
+    return Promise.resolve([session("one", "One session")]);
+  } });
+  panel.refresh();
+  await flushAsync();
+
+  const output = panel.render(40).join("\n");
+  assert.match(output, /刷新失败，点标题重试：sync boom/);
+  assert.doesNotMatch(output, /No saved sessions/);
+  assert.doesNotMatch(output, /Loading sessions/, "a synchronous throw never leaves the panel loading forever");
+
+  press(20, 6);
+  await flushAsync();
+  assert.equal(calls, 2, "the title click retries after a synchronous throw");
+  assert.match(panel.render(40).join("\n"), /One session/);
   panel.dispose();
 });
