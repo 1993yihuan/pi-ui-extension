@@ -10,7 +10,8 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Box, Container, Text, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
-import { readFile, rename, writeFile } from "node:fs/promises";
+import type { FileHandle } from "node:fs/promises";
+import { open, readFile, rename, rm } from "node:fs/promises";
 import { TOOL_VIEW_MODES, isToolViewMode, type ToolViewMode } from "./types.ts";
 import { renderCodemodeCompactCall, renderCodemodeCompactResult, singleLine } from "./codemode-compact.ts";
 import { transformThinkingText } from "./thinking.ts";
@@ -59,6 +60,35 @@ function modeLabel(mode: ToolViewMode): string {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+type AtomicFs = {
+  open(path: string, flags: string, mode?: number): Promise<FileHandle>;
+  rename(from: string, to: string): Promise<void>;
+  rm(path: string, options?: { force?: boolean }): Promise<void>;
+};
+
+const nodeFs: AtomicFs = { open, rename, rm };
+
+/**
+ * Ownership starts when "wx" creates the temporary file, so a partial write or a failed
+ * rename removes only that file, while an EEXIST open never touches a foreign one.
+ */
+export async function writeFileAtomic(target: string, text: string, io: AtomicFs = nodeFs): Promise<void> {
+  const temporary = target + "." + process.pid + "." + Date.now() + "." + Math.random().toString(36).slice(2) + ".tmp";
+  const handle = await io.open(temporary, "wx", 0o600);
+  let owned = true;
+  try {
+    await handle.writeFile(text, "utf8");
+    await handle.close();
+    await io.rename(temporary, target);
+    owned = false;
+  } finally {
+    if (owned) {
+      await handle.close().catch(() => { /* keep the original failure */ });
+      await io.rm(temporary, { force: true }).catch(() => { /* keep the original failure */ });
+    }
+  }
 }
 
 function compactText(value: unknown, maxLength = 96): string {
@@ -274,11 +304,9 @@ export async function installToolViewController(
     }
   }
 
-  async function persistMode(nextMode: ToolViewMode): Promise<void> {
-    const tempFile = `${modeFile}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`; 
+  function persistMode(nextMode: ToolViewMode): Promise<void> {
     const stored: StoredMode = { mode: nextMode };
-    await writeFile(tempFile, `${JSON.stringify(stored, null, 2)}\n`, "utf8");
-    await rename(tempFile, modeFile);
+    return writeFileAtomic(modeFile, JSON.stringify(stored, null, 2) + "\n");
   }
 
   function notifyModeChange(): void {

@@ -28,10 +28,12 @@ import {
   createActiveSessionLease,
   readActiveSessionPaths,
   sessionFileUnchanged,
+  snapshotClearableSession,
   type SessionFileSnapshot,
 } from "./session/safety.ts";
 import { createSessionCatalog } from "./session/catalog.ts";
 import { openSessionManager, readSessionPins, sortedSessions, toggleSessionPin } from "./session/manager.ts";
+import { renameSavedSession, sameSessionFile } from "./session/rename.ts";
 import type { SessionListItem } from "./session/panel.ts";
 import { installToolViewController } from "./tool-view/controller.ts";
 import type { ToolViewMode } from "./tool-view/types.ts";
@@ -387,6 +389,7 @@ export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
         ctx.ui.notify("Missing session id", "error");
         return;
       }
+      if (!canManageSessions(ctx)) return;
 
       try {
         const sessions = await SessionManager.list(ctx.cwd, ctx.sessionManager.getSessionDir());
@@ -397,17 +400,42 @@ export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
           return;
         }
         const title = target.name ?? target.firstMessage;
+        // Captured before the dialog: the file must still be this exact file afterwards.
+        const before = await snapshotClearableSession(target.path);
+        if (!before) {
+          ctx.ui.notify("Session file is missing or is not a regular file", "error");
+          refreshSessions();
+          return;
+        }
         const nextName = await createDialogUI(ctx.ui).input("Rename session", title);
         const next = nextName?.trim();
         if (!next) return;
 
+        // Revalidate after the dialog: idle, same session, same file, unchanged content.
+        if (!canManageSessions(ctx)) return;
         if (target.id === ctx.sessionManager.getSessionId()) {
+          // Pi writes the live session itself, so appends are expected here; only a
+          // removed or replaced file means the rename would land elsewhere.
+          if (!(await sameSessionFile(target.path, before))) {
+            ctx.ui.notify("Session file was removed or replaced during rename; nothing was saved", "warning");
+            refreshSessions();
+            return;
+          }
           pi.setSessionName(next);
-        } else {
-          SessionManager.open(target.path).appendSessionInfo(next);
-          refreshSessions();
+          ctx.ui.notify("Session renamed", "info");
+          return;
         }
-        ctx.ui.notify("Session renamed", "info");
+        const renamed = await renameSavedSession({
+          cwd: ctx.cwd,
+          sessionDir: ctx.sessionManager.getSessionDir(),
+          sessionId: target.id,
+          path: target.path,
+          name: next,
+          before,
+          activePaths: () => readActiveSessionPaths(ACTIVE_SESSIONS_DIR),
+        });
+        refreshSessions();
+        ctx.ui.notify(renamed.ok ? "Session renamed" : renamed.message, renamed.ok ? "info" : renamed.level);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         ctx.ui.notify(`Failed to rename session: ${message}`, "error");
