@@ -1,31 +1,28 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { EXPECTED_CHECKS, NODE_VERSIONS, PI_VERSIONS, aggregateResults, classifyEvent, docsOnly } from "./ci.mjs";
+import { EXPECTED_CHECKS, NODE_VERSIONS, aggregateResults, classifyEvent, docsOnly } from "./ci.mjs";
 
 test("the required matrix matches the workflow, the declared minimum and the pinned development SDK", () => {
   const read = (path) => readFileSync(new URL(path, import.meta.url), "utf8");
   const workflow = read("../.github/workflows/ci.yml");
   const manifest = JSON.parse(read("../package.json"));
-  const dev = manifest.devDependencies["@earendil-works/pi-coding-agent"];
+  // One supported Pi SDK: the version users are told they need must be the one CI installs.
+  const pinned = manifest.devDependencies["@earendil-works/pi-coding-agent"];
   const axis = key => [...workflow.match(new RegExp(`\n\\s*${key}: \\[([^\\]]*)\\]`))[1].matchAll(/'([^']+)'/g)].map(match => match[1]);
-  const nodes = axis("node-version"), listed = axis("pi-version");
-  assert.deepEqual(listed, PI_VERSIONS, "ci.yml and the release gate must list the same Pi versions");
+  const nodes = axis("node-version");
   assert.deepEqual(nodes, NODE_VERSIONS, "ci.yml and the release gate must list the same Node versions");
   assert.equal(manifest.engines.node, `>=${nodes[0]}`,
     `package.json must declare the lowest tested Node version as its runtime minimum`);
-  assert.equal(listed.at(-1), dev, "the matrix must end with the pinned development SDK");
-  // Whatever minimum the package declares to users must be a tested leg.
+  assert.equal(workflow.includes("pi-version"), false, "a single supported Pi SDK needs no matrix axis");
   for (const name of ["pi-coding-agent", "pi-tui"]) {
     const dependency = `@earendil-works/${name}`;
-    assert.equal(manifest.peerDependencies[dependency], `>=${listed[0]}`,
-      `${dependency} must declare the lowest tested Pi SDK as the minimum supported version`);
-    assert.equal(manifest.devDependencies[dependency], listed.at(-1),
-      `${dependency} development version must match the highest tested Pi SDK`);
+    assert.equal(manifest.peerDependencies[dependency], `>=${pinned}`,
+      `${dependency} must declare the CI-installed Pi SDK as the minimum supported version`);
+    assert.equal(manifest.devDependencies[dependency], pinned,
+      `${dependency} development version must match the CI-installed Pi SDK`);
   }
-  assert.equal(workflow.includes(`if: matrix.pi-version != '${dev}'`), true,
-    "only the leg that npm ci already installs skips the SDK pin step");
-  assert.equal(EXPECTED_CHECKS.length, nodes.length * listed.length, "no extra or missing matrix job");
+  assert.equal(EXPECTED_CHECKS.length, nodes.length, "no extra or missing matrix job");
 });
 
 test("only known documentation changes skip the SDK matrix", () => {

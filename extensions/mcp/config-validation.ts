@@ -1,4 +1,4 @@
-// Pi 1.3/1.4 do not export validateMcpServerConfig from the package root.
+// Pi 1.4 does not export validateMcpServerConfig from the package root.
 // Keep this read-only acceptance check aligned with their MCP config validator;
 // never resolve credentials, execute commands, or return raw validation errors.
 function record(value: unknown): value is Record<string, unknown> {

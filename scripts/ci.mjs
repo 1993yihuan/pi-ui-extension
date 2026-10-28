@@ -4,9 +4,7 @@ import { fileURLToPath } from "node:url";
 
 // Single source for the supported matrix; ci.yml and the release gate are checked against it.
 export const NODE_VERSIONS = ["22.19.0", "24"];
-export const PI_VERSIONS = ["1.3.0", "1.4.0"];
-export const EXPECTED_CHECKS = NODE_VERSIONS.flatMap(node =>
-  PI_VERSIONS.map(pi => `check (${node}, ${pi})`));
+export const EXPECTED_CHECKS = NODE_VERSIONS.map(node => `check (${node})`);
 
 export function docsOnly(paths) {
   return paths.length > 0 && paths.every(path =>

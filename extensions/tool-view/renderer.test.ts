@@ -13,14 +13,6 @@ const theme = {
   bold: (value: string) => value,
 } as any;
 
-test("reports an actionable compatibility error on Pi without the renderer API", async () => {
-  await assert.rejects(
-    installToolViewController({ registerMarkdownTransformer() {} } as any,
-      { modeFile: join(tmpdir(), "pi-ui-missing-renderer-test.json") }),
-    /Update Pi.*this extension/,
-  );
-});
-
 test("uses one official renderer resolver without replacing or executing Pi tools", async () => {
   const directory = await mkdtemp(join(tmpdir(), "tool-renderer-"));
   const handlers = new Map<string, Array<(event: any, ctx: any) => void>>();

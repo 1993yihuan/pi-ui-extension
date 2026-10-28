@@ -227,7 +227,9 @@ export async function installToolViewController(
   let modeChangeQueue = Promise.resolve();
   const modeListeners = new Set<(mode: ToolViewMode) => void>();
   const thinkingTiming = new ThinkingTiming();
-  // Undo the v1.2.8 in-memory click adapter when upgrading with Pi's /reload.
+  // Undo the click adapter installed by this extension's own v1.2.8 when Pi's
+  // /reload swaps in a fresh module instance. That is this plugin's version,
+  // not the host Pi version: a Pi 1.4 host still reloads an older plugin.
   // The current adapter owns only the Thinking region child of components built
   // with this extension's transformer; every other component, including Pi's
   // own Thinking click handler, keeps its native behavior.
@@ -494,9 +496,6 @@ export async function installToolViewController(
   // arguments, permissions, project trust behavior, and native tool definitions.
   // A fixed self shell lets mode changes re-render historical rows and lets the
   // hidden mode remove all visual content without replacing tool execution.
-  if (typeof pi.registerToolRenderer !== "function") {
-    throw new Error("Tool View requires Pi with registerToolRenderer(). Update Pi to use this extension.");
-  }
   pi.registerToolRenderer((toolName, next) => {
     if (!ownsCompactTool(toolName)) return next();
     const nativeDefinition = next();
