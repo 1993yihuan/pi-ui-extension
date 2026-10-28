@@ -134,9 +134,9 @@ VIEW 下方按调用来源分组：
 | 操作 | 命令 |
 | --- | --- |
 | 安装最新 npm 版本 | `pi install npm:pi-ui-extension` |
-| 固定 v1.9.10 | `pi install npm:pi-ui-extension@1.9.10` |
+| 固定 v1.9.12 | `pi install npm:pi-ui-extension@1.9.12` |
 | 从 GitHub 安装 | `pi install git:github.com/1993yihuan/pi-ui-extension` |
-| 固定 Git tag | `pi install git:github.com/1993yihuan/pi-ui-extension@v1.9.10` |
+| 固定 Git tag | `pi install git:github.com/1993yihuan/pi-ui-extension@v1.9.12` |
 | 仅当前项目安装 | `pi install --local npm:pi-ui-extension` |
 | 更新非固定版本 | `pi update --extensions` |
 | 列出已配置扩展 | `pi list` |
@@ -151,7 +151,7 @@ VIEW 下方按调用来源分组：
 
 1. 检查 `command -v pi`、`pi --version`、`node --version` 和 `pi list`。若 npm-global 与 Bun-global 安装并存，请升级实际提供当前 `pi` 命令的安装。
 2. 使用对应安装渠道的包管理器升级 Pi，再次确认当前执行的版本。
-3. 执行 `pi install npm:pi-ui-extension@1.9.10`（项目级安装添加 `--local`），重启 Pi，并以 `pi --tui-mode fullscreen` 启动。检查全局和项目级配置，避免仍加载旧的固定版本。
+3. 执行 `pi install npm:pi-ui-extension@1.9.12`（项目级安装添加 `--local`），重启 Pi，并以 `pi --tui-mode fullscreen` 启动。检查全局和项目级配置，避免仍加载旧的固定版本。
 4. 确认边栏、Compact 工具展开及鼠标点击位置、Thinking 展开（需开启原生 Thinking 可见性）、会话切换和 Tool/MCP 统计正常。
 
 如果必须保留 Pi 1.2.x，请继续使用 v1.9.2，或使用 `pi install` 将安装来源指定为 `npm:pi-ui-extension@1.9.2`，或将 Git 来源固定到 `@v1.9.2`；保持原来的全局或项目安装范围。固定版本不会自动升级。安装成功本身不能证明宿主兼容。
