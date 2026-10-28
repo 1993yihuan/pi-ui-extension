@@ -245,5 +245,12 @@ export function installContextEstimates(pi: ExtensionAPI, onChange: () => void):
     settledTotal = undefined;
     delta = undefined;
   });
-  return { getSnapshot: () => snapshot, getDelta: () => delta, resetDelta: () => settledTotal = snapshot.total };
+  return {
+    getSnapshot: () => snapshot,
+    getDelta: () => delta,
+    resetDelta: () => {
+      settledTotal = snapshot.total;
+      delta = undefined;
+    },
+  };
 }

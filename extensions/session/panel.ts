@@ -51,6 +51,17 @@ const RESOURCE_BUTTONS: ReadonlyArray<{ id: ResourceButtonId; label: string }> =
   { id: "mcp", label: "MCP" },
 ];
 
+/** Shared content-column boundaries for drawing and hit-testing resource buttons. */
+function resourceButtonSpans(contentWidth: number) {
+  const baseWidth = Math.floor(contentWidth / RESOURCE_BUTTONS.length);
+  const remainder = contentWidth % RESOURCE_BUTTONS.length;
+  return RESOURCE_BUTTONS.map((button, index) => {
+    const start = index * baseWidth + Math.min(index, remainder);
+    const end = start + baseWidth + (index < remainder ? 1 : 0);
+    return { ...button, start, end };
+  });
+}
+
 type SessionRowAction = "select" | "pin" | "rename" | "delete";
 type SessionActionTarget = {
   readonly session: SessionListItem;
@@ -215,11 +226,8 @@ export class SessionPanel implements Component {
     const contentWidth = Math.max(1, renderWidth - 4);
     const contentColumn = x - box.rect.x - 2;
     if (contentColumn < 0 || contentColumn >= contentWidth) return undefined;
-    const index = Math.min(
-      RESOURCE_BUTTONS.length - 1,
-      Math.floor(contentColumn * RESOURCE_BUTTONS.length / contentWidth),
-    );
-    return RESOURCE_BUTTONS[index]!.id;
+    return resourceButtonSpans(contentWidth)
+      .find(button => contentColumn >= button.start && contentColumn < button.end)?.id;
   }
 
   private targetAt(x: number, y: number): SessionActionTarget | undefined {
@@ -513,11 +521,8 @@ export class SessionPanel implements Component {
       body.push(panelContent(this.theme, `⚠ 刷新失败，点标题重试：${this.error}`, "warning", contentWidth));
     }
 
-    const contentWidthButtons = Math.max(1, renderWidth - 4);
-    const baseWidth = Math.floor(contentWidthButtons / RESOURCE_BUTTONS.length);
-    const remainder = contentWidthButtons % RESOURCE_BUTTONS.length;
-    const buttonRow = RESOURCE_BUTTONS.map((button, index) => {
-      const segmentWidth = baseWidth + (index < remainder ? 1 : 0);
+    const buttonRow = resourceButtonSpans(contentWidth).map((button) => {
+      const segmentWidth = button.end - button.start;
       const clipped = truncateToWidth(button.label, Math.max(0, segmentWidth), "");
       const padding = Math.max(0, segmentWidth - visibleWidth(clipped));
       const text = " ".repeat(Math.floor(padding / 2)) + clipped + " ".repeat(padding - Math.floor(padding / 2));
@@ -525,7 +530,7 @@ export class SessionPanel implements Component {
         ? this.theme.fg("warning", text)
         : this.theme.fg("accent", text);
     }).join("");
-    const resourceRow = panelContent(this.theme, buttonRow, "accent", contentWidthButtons);
+    const resourceRow = panelContent(this.theme, buttonRow, "accent", contentWidth);
 
     const divider = this.theme.fg("dim", `├${"─".repeat(Math.max(1, renderWidth - 2))}┤`);
     return [

@@ -116,6 +116,61 @@ test("renders and opens the MCP resource button", async () => {
   panel.dispose();
 });
 
+test("resource button clicks match every rendered cell at uneven and narrow widths", async () => {
+  const cases = [
+    { width: 26, segments: ["AGENTS", "Skills", "Exten", " MCP "] },
+    { width: 25, segments: ["AGENTS", "Skill", "Exten", " MCP "] },
+    { width: 27, segments: ["AGENTS", "Skills", "Extens", " MCP "] },
+    { width: 24, segments: ["AGENT", "Skill", "Exten", " MCP "] },
+    { width: 28, segments: ["AGENTS", "Skills", "Extens", " MCP  "] },
+    { width: 7, segments: ["A", "S", "E", ""] },
+    { width: 8, segments: ["A", "S", "E", "M"] },
+    { width: 26, desiredWidth: 40, segments: ["AGENTS", "Skills", "Exten", " MCP "] },
+    { width: 40, desiredWidth: 26, segments: ["AGENTS", "Skills", "Exten", " MCP "] },
+  ];
+  const ids = ["agents", "skills", "extensions", "mcp"];
+  for (const { width, desiredWidth = width, segments } of cases) {
+    let listener: TuiInputListener | undefined;
+    const opened: string[] = [];
+    const tui = {
+      addInputListener(next: TuiInputListener) { listener = next; return () => {}; },
+      requestRender() {},
+      currentLayout: undefined as any,
+    } as any;
+    const panel = new SessionPanel(theme, {
+      tui,
+      getDesiredWidth: () => desiredWidth,
+      loadSessions: async () => [],
+      onSelect() {}, onRename() {}, onDelete() {}, onDeleteOthers() {},
+      onOpenResources(button) { opened.push(button); },
+    });
+    panel.refresh();
+    await flushAsync();
+    const lines = panel.render(width);
+    assert.equal(stripTerminalSequences(lines.at(-2)!), `│ ${segments.join("")} │`);
+    tui.currentLayout = {
+      root: {
+        component: panel,
+        rect: { x: 10, y: 5, width, height: lines.length },
+        clip: { x: 10, y: 5, width, height: lines.length }, children: [],
+      },
+    };
+    let column = 0;
+    for (const [index, segment] of segments.entries()) {
+      for (const _cell of segment) {
+        const x = 13 + column++;
+        const y = 5 + lines.length - 1;
+        listener?.(`\u001b[<0;${x};${y}M`);
+        listener?.(`\u001b[<0;${x};${y}m`);
+        await flushAsync();
+        assert.deepEqual(opened.splice(0), [ids[index]],
+          `width ${width}, desired ${desiredWidth}, content column ${column - 1}`);
+      }
+    }
+    panel.dispose();
+  }
+});
+
 test("releasing outside the Sessions title cancels a refresh click", async () => {
   let listener: TuiInputListener | undefined;
   let loads = 0;

@@ -60,6 +60,32 @@ test("delta tracks the previous settled run and resets", () => {
   assert.equal(tracker.getDelta(), undefined);
   assert.equal(tracker.getSnapshot().total, 1100);
 });
+test("starting a new run clears the previous delta and measures from the reset baseline", () => {
+  const handlers = new Map<string, Function>();
+  const tracker = installContextEstimates({
+    on: (name: string, fn: Function) => handlers.set(name, fn),
+    getActiveTools: () => [], getAllTools: () => [],
+  } as any, () => {});
+  const session = SessionManager.inMemory();
+  const ctx = { sessionManager: session, getSystemPrompt: () => "" };
+  handlers.get("session_start")!({}, ctx);
+  session.appendMessage({ role: "user", content: "x".repeat(4000), timestamp: 1 });
+  handlers.get("agent_settled")!({}, ctx);
+  assert.equal(tracker.getDelta(), 1000);
+
+  tracker.resetDelta();
+  assert.equal(tracker.getDelta(), undefined, "a new run must immediately discard the previous delta");
+  assert.equal(tracker.getSnapshot().total, 1000, "reset preserves the current snapshot");
+  session.appendMessage({ role: "user", content: "x".repeat(400), timestamp: 2 });
+  handlers.get("context")!({ messages: session.buildSessionProjection().messages }, ctx);
+  assert.equal(tracker.getSnapshot().total, 1100);
+  assert.equal(tracker.getDelta(), undefined, "context refresh must not resurrect the previous delta");
+  handlers.get("turn_end")!({}, ctx);
+  assert.equal(tracker.getDelta(), 100, "the new run measures only its own growth");
+  handlers.get("agent_settled")!({}, ctx);
+  assert.equal(tracker.getDelta(), 100);
+});
+
 test("the active branch projection includes custom context entries", () => {
   const handlers = new Map<string, Function>();
   const tracker = installContextEstimates({
