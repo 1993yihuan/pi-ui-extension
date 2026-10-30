@@ -194,8 +194,9 @@ export async function openSessionManager(options: SessionManagerOptions): Promis
     const current = getSessionPage(sessions, query, sort, page);
     page = current.page;
     const labels = current.items.map((session, index) =>
-      `${index + 1}. ${session.pinned ? "★ " : ""}${session.current ? "● " : ""}${safeLabel(session.title)} · ${session.userPromptCount ?? "?"} 次提问`,
+      `${index + 1}. ${session.pinned ? "★ " : ""}${session.current ? "● " : ""}${session.unavailable ? "⚠ " : ""}${safeLabel(session.title)} · ${session.userPromptCount ?? "?"} 次提问`,
     );
+    const unavailable = sessions.filter((session) => session.unavailable).length;
     const actions = [
       "⌕ 搜索 / 清除搜索",
       `↕ 排序：${SORT_CHOICES.find((choice) => choice.sort === sort)!.label}`,
@@ -206,7 +207,8 @@ export async function openSessionManager(options: SessionManagerOptions): Promis
     ];
     const choice = await ui.select(
       `Sessions · ${current.total}/${sessions.length} · ${page + 1}/${current.pages}${query ? ` · 搜索：${safeLabel(query)}` : ""}` +
-        (loadError ? ` · ⚠ 加载失败：${safeLabel(loadError)}` : ""),
+        (loadError ? ` · ⚠ 加载失败：${safeLabel(loadError)}` : "") +
+        (unavailable > 0 ? ` · ⚠ ${unavailable} 个会话暂不可用` : ""),
       [...labels, ...actions],
     );
     if (!choice || choice === "关闭") return;

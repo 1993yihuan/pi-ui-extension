@@ -546,6 +546,22 @@ function panelHarness(options: { width: number; loadSessions: () => Promise<read
   } };
 }
 
+test("an unavailable session keeps its row and flags the partial failure", async () => {
+  const { panel } = panelHarness({
+    width: 40,
+    loadSessions: async () => [{ ...session("one", "Cached session"), unavailable: true }],
+  });
+  panel.refresh();
+  await flushAsync();
+
+  const output = panel.render(40).join("\n");
+  assert.match(output, /Cached session/, "the last good summary stays visible");
+  assert.match(output, /⚠ 1 个会话暂不可用，显示上次摘要/);
+  assert.match(panel.render(40)[0]!, /SESSIONS ⚠/);
+  assert.doesNotMatch(output, /No saved sessions/);
+  panel.dispose();
+});
+
 test("a failed first load shows a retry hint instead of No saved sessions", async () => {
   const loader = deferredLoader();
   const { panel, press } = panelHarness({ width: 40, loadSessions: loader.loadSessions });

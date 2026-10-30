@@ -310,6 +310,7 @@ export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
       title: session.name ?? session.firstMessage,
       modified: session.modified,
       userPromptCount: session.userPromptCount,
+      unavailable: session.unavailable,
       current: session.id === currentId,
       pinned: pinned.has(session.id),
     })), "recent");

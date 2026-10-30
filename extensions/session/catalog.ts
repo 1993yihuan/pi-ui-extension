@@ -12,6 +12,8 @@ export type SessionSummary = {
   readonly firstMessage: string;
   readonly modified: Date;
   readonly userPromptCount: number;
+  /** The file could not be read this refresh; these fields are the last good summary. */
+  readonly unavailable?: boolean;
 };
 type CachedSummary = { readonly snapshot: SessionFileSnapshot; readonly summary: SessionSummary };
 const sameFile = (a: SessionFileSnapshot, b: SessionFileSnapshot): boolean =>
@@ -20,7 +22,11 @@ const expandPath = (path: string): string => resolve(path === "~" ? homedir() : 
 const record = (value: unknown): Record<string, unknown> | undefined =>
   value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
 
-/** A sidebar needs summaries, not the SDK list's concatenation of every message body. */
+/**
+ * A sidebar needs summaries, not the SDK list's concatenation of every message body.
+ * I/O failures propagate so the caller can keep the last good summary instead of
+ * treating a temporarily unreadable file as a deleted session.
+ */
 async function readSummary(path: string, expected: SessionFileSnapshot): Promise<SessionSummary | undefined> {
   let file: FileHandle | undefined;
   try {
@@ -72,8 +78,6 @@ async function readSummary(path: string, expected: SessionFileSnapshot): Promise
       lines.close();
       input.destroy();
     }
-  } catch {
-    return undefined;
   } finally {
     await file?.close();
   }
@@ -100,17 +104,24 @@ export function createSessionCatalog() {
       await Promise.all(Array.from({ length: Math.min(8, paths.length) }, async () => {
         while (next < paths.length) {
           const path = paths[next++]!;
+          const cached = cache.get(path);
           try {
             const info = await stat(path);
             if (!info.isFile()) { cache.delete(path); continue; }
-            const cached = cache.get(path);
             const summary = cached && sameFile(cached.snapshot, info) ? cached.summary : await readSummary(path, info);
             if (summary) {
               cache.set(path, { snapshot: { dev: info.dev, ino: info.ino, size: info.size, mtimeMs: info.mtimeMs, ctimeMs: info.ctimeMs }, summary });
               // Custom/shared directories must not expose another project's sessions.
               if (summary.cwd && expandPath(summary.cwd) === expandPath(cwd)) summaries.push(summary);
             } else cache.delete(path);
-          } catch { cache.delete(path); }
+          } catch (error) {
+            // A transient read failure must not hide a session: keep the last good
+            // summary, marked unavailable, until the file is readable again. A deleted
+            // file (ENOENT) and a file that was never read still leave the list.
+            if (cached && (error as NodeJS.ErrnoException).code !== "ENOENT") {
+              summaries.push({ ...cached.summary, unavailable: true });
+            } else cache.delete(path);
+          }
         }
       }));
       return summaries;

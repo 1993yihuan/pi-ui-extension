@@ -26,6 +26,8 @@ export type SessionListItem = {
   readonly userPromptCount: number | undefined;
   readonly current: boolean;
   readonly pinned?: boolean;
+  /** Shown from the last good summary: the file could not be read this refresh. */
+  readonly unavailable?: boolean;
 };
 
 export type ResourceButtonId = "agents" | "skills" | "extensions" | "mcp";
@@ -145,7 +147,7 @@ function renderSessionTitleRow(theme: Theme, title: string, renderWidth: number,
 }
 
 function formatSessionSummary(session: SessionListItem, width: number, now: number): string {
-  const marker = `${session.current ? "● " : "○ "}${session.pinned ? "★" : ""}`;
+  const marker = `${session.current ? "● " : "○ "}${session.pinned ? "★" : ""}${session.unavailable ? "⚠" : ""}`;
   const metadata = `${session.userPromptCount ?? "?"} · ${formatRelativeTime(session.modified, now)}`;
   const fixedWidth = visibleWidth(marker) + visibleWidth(metadata) + 1;
   if (fixedWidth >= width) {
@@ -182,6 +184,7 @@ export class SessionPanel implements Component {
   private managePressed = false;
 
   private sessions: readonly SessionListItem[] = [];
+  private unavailable = 0;
   private loading = true;
   private error: string | undefined;
   private disposed = false;
@@ -206,7 +209,7 @@ export class SessionPanel implements Component {
 
   /** Rows actually drawn: the failure hint takes one slot, so hit-testing uses the same set. */
   private visibleSessions(): readonly SessionListItem[] {
-    return this.error ? this.sessions.slice(0, MAX_VISIBLE_SESSIONS - 1) : this.sessions;
+    return this.error || this.unavailable > 0 ? this.sessions.slice(0, MAX_VISIBLE_SESSIONS - 1) : this.sessions;
   }
 
   private sessionAt(box: LayoutBox, x: number, y: number): SessionListItem | undefined {
@@ -473,6 +476,7 @@ export class SessionPanel implements Component {
       .then((sessions) => {
         if (this.disposed) return;
         this.sessions = sessions.slice(0, MAX_VISIBLE_SESSIONS);
+        this.unavailable = sessions.filter((session) => session.unavailable).length;
         this.error = undefined;
         this.loading = false;
       })
@@ -519,6 +523,8 @@ export class SessionPanel implements Component {
     // Sits under the retained rows, so row hit-testing keeps its index mapping.
     if (this.error) {
       body.push(panelContent(this.theme, `⚠ 刷新失败，点标题重试：${this.error}`, "warning", contentWidth));
+    } else if (this.unavailable > 0) {
+      body.push(panelContent(this.theme, `⚠ ${this.unavailable} 个会话暂不可用，显示上次摘要`, "warning", contentWidth));
     }
 
     const buttonRow = resourceButtonSpans(contentWidth).map((button) => {
@@ -534,7 +540,7 @@ export class SessionPanel implements Component {
 
     const divider = this.theme.fg("dim", `├${"─".repeat(Math.max(1, renderWidth - 2))}┤`);
     return [
-      renderSessionTitleRow(this.theme, this.loading || this.loadInFlight ? "SESSIONS …" : this.error ? "SESSIONS ⚠" : "SESSIONS ↻", renderWidth, this.clearPressed, this.managePressed, Boolean(this.options.onOpenManager)),
+      renderSessionTitleRow(this.theme, this.loading || this.loadInFlight ? "SESSIONS …" : this.error || this.unavailable > 0 ? "SESSIONS ⚠" : "SESSIONS ↻", renderWidth, this.clearPressed, this.managePressed, Boolean(this.options.onOpenManager)),
       ...body,
       divider,
       resourceRow,

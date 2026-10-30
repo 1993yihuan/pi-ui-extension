@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { appendFileSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, chmodSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { open, type FileHandle } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -70,6 +70,52 @@ test("catalog shares unchanged summaries, reads only changed files and tracks di
     assert.equal((await catalog(root, directory)).length, 1);
     rmSync(directory, { recursive: true });
     assert.deepEqual(await catalog(root, directory), []);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+const rootCannotBeBlocked = process.getuid?.() === 0 ? "chmod does not restrict root" : false;
+
+test("catalog keeps the last good summary while a session file cannot be read", { skip: rootCannotBeBlocked }, async () => {
+  const root = mkdtempSync(join(tmpdir(), "pi-catalog-unreadable-"));
+  try {
+    const session = SessionManager.create(root, root);
+    session.appendMessage({ role: "user", content: "Kept", timestamp: 1 });
+    const path = session.getSessionFile()!;
+    const catalog = createSessionCatalog();
+    const first = await catalog(root, root);
+    assert.equal(first.length, 1);
+    assert.equal(first[0]!.unavailable, undefined);
+    // New content invalidates the cached snapshot, so the next refresh must re-read.
+    session.appendMessage({ role: "user", content: "Second question", timestamp: 2 });
+    chmodSync(path, 0o000);
+    const unreadable = await catalog(root, root);
+    assert.equal(unreadable.length, 1, "an unreadable file must not remove the session");
+    assert.equal(unreadable[0]!.id, session.getSessionId());
+    assert.equal(unreadable[0]!.unavailable, true);
+    assert.equal(unreadable[0]!.userPromptCount, 1, "the last good summary is kept");
+    assert.equal(unreadable[0]!.firstMessage, "Kept");
+    chmodSync(path, 0o600);
+    const recovered = await catalog(root, root);
+    assert.equal(recovered.length, 1);
+    assert.equal(recovered[0]!.id, session.getSessionId());
+    assert.equal(recovered[0]!.unavailable, undefined, "a readable file clears the unavailable flag");
+    assert.equal(recovered[0]!.userPromptCount, 2, "a readable file refreshes the summary");
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("catalog never invents a summary for a file it could not read", { skip: rootCannotBeBlocked }, async () => {
+  const root = mkdtempSync(join(tmpdir(), "pi-catalog-never-read-"));
+  try {
+    const session = SessionManager.create(root, root);
+    session.appendMessage({ role: "user", content: "Never read", timestamp: 1 });
+    const path = session.getSessionFile()!;
+    chmodSync(path, 0o000);
+    const catalog = createSessionCatalog();
+    assert.deepEqual(await catalog(root, root), [], "a first failed read yields no row");
+    chmodSync(path, 0o600);
+    const recovered = await catalog(root, root);
+    assert.equal(recovered.length, 1);
+    assert.equal(recovered[0]!.unavailable, undefined);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
