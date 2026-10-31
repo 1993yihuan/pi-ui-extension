@@ -63,8 +63,10 @@ export type DefaultSidebarPanelOptions = {
   readonly getModel: () => string;
   readonly getThinkingLevel: () => string;
   readonly getToolViewMode: () => ToolViewMode | undefined;
+  readonly getThinkingCollapsed: () => boolean | undefined;
   readonly getToolUsage: () => ToolUsageSnapshot | undefined;
   readonly onSelectToolViewMode: (mode: ToolViewMode) => void;
+  readonly onToggleThinkingCollapsed: () => void;
   readonly loadSessions: () => Promise<readonly SessionListItem[]>;
   readonly onSelectSession: (session: SessionListItem) => void;
   readonly onRenameSession: (session: SessionListItem) => void;
@@ -160,8 +162,10 @@ export function createDefaultSidebarPanels(
         tui,
         getDesiredWidth,
         getMode: options.getToolViewMode,
+        getThinkingCollapsed: options.getThinkingCollapsed,
         getUsage: options.getToolUsage,
         onSelect: options.onSelectToolViewMode,
+        onToggleThinking: options.onToggleThinkingCollapsed,
         showBottomBorder: false,
       });
       cacheRender?.(panel);

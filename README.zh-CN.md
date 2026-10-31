@@ -111,6 +111,8 @@ Compact 的 Thinking 默认折叠。点击标题即可展开或收起，思考�
 
 耗时只计算思考阶段，不包含整条回复的其他用时。不足一分钟保留一位小数，更长的用时采用 `1m05s` 形式。恢复历史会话等无法可靠计时的情况下，标题省略耗时。尚无正文时也可显示进行中标题。Hidden 始终隐藏正文。
 
+**Thinking 折叠（设置项）：** 模式选择器下方的 `Thinking` 一行控制 Compact 是否默认折叠。默认值为 `collapsed`，即上表行为；改为 `expanded` 后所有 Thinking 正文直接显示、无需点击，单独点击某个标题仍可只折叠该段。该行仅在 Compact 显示：Normal 本就显示完整正文，Hidden 按设计隐藏正文。也可用 `/tool-view thinking on|off` 设置，单独输入 `/tool-view thinking` 则切换。取值与模式一起保存在扩展的显示设置文件（`~/.pi/agent/tool-view-mode.json` 的 `thinkingCollapsed`），重启后保持；旧文件没有该键时仍按折叠处理。
+
 **Thinking 显示设置：** 请开启 Pi 原生 Thinking 可见性（`hideThinkingBlock: false`），以显示 Compact / Hidden 的 Thinking 标题。Pi 自带的隐藏开关（`Ctrl+T`）保持原生作用。
 
 ### Tool / MCP 调用统计

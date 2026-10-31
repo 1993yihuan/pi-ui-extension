@@ -165,3 +165,61 @@ test("keeps the mode selector visible alongside Tool and MCP usage", () => {
   assert.match(output, /MCP/);
   assert.match(output, /context-mode/);
 });
+
+test("the Thinking toggle row renders in Compact, hides elsewhere, and reports a click", async () => {
+  const ESC = String.fromCharCode(27);
+  const sgr = (x: number, y: number, press: boolean) => `${ESC}[<0;${x};${y}${press ? "M" : "m"}`;
+  const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+  let mode: "normal" | "compact" | "hidden" = "compact";
+  let toggles = 0;
+  let listener: ((data: string) => void) | undefined;
+  const tui = {
+    addInputListener(next: (data: string) => void) { listener = next; return () => {}; },
+    requestRender() {},
+    currentLayout: undefined as any,
+  } as any;
+  const theme = { fg: (_color: string, text: string) => text } as any;
+  const panel = new ToolViewPanel(theme, {
+    tui,
+    getDesiredWidth: () => 40,
+    getMode: () => mode,
+    getThinkingCollapsed: () => true,
+    getUsage: () => ({ counts: [] }),
+    onSelect() {},
+    onToggleThinking() { toggles++; },
+  });
+
+  const compact = panel.render(40);
+  assert.equal(compact.filter((line) => line.includes("Thinking")).length, 1, "one toggle row");
+  assert.match(compact.join(" "), /Thinking\s+collapsed/, "the row reports the current setting");
+
+  for (const other of ["normal", "hidden"] as const) {
+    mode = other;
+    assert.equal(panel.render(40).filter((line) => line.includes("Thinking")).length, 0,
+      `no Thinking toggle in ${other} mode, where the setting has no effect`);
+  }
+  mode = "compact";
+
+  tui.currentLayout = {
+    root: {
+      component: panel,
+      rect: { x: 10, y: 5, width: 40, height: compact.length },
+      clip: { x: 10, y: 5, width: 40, height: compact.length },
+      children: [],
+    },
+  };
+  // The toggle sits on the row below the mode selector (index 2, one-based row 3).
+  listener?.(sgr(13, 8, true));
+  await flush();
+  listener?.(sgr(13, 8, false));
+  await flush();
+  assert.equal(toggles, 1, "press and release on the row toggles the setting");
+
+  listener?.(sgr(13, 8, true));
+  await flush();
+  listener?.(sgr(13, 40, false));
+  await flush();
+  assert.equal(toggles, 1, "a release outside the row must not toggle");
+
+  panel.dispose();
+});

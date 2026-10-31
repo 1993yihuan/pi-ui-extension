@@ -111,6 +111,8 @@ Expanded text starts directly below the title and wraps to the terminal width. G
 
 Elapsed time measures the Thinking phase, not the whole response. Values below a minute keep one decimal; longer values use `1m05s`. When timing is unavailable, such as in restored history, the title omits it. A live title can appear before the first text arrives. Hidden always keeps the body hidden.
 
+**Thinking collapsed (setting):** the `Thinking` row under the mode selector controls whether a Compact run starts folded. It is `collapsed` by default, which is the behavior above; set it to `expanded` and every Thinking body is revealed without a click, while a title click still folds that one run. The row only appears in Compact, because Normal already shows the full text and Hidden keeps the body hidden by design. `/tool-view thinking on|off` does the same from the keyboard, and a bare `/tool-view thinking` toggles it. The value lives beside the mode in the extension's display settings file (`~/.pi/agent/tool-view-mode.json`, `thinkingCollapsed`), so it survives a restart; an older file without the key keeps collapsing.
+
 **Thinking visibility:** Enable Pi's native Thinking visibility (`hideThinkingBlock: false`) for Compact/Hidden Thinking titles to appear. Pi's own hide control (`Ctrl+T`) keeps its native behavior.
 
 ### Tool / MCP usage statistics
