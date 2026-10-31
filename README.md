@@ -58,8 +58,8 @@ Click `⊗` in the SESSIONS title bar to preview bulk cleanup. The preview shows
 The bottom of SESSIONS provides four resource shortcuts:
 
 - **AGENTS.md** — browse instruction resources and read the full selected file.
-- **Skills** — browse available skills and their descriptions.
-- **Extensions** — view installed or loaded extensions.
+- **SKILLS** — browse available skills and their descriptions.
+- **EXT** — view installed or loaded extensions.
 - **MCP** — view server configuration and available connection status.
 
 The **MCP Status Center** is read-only. **Configured, registered, or loaded does not mean connected**; some servers have no confirmed connection status available. Sensitive credentials are not displayed. Use Pi's `/mcp` manager for connection diagnostics, sign-in, and configuration changes.
