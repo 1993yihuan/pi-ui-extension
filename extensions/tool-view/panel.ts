@@ -6,7 +6,7 @@ import {
   type TUI,
   type TuiInputListener,
 } from "@earendil-works/pi-tui";
-import { panelBottom, panelContent, panelTop } from "../sidebar/panel.ts";
+import { panelBottom, panelContent, panelRow, panelTop } from "../sidebar/panel.ts";
 import { installPriorityInputListener, isSidebarInputBlocked, parseSgrMouseEvent } from "../sidebar/resize.ts";
 import { TOOL_VIEW_MODES, type ToolViewMode } from "./types.ts";
 import type { ToolUsageCount, ToolUsageKind, ToolUsageSnapshot } from "./usage.ts";
@@ -15,8 +15,12 @@ export type ToolViewPanelOptions = {
   readonly tui: TUI;
   readonly getDesiredWidth: () => number;
   readonly getMode: () => ToolViewMode | undefined;
+  /** The "Thinking collapsed" setting; undefined follows the default (on). */
+  readonly getThinkingCollapsed?: () => boolean | undefined;
   readonly getUsage: () => ToolUsageSnapshot | undefined;
   readonly onSelect: (mode: ToolViewMode) => void;
+  /** Wired by the sidebar; without it the toggle row is not rendered. */
+  readonly onToggleThinking?: () => void;
   readonly showBottomBorder?: boolean;
 };
 
@@ -113,6 +117,7 @@ export function groupUsageCounts(counts: readonly ToolUsageCount[]): Readonly<Re
 /** Clickable single-row selector for tool transcript rendering mode. */
 export class ToolViewPanel implements Component {
   private pressedMode: ToolViewMode | undefined;
+  private pressedThinking = false;
   private disposed = false;
   private readonly uninstallInput: () => void;
 
@@ -145,6 +150,21 @@ export class ToolViewPanel implements Component {
     return TOOL_VIEW_MODES[index];
   }
 
+  /** The Thinking toggle sits on row 2, and only in Compact mode where it applies. */
+  private thinkingRowVisible(): boolean {
+    return this.options.onToggleThinking !== undefined && this.options.getMode() === "compact";
+  }
+
+  private thinkingAt(x: number, y: number): boolean {
+    if (!this.thinkingRowVisible()) return false;
+    const box = this.getLayoutBox();
+    if (!box || !contains(box.clip, x, y) || !contains(box.rect, x, y)) return false;
+    if (y - box.rect.y !== 2) return false;
+    const contentWidth = Math.max(1, Math.min(box.rect.width, this.options.getDesiredWidth()) - 4);
+    const contentColumn = x - box.rect.x - 2;
+    return contentColumn >= 0 && contentColumn < contentWidth;
+  }
+
   private isInsidePanel(x: number, y: number): boolean {
     const box = this.getLayoutBox();
     return Boolean(box && contains(box.clip, x, y) && contains(box.rect, x, y));
@@ -165,15 +185,29 @@ export class ToolViewPanel implements Component {
     const isLeft = (mouse.button & 3) === 0;
 
     if (mouse.release) {
-      const pressed = this.pressedMode;
-      if (!pressed) return undefined;
+      const pressedMode = this.pressedMode;
+      const pressedThinking = this.pressedThinking;
+      if (!pressedMode && !pressedThinking) return undefined;
       this.pressedMode = undefined;
-      const released = this.modeAt(x, y);
-      if (released === pressed) {
+      this.pressedThinking = false;
+      if (pressedMode) {
+        const released = this.modeAt(x, y);
+        if (released === pressedMode) {
+          queueMicrotask(() => {
+            const currentMode = this.options.getMode();
+            if (!this.disposed && !isSidebarInputBlocked(this.options.tui) && currentMode !== undefined && currentMode !== released) {
+              this.options.onSelect(released);
+            }
+          });
+        }
+      } else if (!this.thinkingAt(x, y)) {
+        // Released outside the toggle: cancel without touching the setting.
+        this.options.tui.requestRender();
+        return { consume: true };
+      } else {
         queueMicrotask(() => {
-          const currentMode = this.options.getMode();
-          if (!this.disposed && !isSidebarInputBlocked(this.options.tui) && currentMode !== undefined && currentMode !== released) {
-            this.options.onSelect(released);
+          if (!this.disposed && !isSidebarInputBlocked(this.options.tui) && this.thinkingRowVisible()) {
+            this.options.onToggleThinking?.();
           }
         });
       }
@@ -182,7 +216,13 @@ export class ToolViewPanel implements Component {
     }
 
     if (mouse.motion) {
-      if (!this.pressedMode) return undefined;
+      if (!this.pressedMode && !this.pressedThinking) return undefined;
+      if (this.pressedThinking) {
+        if (this.thinkingAt(x, y)) return { consume: true };
+        this.pressedThinking = false;
+        this.options.tui.requestRender();
+        return { consume: true };
+      }
       if (this.modeAt(x, y) !== this.pressedMode) {
         this.pressedMode = undefined;
         this.options.tui.requestRender();
@@ -195,8 +235,13 @@ export class ToolViewPanel implements Component {
 
     if (this.options.getMode() === undefined) return { consume: true };
     this.pressedMode = this.modeAt(x, y);
-    if (this.pressedMode) this.options.tui.requestRender();
-    return this.pressedMode ? { consume: true } : undefined;
+    if (this.pressedMode) {
+      this.options.tui.requestRender();
+      return { consume: true };
+    }
+    this.pressedThinking = this.thinkingAt(x, y);
+    if (this.pressedThinking) this.options.tui.requestRender();
+    return this.pressedThinking ? { consume: true } : undefined;
   }
 
   render(width: number): string[] {
@@ -257,9 +302,20 @@ export class ToolViewPanel implements Component {
     appendGroup("nested", nested);
     appendGroup("mcp", grouped.mcp);
 
+    const thinkingCollapsed = this.options.getThinkingCollapsed?.() ?? true;
+    const thinkingRow = this.thinkingRowVisible()
+      ? [panelRow(
+          this.theme,
+          "Thinking",
+          thinkingCollapsed ? "collapsed" : "expanded",
+          this.pressedThinking ? "warning" : thinkingCollapsed ? "success" : "accent",
+          contentWidth,
+        )]
+      : [];
     const lines = [
       panelTop(this.theme, "VIEW", renderWidth),
       panelContent(this.theme, body, "dim", contentWidth),
+      ...thinkingRow,
       flushSeparator(this.theme, renderWidth),
       ...usageRows,
     ];
@@ -273,6 +329,7 @@ export class ToolViewPanel implements Component {
     if (this.disposed) return;
     this.disposed = true;
     this.pressedMode = undefined;
+    this.pressedThinking = false;
     this.uninstallInput();
   }
 }

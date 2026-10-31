@@ -15,11 +15,11 @@ test("sidebar reads each owned panel once per width per frame without retaining 
   };
   const controller = installSidebar(tui, { fg: (_key: string, text: string) => text, bold: (text: string) => text } as any, createDefaultSidebarPanels({
     getContextUsage: () => { ctxReads++; return undefined; }, getModel: () => model, getThinkingLevel: () => "off",
-    getToolViewMode: () => "compact", getToolUsage: () => {
+    getToolViewMode: () => "compact", getThinkingCollapsed: () => true, getToolUsage: () => {
       usageReads++;
       return { counts: Array.from({ length: count }, (_, i) => ({ name: `tool_${i}`, kind: "tool", exchange: 1, session: 1 })) };
     },
-    onSelectToolViewMode() {}, loadSessions: async () => [], onSelectSession() {}, onRenameSession() {}, onDeleteSession() {}, onDeleteOthers() {}, onOpenResources() {},
+    onSelectToolViewMode() {}, onToggleThinkingCollapsed() {}, loadSessions: async () => [], onSelectSession() {}, onRenameSession() {}, onDeleteSession() {}, onDeleteOthers() {}, onOpenResources() {},
   }));
   try {
     // Settle adaptive scrollbar geometry first.

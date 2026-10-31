@@ -250,7 +250,7 @@ test("uses one official renderer resolver without replacing or executing Pi tool
     assert.match(plain(transcript.render(100)), /NATIVE CALL/);
 
     await controller.setMode("compact", ctx);
-    assert.deepEqual(JSON.parse(await readFile(join(directory, "mode.json"), "utf8")), { mode: "compact" });
+    assert.deepEqual(JSON.parse(await readFile(join(directory, "mode.json"), "utf8")), { mode: "compact", thinkingCollapsed: true });
     assert.equal(expandedChanges.length, 16, "every mode change should refresh historical transcript rows");
     assert.equal(commands.has("tool-view"), true);
     assert.equal(counters.registered, 0);

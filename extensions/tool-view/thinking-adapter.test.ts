@@ -68,7 +68,12 @@ function clickLine(
 const OWNED_TOOLS = new Set(["codemode", "bash", "read"]);
 const needsToolGap = (toolName: string) => OWNED_TOOLS.has(toolName);
 
-function harness(t: TestContext, providedStatus?: StatusFn, toolGap?: (toolName: string) => boolean) {
+function harness(
+  t: TestContext,
+  providedStatus?: StatusFn,
+  toolGap?: (toolName: string) => boolean,
+  collapsedByDefault?: () => boolean,
+) {
   initTheme("dark");
   const prototype = AssistantMessageComponent.prototype as unknown as Record<symbol | "updateContent", any>;
   const initial = prototype.updateContent;
@@ -77,7 +82,7 @@ function harness(t: TestContext, providedStatus?: StatusFn, toolGap?: (toolName:
     ((_text, streaming) => state.status ?? { phase: streaming ? "streaming" : "complete" });
   const transformer: MarkdownTransformer = (text, context) => transformThinkingText(text, context, state.mode, status);
   const installed = installCompactThinkingAdapter(
-    () => state.mode, transformer, { status, needsToolGap: toolGap },
+    () => state.mode, transformer, { status, needsToolGap: toolGap, collapsedByDefault },
   );
   t.after(() => {
     prototype.updateContent = initial;
@@ -105,6 +110,37 @@ function harness(t: TestContext, providedStatus?: StatusFn, toolGap?: (toolName:
   };
   return { state, status, transformer, installed, make, setMode, prototype, initial };
 }
+
+test("Thinking collapsing off reveals the body without a click and still obeys a title click", (t) => {
+  let collapsed = false;
+  const { make } = harness(t, undefined, needsToolGap, () => collapsed);
+  const text = "The body is readable because collapsing is off.";
+  const component = make([{ type: "thinking", thinking: text }], false);
+
+  const revealed = lines(component);
+  assert.match(revealed.join("\n"), /readable because collapsing is off/,
+    "a run starts expanded when the setting is off");
+  assert.match(revealed[1] ?? "", /Thought/, "the title row still renders above the body");
+  const body = revealed.slice(2).filter((line) => line.trim());
+  assert.ok(body.length > 0 && body.every((line) => BAR_ROW.test(line)),
+    "the revealed body keeps its bar column");
+
+  // A click on that title collapses only that run, even with the setting off.
+  const toggled = clickLine(component, /Thought/);
+  assert.equal(toggled?.handled, true);
+  const folded = lines(component);
+  assert.equal(folded.length, 2, "a collapsed run keeps its spacer and title");
+  assert.doesNotMatch(folded.join("\n"), /readable because collapsing is off/);
+
+  // Turning the setting back on keeps the user's own choice for that run.
+  collapsed = true;
+  component.updateContent({
+    role: "assistant", stopReason: "stop",
+    content: [{ type: "thinking", thinking: text }, { type: "text", text: "Done." }],
+  } as any, false);
+  assert.doesNotMatch(lines(component).join("\n"), /readable because collapsing is off/,
+    "a run the user folded stays folded after the setting flips back");
+});
 
 test("Compact Thinking streams a live title, expands to the full body, and settles on Thought", (t) => {
   assert.equal(typeof AssistantMessageComponent.prototype.setHiddenThinkingLabel, "function",

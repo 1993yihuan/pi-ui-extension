@@ -57,7 +57,7 @@ test("applies a mode change from another context wrapper in the active session",
     await controller.setMode("normal", panelCtx);
 
     assert.equal(controller.getMode(), "normal");
-    assert.deepEqual(JSON.parse(await readFile(modeFile, "utf8")), { mode: "normal" });
+    assert.deepEqual(JSON.parse(await readFile(modeFile, "utf8")), { mode: "normal", thinkingCollapsed: true });
     assert.equal(statuses.at(-1), "Tool View: Normal");
     assert.equal(notices.at(-1), "Tool View: Normal");
     assert.deepEqual(expandedValues.slice(-2), [true, false]);
@@ -123,7 +123,7 @@ test("the single Tool View mode controls Thinking, persists once, and refreshes 
     await commands.get("tool-view").handler("hidden", ctx);
     assert.match(transform("private thought"), /^Thought · \d\.\ds$/, "Hidden has no disclosure glyph");
     assert.equal(controller.getMode(), "hidden");
-    assert.deepEqual(JSON.parse(await readFile(modeFile, "utf8")), { mode: "hidden" });
+    assert.deepEqual(JSON.parse(await readFile(modeFile, "utf8")), { mode: "hidden", thinkingCollapsed: true });
     assert.equal(refreshed, 2, "one public refresh per mode change, including historical Thinking");
     assert.deepEqual(expanded, [true, false, true, false], "tool transcript refresh still occurs");
     assert.equal(commands.has("thinking-view"), false, "no separate Thinking command");
@@ -448,4 +448,72 @@ test("Compact Thinking supplies the tool gap only for a tool whose leading blank
   const untrimmed = expand("bash", ownTool("bash"));
   assert.equal(untrimmed[1].render(64)[0], "", "the tool's native leading blank returns");
   assert.equal(gapAfterBody(untrimmed), 1, "the tool's own blank row is the only gap");
+});
+
+test("Thinking collapsing is a setting: on by default, off persists, and the command flips it", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "tool-view-thinking-"));
+  const modeFile = join(directory, "mode.json");
+  const commands = new Map<string, { handler: (args: string, ctx: any) => unknown }>();
+  const handlers = new Map<string, Handler[]>();
+  let toolsExpanded = false;
+  const sessionManager = { getSessionId: () => "session-1" };
+  const pi = {
+    registerTool() { throw new Error("Tool View must not register tools"); },
+    registerToolRenderer() {},
+    registerMarkdownTransformer() {},
+    getSettings: () => ({}),
+    registerCommand(name: string, definition: { handler: (args: string, ctx: any) => unknown }) {
+      commands.set(name, definition);
+    },
+    registerShortcut() {},
+    getCommands: () => [],
+    on(event: string, handler: Handler) {
+      handlers.set(event, [...(handlers.get(event) ?? []), handler]);
+    },
+  } as any;
+  const ui = {
+    setStatus() {},
+    notify() {},
+    getToolsExpanded: () => toolsExpanded,
+    setToolsExpanded(value: boolean) { toolsExpanded = value; },
+    setHiddenThinkingLabel() {},
+  };
+  const ctx = { mode: "tui", ui, sessionManager } as any;
+
+  try {
+    const controller = await installToolViewController(pi, { modeFile });
+    for (const handler of handlers.get("session_start") ?? []) handler({}, ctx);
+
+    // Each install registers the command again, so keep this controller's own.
+    const command = commands.get("tool-view");
+    const seen: boolean[] = [];
+    const unsubscribe = controller.onThinkingCollapsedChange((collapsed) => seen.push(collapsed));
+    assert.equal(controller.getThinkingCollapsed(), true, "collapsing is the default");
+    assert.deepEqual(seen, [true], "a subscriber receives the current value immediately");
+
+    await controller.setThinkingCollapsed(false, ctx);
+    assert.equal(controller.getThinkingCollapsed(), false);
+    assert.deepEqual(seen, [true, false]);
+    assert.deepEqual(JSON.parse(await readFile(modeFile, "utf8")), { mode: "compact", thinkingCollapsed: false });
+
+    // The setting comes back after a restart, and an older file stays collapsed.
+    const restarted = await installToolViewController(pi, { modeFile });
+    assert.equal(restarted.getThinkingCollapsed(), false, "the setting survives a restart");
+    await writeFile(modeFile, JSON.stringify({ mode: "compact" }));
+    const legacy = await installToolViewController(pi, { modeFile });
+    assert.equal(legacy.getThinkingCollapsed(), true, "a file written before the setting keeps collapsing");
+
+    // /tool-view thinking on|off|toggle drives the same state.
+    assert.ok(command, "/tool-view must stay registered");
+    await command.handler("thinking off", ctx);
+    assert.equal(controller.getThinkingCollapsed(), false);
+    await command.handler("thinking on", ctx);
+    assert.equal(controller.getThinkingCollapsed(), true);
+    await command.handler("thinking", ctx);
+    assert.equal(controller.getThinkingCollapsed(), false, "a bare 'thinking' toggles");
+
+    unsubscribe();
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });

@@ -588,6 +588,10 @@ export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
     sidebar?.refresh();
   });
 
+  const unsubscribeThinkingCollapsed = toolView.onThinkingCollapsedChange(() => {
+    sidebar?.refresh();
+  });
+
   const refreshContextUi = () => {
     footer?.refresh();
     // CTX reads the activity snapshot during render, so refresh rather than
@@ -709,9 +713,13 @@ export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
           getModel: () => ctx.model?.id ?? "no-model",
           getThinkingLevel: () => pi.getThinkingLevel(),
           getToolViewMode: () => toolViewMode,
+          getThinkingCollapsed: () => toolView.getThinkingCollapsed(),
           getToolUsage: () => toolUsage?.getSnapshot(),
           onSelectToolViewMode: (mode): void => {
             void toolView.setMode(mode, ctx);
+          },
+          onToggleThinkingCollapsed: (): void => {
+            void toolView.setThinkingCollapsed(!toolView.getThinkingCollapsed(), ctx);
           },
           loadSessions: () => loadSessionRows(ctx),
           onSelectSession: (session): void => selectSession(ctx, session),
@@ -778,6 +786,7 @@ export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
   pi.on("session_shutdown", () => {
     activeLease.dispose();
     unsubscribeToolViewMode();
+    unsubscribeThinkingCollapsed();
     unsubscribeMcpStatus();
     liveMcpServers = [];
 

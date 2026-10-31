@@ -41,8 +41,13 @@ type RendererState = {
   compactInvalidate?: () => void;
 };
 
-interface StoredMode {
+interface StoredDisplay {
   mode: ToolViewMode;
+  /**
+   * The user's "Thinking collapsed" setting. Absent in files written before it
+   * existed, which keeps the old collapsed behavior.
+   */
+  thinkingCollapsed?: boolean;
 }
 
 interface CompactToolSpec {
@@ -207,6 +212,10 @@ export interface ToolViewController {
   getMode(): ToolViewMode;
   setMode(mode: ToolViewMode, ctx: ExtensionContext, notify?: boolean): Promise<void>;
   onModeChange(listener: (mode: ToolViewMode) => void): () => void;
+  /** Whether Compact Thinking runs start collapsed and expand on click. */
+  getThinkingCollapsed(): boolean;
+  setThinkingCollapsed(collapsed: boolean, ctx: ExtensionContext, notify?: boolean): Promise<void>;
+  onThinkingCollapsedChange(listener: (collapsed: boolean) => void): () => void;
 }
 
 export type ToolViewControllerOptions = {
@@ -218,7 +227,9 @@ export async function installToolViewController(
   options: ToolViewControllerOptions = {},
 ): Promise<ToolViewController> {
   const modeFile = options.modeFile ?? DEFAULT_MODE_FILE;
-  let mode = await loadMode();
+  const stored = await loadDisplay();
+  let mode = stored.mode;
+  let thinkingCollapsed = stored.thinkingCollapsed ?? true;
   // Set once the spacing guard is active; the Thinking gap depends on it.
   let compactSpacingActive = false;
   let skillRoots = new Set<string>();
@@ -226,6 +237,7 @@ export async function installToolViewController(
   let sessionGeneration = 0;
   let modeChangeQueue = Promise.resolve();
   const modeListeners = new Set<(mode: ToolViewMode) => void>();
+  const thinkingListeners = new Set<(collapsed: boolean) => void>();
   const thinkingTiming = new ThinkingTiming();
   // Undo the click adapter installed by this extension's own v1.2.8 when Pi's
   // /reload swaps in a fresh module instance. That is this plugin's version,
@@ -250,6 +262,7 @@ export async function installToolViewController(
   const hostBundle = await loadActivePiBundle();
   const thinkingOptions: CompactThinkingOptions = {
     status: thinkingStatus,
+    collapsedByDefault: () => thinkingCollapsed,
     // Pi's own tool row keeps its leading blank row unless the spacing guard
     // below trims it, so only then does an expanded body supply that row.
     needsToolGap: (toolName) => compactSpacingActive && ownsCompactTool(toolName),
@@ -297,17 +310,21 @@ export async function installToolViewController(
     return state.compactStartedAt;
   };
 
-  async function loadMode(): Promise<ToolViewMode> {
+  async function loadDisplay(): Promise<StoredDisplay> {
     try {
-      const stored = JSON.parse(await readFile(modeFile, "utf8")) as Partial<StoredMode>;
-      return typeof stored.mode === "string" && isToolViewMode(stored.mode) ? stored.mode : "compact";
+      const stored = JSON.parse(await readFile(modeFile, "utf8")) as Partial<StoredDisplay>;
+      return {
+        mode: typeof stored.mode === "string" && isToolViewMode(stored.mode) ? stored.mode : "compact",
+        // Anything but an explicit false keeps the documented default.
+        thinkingCollapsed: stored.thinkingCollapsed !== false,
+      };
     } catch {
-      return "compact";
+      return { mode: "compact", thinkingCollapsed: true };
     }
   }
 
-  function persistMode(nextMode: ToolViewMode): Promise<void> {
-    const stored: StoredMode = { mode: nextMode };
+  function persistDisplay(): Promise<void> {
+    const stored: StoredDisplay = { mode, thinkingCollapsed };
     return writeFileAtomic(modeFile, JSON.stringify(stored, null, 2) + "\n");
   }
 
@@ -338,7 +355,7 @@ export async function installToolViewController(
       if (mode !== "compact") stopAllTickers();
       let persistError: unknown;
       try {
-        await persistMode(mode);
+        await persistDisplay();
       } catch (error) {
         persistError = error;
       }
@@ -366,6 +383,39 @@ export async function installToolViewController(
   function cycleMode(ctx: ExtensionContext): Promise<void> {
     const index = MODE_ORDER.indexOf(mode);
     return setMode(MODE_ORDER[(index + 1) % MODE_ORDER.length]!, ctx);
+  }
+
+  /**
+   * The "Thinking collapsed" setting. Off leaves every Compact Thinking body
+   * visible until the user clicks that one run; on is the documented default.
+   */
+  async function setThinkingCollapsed(collapsed: boolean, ctx: ExtensionContext, notify = true): Promise<void> {
+    const generation = sessionGeneration;
+    const sessionId = ctx.sessionManager.getSessionId();
+    thinkingCollapsed = collapsed;
+    let persistError: unknown;
+    try {
+      await persistDisplay();
+    } catch (error) {
+      persistError = error;
+    }
+    // A reload or session swap invalidates this context while the write ran.
+    if (generation !== sessionGeneration || activeSessionId !== sessionId) return;
+    if (persistError) {
+      ctx.ui.notify(`Thinking display changed, but saving failed: ${errorMessage(persistError)}`, "warning");
+    }
+    for (const listener of thinkingListeners) listener(thinkingCollapsed);
+    if (ctx.mode === "tui") {
+      requestTranscriptRerender(ctx);
+      ctx.ui.setHiddenThinkingLabel();
+    }
+    if (notify) {
+      ctx.ui.notify(collapsed ? "Thinking: collapsed until clicked" : "Thinking: always expanded", "info");
+    }
+  }
+
+  function notifyThinkingChange(): void {
+    for (const listener of thinkingListeners) listener(thinkingCollapsed);
   }
 
   function updateSkillRootsFromPromptOptions(skills: Array<{ baseDir?: string; filePath?: string }> | undefined): void {
@@ -575,9 +625,9 @@ export async function installToolViewController(
   }
 
   pi.registerCommand(MODE_COMMAND, {
-    description: "Change Tool View mode: normal, compact, hidden, or status",
+    description: "Change Tool View mode (normal, compact, hidden), or toggle Thinking collapsing",
     getArgumentCompletions: (prefix) => {
-      const values = [...MODE_ORDER, "status"];
+      const values = [...MODE_ORDER, "status", "thinking", "thinking on", "thinking off"];
       const matches = values.filter((value) => value.startsWith(prefix.trim()));
       return matches.length > 0 ? matches.map((value) => ({ value, label: value })) : null;
     },
@@ -596,8 +646,12 @@ export async function installToolViewController(
         ctx.ui.notify(`Tool View: ${modeLabel(mode)}`, "info");
         return;
       }
+      if (requested === "thinking" || requested === "thinking on" || requested === "thinking off") {
+        await setThinkingCollapsed(requested === "thinking" ? !thinkingCollapsed : requested.endsWith("on"), ctx);
+        return;
+      }
       if (!isToolViewMode(requested)) {
-        ctx.ui.notify("Usage: /tool-view normal|compact|hidden|status", "warning");
+        ctx.ui.notify("Usage: /tool-view normal|compact|hidden|status|thinking [on|off]", "warning");
         return;
       }
       await setMode(requested, ctx);
@@ -635,6 +689,7 @@ export async function installToolViewController(
     );
     updateStatus(ctx);
     notifyModeChange();
+    notifyThinkingChange();
     warnNativeThinkingHidden(ctx);
   });
 
@@ -653,6 +708,13 @@ export async function installToolViewController(
       modeListeners.add(listener);
       listener(mode);
       return () => modeListeners.delete(listener);
+    },
+    getThinkingCollapsed: () => thinkingCollapsed,
+    setThinkingCollapsed,
+    onThinkingCollapsedChange(listener) {
+      thinkingListeners.add(listener);
+      listener(thinkingCollapsed);
+      return () => thinkingListeners.delete(listener);
     },
   };
 }

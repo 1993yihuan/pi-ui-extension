@@ -64,22 +64,34 @@ export interface CompactThinkingOptions {
    * tools; anything else keeps Pi's own gap. Defaults to false.
    */
   needsToolGap?: (toolName: string) => boolean;
+  /**
+   * The user's "Thinking collapsed" setting. On (the default) a Compact run
+   * starts as a title and expands on click; off reveals every body.
+   */
+  collapsedByDefault?: () => boolean;
 }
 
 /**
  * Per AssistantMessageComponent and Thinking run index. A WeakMap keeps
- * expansion out of the message content and lets discarded components go.
+ * expansion out of the message content and lets discarded components go. An
+ * entry exists only after the user clicked that run, so the setting stays the
+ * fallback for every run nobody touched.
  */
 const expansion = new WeakMap<AssistantMessageComponent, Map<number, boolean>>();
 
-function isExpanded(component: AssistantMessageComponent, index: number): boolean {
-  return expansion.get(component)?.get(index) ?? false;
+/** Default expansion state for a run the user has not clicked. */
+function startsExpanded(options: CompactThinkingOptions): boolean {
+  return options.collapsedByDefault?.() === false;
 }
 
-function toggleExpanded(component: AssistantMessageComponent, index: number): void {
+function isExpanded(component: AssistantMessageComponent, index: number, fallback: boolean): boolean {
+  return expansion.get(component)?.get(index) ?? fallback;
+}
+
+function toggleExpanded(component: AssistantMessageComponent, index: number, fallback: boolean): void {
   const runs = expansion.get(component) ?? new Map<number, boolean>();
   expansion.set(component, runs);
-  runs.set(index, !(runs.get(index) ?? false));
+  runs.set(index, !(runs.get(index) ?? fallback));
 }
 
 function isThinkingRegion(child: unknown): child is ThinkingRegion {
@@ -204,22 +216,23 @@ function decorateRegion(
     .filter((candidate) => candidate !== transformer);
   const body = mode === "compact" ? createBody(run.text, shape, others, streaming) : undefined;
   const nativeOnMouse = region.onMouse;
+  const fallback = startsExpanded(options);
   region.child = new ThinkingBlockView({
     header: (width) => renderThinkingHeader({
       status,
       colors,
       width,
       disclosure: mode === "compact",
-      expanded: isExpanded(component, index),
+      expanded: isExpanded(component, index, fallback),
     }),
     // Keep Pi's own message padding so the title, the quote bar and the
     // surrounding assistant text all start on the same column.
     outputPad: shape.paddingX ?? readOutputPad(component) ?? ASSUMED_OUTPUT_PAD,
     body,
     colors,
-    expanded: () => isExpanded(component, index),
+    expanded: () => isExpanded(component, index, fallback),
     toggleable: () => mode === "compact",
-    onToggle: () => toggleExpanded(component, index),
+    onToggle: () => toggleExpanded(component, index, fallback),
     trailingBlank: () => needsTrailingBlank(content, run.startIndex, stopReason, options),
   });
   // The view handles title clicks itself; everything else must stay a no-op so
@@ -274,19 +287,20 @@ function decoratePendingRun(
   const container = internals.contentContainer;
   if (typeof container?.addChild !== "function") return;
   const colors = defaultThinkingColors();
+  const fallback = startsExpanded(options);
   container.addChild(new ThinkingBlockView({
     header: (width) => renderThinkingHeader({
       status: { phase: "streaming" },
       colors,
       width,
       disclosure: mode === "compact",
-      expanded: isExpanded(component, index),
+      expanded: isExpanded(component, index, fallback),
     }),
     outputPad: readOutputPad(component) ?? ASSUMED_OUTPUT_PAD,
     colors,
-    expanded: () => isExpanded(component, index),
+    expanded: () => isExpanded(component, index, fallback),
     toggleable: () => mode === "compact",
-    onToggle: () => toggleExpanded(component, index),
+    onToggle: () => toggleExpanded(component, index, fallback),
   }));
 }
 

@@ -11,8 +11,9 @@ test("capturing overlays block sidebar clicks and drags and cancel pending gestu
   const actions: string[] = [];
   const panels = createDefaultSidebarPanels({
     getContextUsage: () => undefined, getModel: () => "model", getThinkingLevel: () => "off",
-    getToolViewMode: () => "compact", getToolUsage: () => undefined,
+    getToolViewMode: () => "compact", getThinkingCollapsed: () => true, getToolUsage: () => undefined,
     onSelectToolViewMode: () => actions.push("mode"),
+    onToggleThinkingCollapsed: () => actions.push("thinking"),
     loadSessions: async () => [{ id: "other", title: "Other", current: false, modified: new Date(), userPromptCount: 1 }],
     onSelectSession: () => actions.push("switch"), onRenameSession: () => actions.push("rename"),
     onDeleteSession: () => actions.push("delete"), onDeleteOthers: () => actions.push("cleanup"),
