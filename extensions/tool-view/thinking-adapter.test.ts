@@ -87,7 +87,13 @@ function harness(t: TestContext, providedStatus?: StatusFn, toolGap?: (toolName:
   const make = (
     content: unknown[],
     streaming: boolean,
-    options: { hideThinking?: boolean; transformers?: MarkdownTransformer[]; outputPad?: number } = {},
+    options: {
+      hideThinking?: boolean;
+      transformers?: MarkdownTransformer[];
+      outputPad?: number;
+      /** Pi 1.5 session entry identity, which the component carries as its own fields. */
+      history?: { messageId?: string; timestamp?: string };
+    } = {},
   ) => {
     const component = new AssistantMessageComponent(
       undefined,
@@ -97,6 +103,7 @@ function harness(t: TestContext, providedStatus?: StatusFn, toolGap?: (toolName:
       options.outputPad ?? 1,
       options.transformers ?? [transformer],
     );
+    Object.assign(component, options.history ?? {});
     component.updateContent({ role: "assistant", content, stopReason: "stop" } as any, streaming);
     return component;
   };
@@ -660,6 +667,41 @@ test("installation is gated by Pi's component shape, not by an exact version lis
   } finally {
     host.updateContent = update;
   }
+});
+
+test("the expanded Thinking body passes Pi 1.5 messageId and timestamp on to every transformer", (t) => {
+  const { make, transformer } = harness(t);
+  type Seen = { markdown: string; messageId?: string; timestamp?: string; isStreaming: boolean };
+  const seen: Seen[] = [];
+  const thirdParty: MarkdownTransformer = (markdown, context) => {
+    if (context.messageType === "assistant-thinking" && markdown.includes("forwarded body")) {
+      const history = context as { messageId?: string; timestamp?: string };
+      seen.push({ markdown, messageId: history.messageId, timestamp: history.timestamp, isStreaming: context.isStreaming });
+    }
+    return markdown;
+  };
+  const history = { messageId: "session-entry-0001", timestamp: "2025-08-01T10:20:30.000Z" };
+  const component = make([{ type: "thinking", thinking: "forwarded body text" }, { type: "text", text: "Done." }],
+    false, { transformers: [transformer, thirdParty], history });
+
+  assert.ok(lines(component).some((line) => /Thought$/.test(line)), "Compact collapses the run to its title");
+  assert.equal(clickLine(component, /Thought$/)?.handled, true, "the title opens the rebuilt body");
+  // The body Markdown renders on the next pass, which is when its transformers run.
+  assert.match(lines(component).join("\n"), /forwarded body text/, "the rebuilt body renders");
+  assert.ok(seen.length > 0, "the third-party transformer runs on the rebuilt Thinking Markdown");
+  for (const context of seen) {
+    assert.equal(context.messageId, history.messageId, "messageId survives the rebuild");
+    assert.equal(context.timestamp, history.timestamp, "timestamp survives the rebuild");
+    assert.equal(context.isStreaming, false, "the rebuilt body keeps the streaming flag");
+  }
+
+  // Pi 1.4 and live messages carry no entry identity: the keys stay absent and nothing throws.
+  const live = make([{ type: "thinking", thinking: "live body text" }], true,
+    { transformers: [transformer, thirdParty] });
+  assert.equal(plain(live).includes("live body text"), false, "a streaming run keeps only its title");
+  const expandedLive = lines(live).length;
+  assert.equal(clickLine(live, /Thinking$/)?.handled, true, "a live title still toggles");
+  assert.ok(lines(live).length > expandedLive, "the live body opens without a session entry");
 });
 
 test("an older click-guard generation is unwrapped on upgrade", (t) => {

@@ -38,6 +38,9 @@ type ComponentInternals = {
   contentContainer?: { children?: unknown[]; addChild?: (child: Component) => void };
   markdownTransformers?: readonly MarkdownTransformer[];
   isStreaming?: boolean;
+  /** Pi 1.5 session entry identity for this message; absent on Pi 1.4 and live messages. */
+  messageId?: string;
+  timestamp?: string;
   /** Pi's own Thinking visibility state; both must be honored, never bypassed. */
   hideThinkingBlock?: boolean;
   thinkingVisibilityOverrides?: Map<number, boolean>;
@@ -54,6 +57,8 @@ type MarkdownShape = {
   paddingX?: number;
 };
 type ThinkingBlockLike = { type: string; thinking?: string; text?: string; name?: string };
+/** Pi 1.5 adds the persisted session entry id and ISO timestamp to the context; Pi 1.4 has neither. */
+type MessageHistory = { messageId?: string; timestamp?: string };
 
 export interface CompactThinkingOptions {
   /** Explicit thinking_end phase plus measured time for one Thinking run. */
@@ -113,7 +118,7 @@ function readOutputPad(component: AssistantMessageComponent | ComponentInternals
 
 function applyTransformers(
   markdown: string,
-  context: MarkdownTransformContext,
+  context: MarkdownTransformContext & MessageHistory,
   transformers: readonly MarkdownTransformer[],
 ): string {
   let transformed = markdown;
@@ -137,12 +142,16 @@ function createBody(
   shape: MarkdownShape,
   transformers: readonly MarkdownTransformer[],
   streaming: boolean,
+  // Pi hands these to its own Markdown; a rebuilt body must pass them on unchanged.
+  history: MessageHistory,
 ): Markdown {
   const style = shape.defaultTextStyle ?? { color: shape.theme.quote, italic: true };
   const transform = transformers.length === 0
     ? undefined
     : (markdown: string, availableWidth: number) =>
-      applyTransformers(markdown, { messageType: "assistant-thinking", isStreaming: streaming, availableWidth }, transformers);
+      applyTransformers(markdown, {
+        messageType: "assistant-thinking", isStreaming: streaming, availableWidth, ...history,
+      }, transformers);
   // Padding is applied by ThinkingBlockView so the quote bar can sit inside it.
   return new Markdown(text, 0, 0, shape.theme, style, transform ? { transform } : undefined);
 }
@@ -200,9 +209,12 @@ function decorateRegion(
   const colors: ThinkingColors = markdownThinkingColors(shape.theme, shape.defaultTextStyle?.color);
   const status = options.status(run.text, streaming);
   // Everything except this extension's transformer still applies to the body.
-  const others = ((component as unknown as ComponentInternals).markdownTransformers ?? [])
+  const internals = component as unknown as ComponentInternals;
+  const others = (internals.markdownTransformers ?? [])
     .filter((candidate) => candidate !== transformer);
-  const body = mode === "compact" ? createBody(run.text, shape, others, streaming) : undefined;
+  const body = mode === "compact"
+    ? createBody(run.text, shape, others, streaming, { messageId: internals.messageId, timestamp: internals.timestamp })
+    : undefined;
   const nativeOnMouse = region.onMouse;
   region.child = new ThinkingBlockView({
     header: (width) => renderThinkingHeader({

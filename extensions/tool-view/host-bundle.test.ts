@@ -94,9 +94,19 @@ test("the bundled CLI Thinking title expands despite separate TUI class identiti
   const status = () => ({ phase: "complete" as const });
   const transformer = (markdown: string, context: any) =>
     transformThinkingText(markdown, context, "compact", status);
+  // A third-party transformer must receive the same session entry identity Pi gives its own Markdown.
+  const history = { messageId: "bundled-entry-0001", timestamp: "2025-08-01T10:20:30.000Z" };
+  const seen: Array<Record<string, unknown>> = [];
+  const thirdParty = (markdown: string, context: any) => {
+    if (context.messageType === "assistant-thinking" && markdown.includes("bundled thinking body")) {
+      seen.push({ messageId: context.messageId, timestamp: context.timestamp });
+    }
+    return markdown;
+  };
   const message = new bundle.AssistantMessageComponent(
-    undefined, false, getMarkdownTheme(), "Thinking...", 1, [transformer],
+    undefined, false, getMarkdownTheme(), "Thinking...", 1, [transformer, thirdParty],
   );
+  Object.assign(message, history);
   assert.equal(installCompactThinkingAdapter(
     () => "compact", transformer, { status }, prototype,
   ), true);
@@ -116,6 +126,9 @@ test("the bundled CLI Thinking title expands despite separate TUI class identiti
   const after = message.render(80).map(stripTerminalSequences).join("\n");
   assert.match(after, /− Thought/);
   assert.match(after, /bundled thinking body/);
+  assert.ok(seen.length > 0, "the rebuilt body on the host class reaches the third-party transformer");
+  assert.ok(seen.every((entry) => entry.messageId === history.messageId && entry.timestamp === history.timestamp),
+    "the host class rebuilt body keeps the session entry id and timestamp");
   assert.equal(AssistantMessageComponent.prototype.updateContent === original, false,
     "the SDK component has not been confused with the host bundle");
 });
