@@ -7,7 +7,7 @@ This document contains maintainer-level instructions for `pi-ui-extension`. User
 ## Prerequisites
 
 - Node.js **>= 22.19.0** and npm. `@types/node` stays on the Node 22 series (the same baseline as the Pi SDK's own development types) to prevent type checking from drifting to a newer major API surface; it does not pin the exact patch level, so CI still verifies the declared minimum 22.19.0 itself. Dependabot ignores major bumps of that package.
-- Pi Coding Agent with `registerToolRenderer()`, **>= 1.4.0**. Development and `npm ci` use Pi SDK **1.4.0**; CI also verifies **1.5.0**. Pi 1.2.0 and 1.3.0 are no longer supported.
+- Pi Coding Agent with `registerToolRenderer()`, **>= 1.4.0**. The pinned development SDK and `npm ci` use Pi **1.5.0**; CI verifies both **1.4.0** and **1.5.0**. Development and `npm ci` never determine what users must install: the declared peer minimum stays where the matrix starts. Pi 1.2.0 and 1.3.0 are no longer supported.
 - Pi fullscreen mode for the sidebar. The standard shell command may resolve to a Bun-global or npm-global Pi installation.
 
 ## Checkout and test
@@ -86,9 +86,9 @@ The [CI workflow](../.github/workflows/ci.yml) validates both Node.js versions a
 | 22.19.0 | 1.4.0, 1.5.0 |
 | 24 | 1.4.0, 1.5.0 |
 
-The matrix, the release gate, and `package.json` must agree: `scripts/ci.mjs` holds both lists, and its tests fail if the workflow, the declared `engines.node`, the pinned development SDK, or the declared peer minimum drifts from them. The peer minimum and the `npm ci` pin are always the lowest tested Pi version, so adding a newer axis never raises what users must install. `scripts/check-docs.mjs` additionally requires both root READMEs to state that Node minimum, and rejects any document whose explicit Node minimum differs from `engines.node`.
+The matrix, the release gate, and `package.json` must agree: `scripts/ci.mjs` holds both lists, and its tests fail if the workflow, the declared `engines.node`, the pinned development SDK, or the declared peer minimum drifts from them. The declared peer minimum is always the lowest tested Pi version, so adding a newer axis never raises what users must install. The two directly developed Pi packages (`pi-coding-agent` and `pi-tui`) are pinned together to one tested axis, currently `1.5.0`; pinning only one of them installs two TUI families in the development tree. `scripts/check-docs.mjs` additionally requires both root READMEs to state that Node minimum, and rejects any document whose explicit Node minimum differs from `engines.node`.
 
-`npm ci` installs the pinned Pi SDK; every axis then runs `node scripts/ci.mjs install-sdk <version>`, which switches the whole family with `--no-save --no-package-lock` so the manifest and lockfile stay on the minimum. `node scripts/ci.mjs verify-sdk <version>` fails the job when any installed `@earendil-works/*` package differs from the axis, when part of the family is missing, or when the installed CLI ships no `dist/bundle/cli.js`. No job can therefore look like 1.5 while loading 1.4 classes.
+`npm ci` installs the pinned development SDK; every axis then runs `node scripts/ci.mjs install-sdk <version>`, which switches the whole family with `--no-save --no-package-lock` so the manifest and lockfile stay on the development pin. `node scripts/ci.mjs verify-sdk <version>` fails the job when any installed `@earendil-works/*` package differs from the axis, when part of the family is missing, when a second copy is nested inside another Pi package, when the host CLI resolves a TUI other than the root one, or when the installed CLI ships no `dist/bundle/cli.js`. No job can therefore look like 1.5 while loading 1.4 classes. Sibling packages such as `pi-schema` are only checked when the axis installs them.
 
 Changes limited to root README files, `LICENSE`, and Markdown/images under `docs/` instead run a lightweight job without installing dependencies. It checks Markdown UTF-8, final newlines, conflict markers, existing local link targets, and npm package contents. External links and section anchors are not fetched or validated. Missing or unreadable Git diffs fall back to the full matrix.
 
@@ -134,7 +134,7 @@ npm run check
 npm pack --dry-run
 ```
 
-Review the diff, commit only intended files, push to `main`, and wait for both CI checks (Node.js 22.19.0 and 24). Then create the matching annotated tag at the tested commit and push it:
+Review the diff, commit only intended files, push to `main`, and wait for the complete matrix on that commit (all four Node.js/Pi checks plus `CI result`). Then create the matching annotated tag at the tested commit and push it:
 
 ```bash
 git tag -a vX.Y.Z -m "vX.Y.Z"
