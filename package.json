@@ -1,6 +1,6 @@
 {
   "name": "pi-ui-extension",
-  "version": "1.10.2",
+  "version": "1.10.3",
   "type": "module",
   "description": "Pi terminal UI extension with session management, context inspection, Tool/MCP usage tracking, sidebar panels, and a compact footer",
   "keywords": [
@@ -39,8 +39,8 @@
     }
   },
   "devDependencies": {
-    "@earendil-works/pi-coding-agent": "1.4.0",
-    "@earendil-works/pi-tui": "1.4.0",
+    "@earendil-works/pi-coding-agent": "1.5.0",
+    "@earendil-works/pi-tui": "1.5.0",
     "@types/node": "^22.19.19",
     "tsx": "^4.20.6",
     "typescript": "^7.0.2"
