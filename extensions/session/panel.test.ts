@@ -118,15 +118,15 @@ test("renders and opens the MCP resource button", async () => {
 
 test("resource button clicks match every rendered cell at uneven and narrow widths", async () => {
   const cases = [
-    { width: 26, segments: ["AGENTS", "Skills", "Exten", " MCP "] },
-    { width: 25, segments: ["AGENTS", "Skill", "Exten", " MCP "] },
-    { width: 27, segments: ["AGENTS", "Skills", "Extens", " MCP "] },
-    { width: 24, segments: ["AGENT", "Skill", "Exten", " MCP "] },
-    { width: 28, segments: ["AGENTS", "Skills", "Extens", " MCP  "] },
+    { width: 26, segments: ["AGENTS", "SKILLS", " EXT ", " MCP "] },
+    { width: 25, segments: ["AGENTS", "SKILL", " EXT ", " MCP "] },
+    { width: 27, segments: ["AGENTS", "SKILLS", " EXT  ", " MCP "] },
+    { width: 24, segments: ["AGENT", "SKILL", " EXT ", " MCP "] },
+    { width: 28, segments: ["AGENTS", "SKILLS", " EXT  ", " MCP  "] },
     { width: 7, segments: ["A", "S", "E", ""] },
     { width: 8, segments: ["A", "S", "E", "M"] },
-    { width: 26, desiredWidth: 40, segments: ["AGENTS", "Skills", "Exten", " MCP "] },
-    { width: 40, desiredWidth: 26, segments: ["AGENTS", "Skills", "Exten", " MCP "] },
+    { width: 26, desiredWidth: 40, segments: ["AGENTS", "SKILLS", " EXT ", " MCP "] },
+    { width: 40, desiredWidth: 26, segments: ["AGENTS", "SKILLS", " EXT ", " MCP "] },
   ];
   const ids = ["agents", "skills", "extensions", "mcp"];
   for (const { width, desiredWidth = width, segments } of cases) {
