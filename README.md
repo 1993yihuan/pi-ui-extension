@@ -156,7 +156,7 @@ Project-local installation requires Pi to trust the project. Pinned versions do 
 
 If you must stay on an older Pi, use `pi install` with the package source `npm:pi-ui-extension@1.9.12` (Pi 1.3.x) or `npm:pi-ui-extension@1.9.2` (Pi 1.2.x), or pin the matching Git tag; preserve the original global/project scope. Pinned versions do not upgrade automatically. A successful installation alone does not establish host compatibility.
 
-CI verifies Pi SDK **1.4.0** on Node.js **22.19.0 and 24**. The declared `>=1.4.0` range also permits later versions, but they are not individually verified by this matrix. This release adds no session/configuration format migration.
+CI verifies Pi SDK **1.4.0 and 1.5.0** on Node.js **22.19.0 and 24**. The declared `>=1.4.0` range also permits later versions, but they are not individually verified by this matrix. This release adds no session/configuration format migration.
 
 ## Common questions
 

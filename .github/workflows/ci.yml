@@ -44,18 +44,17 @@ jobs:
       - run: npm run check:docs && npm run check:package
 
   check:
-    name: check (${{ matrix.node-version }})
+    name: check (${{ matrix.node-version }}, Pi ${{ matrix.pi-version }})
     needs: changes
     if: needs.changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    # One list for the whole SDK family: install and verification cannot drift apart.
-    env:
-      PI_SDK_PACKAGES: pi-coding-agent pi-tui pi-agent-core pi-ai pi-codemode pi-mcp pi-telemetry
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
         node-version: ['22.19.0', '24']
+        # The minimum supported Pi and the maintained newer one; scripts/ci.mjs owns both lists.
+        pi-version: ['1.4.0', '1.5.0']
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -71,10 +70,13 @@ jobs:
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
 
-      # npm ci installs the single supported SDK; the whole Pi family must match that pin.
+      # npm ci installs the peer minimum; another axis switches the whole Pi family to its version.
+      - name: Install Pi ${{ matrix.pi-version }} SDK
+        run: node scripts/ci.mjs install-sdk ${{ matrix.pi-version }}
+
+      # Fails when an axis mixes Pi versions, misses part of the family, or has no host bundle.
       - name: Verify Pi SDK versions
-        run: |
-          node -e 'const pinned = require("./package.json").devDependencies["@earendil-works/pi-coding-agent"]; for (const name of process.env.PI_SDK_PACKAGES.split(" ")) { const key = "@earendil-works/" + name; const actual = require("./node_modules/" + key + "/package.json").version; if (actual !== pinned) throw new Error(key + ": expected " + pinned + ", got " + actual); }'
+        run: node scripts/ci.mjs verify-sdk ${{ matrix.pi-version }}
 
       - name: Validate
         run: npm run check

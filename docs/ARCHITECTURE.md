@@ -138,6 +138,6 @@ MCP status UI never displays commands, raw endpoint URLs, headers, tokens, envir
 
 ## Dependency and release considerations
 
-The Pi coding-agent and TUI packages are peer dependencies to avoid bundling duplicate host instances. The code still protects against the real CLI's separately bundled UI runtime via explicit host shape checks. Pi **1.4.0** is the minimum supported version; CI tests Node 22.19.0/24 against Pi SDK 1.4.0.
+The Pi coding-agent and TUI packages are peer dependencies to avoid bundling duplicate host instances. The code still protects against the real CLI's separately bundled UI runtime via explicit host shape checks. Pi **1.4.0** is the minimum supported version; CI tests Node 22.19.0/24 against Pi SDK 1.4.0 and 1.5.0.
 
 Published npm tarballs contain runtime TypeScript sources but not `*.test.ts`. The full test suite and release workflow are described in [Development](DEVELOPMENT.md); there is no need to ship these architecture notes in the npm tarball when the main README links to the GitHub copies.
