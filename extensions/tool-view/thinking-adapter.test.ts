@@ -172,6 +172,32 @@ test("Compact Thinking streams a live title, expands to the full body, and settl
   assert.doesNotMatch(collapsed.join("\n"), /plugin version/);
 });
 
+test("Focus opens each Thinking run by default but honors per-run folds during updates", (t) => {
+  const { make, setMode } = harness(t);
+  setMode("focus");
+  const component = make([{ type: "thinking", thinking: "FOCUS_FULL_THOUGHT" }], false);
+  assert.match(lines(component)[1]!, /− Thought/);
+  assert.match(plain(component), /FOCUS_FULL_THOUGHT/);
+
+  clickLine(component, /Thought/);
+  assert.match(lines(component)[1]!, /\+ Thought/);
+  assert.doesNotMatch(plain(component), /FOCUS_FULL_THOUGHT/);
+
+  component.updateContent({
+    role: "assistant", stopReason: "stop",
+    content: [{ type: "thinking", thinking: "FOCUS_FULL_THOUGHT updated" }],
+  } as any, true);
+  assert.doesNotMatch(plain(component), /FOCUS_FULL_THOUGHT/, "streaming must preserve a manual fold");
+  clickLine(component, /Thinking$/);
+  assert.match(plain(component), /FOCUS_FULL_THOUGHT updated/);
+
+  setMode("compact");
+  const next = make([{ type: "thinking", thinking: "NEW_COMPACT_THOUGHT" }], false);
+  assert.doesNotMatch(plain(next), /NEW_COMPACT_THOUGHT/, "Compact remains folded by default");
+  const hidden = make([{ type: "thinking", thinking: "HIDDEN_NATIVE_THOUGHT" }], false, { hideThinking: true });
+  assert.doesNotMatch(plain(hidden), /HIDDEN_NATIVE_THOUGHT/, "Pi's native hide setting wins");
+});
+
 test("only the Thinking title toggles it; body clicks, wheel, and other buttons do not", (t) => {
   const { make } = harness(t);
   const component = make([

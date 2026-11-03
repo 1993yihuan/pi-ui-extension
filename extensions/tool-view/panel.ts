@@ -42,19 +42,35 @@ function findLayoutBox(box: LayoutBox, component: Component): LayoutBox | undefi
   return undefined;
 }
 
-function modeLabel(mode: ToolViewMode): string {
-  switch (mode) {
-    case "normal": return "Normal";
-    case "compact": return "Compact";
-    case "hidden": return "Hidden";
-  }
-}
+/** Keep the four actual mode names on one row, with one space after each marker and two between modes. */
+const MODE_LABELS: Record<ToolViewMode, string> = {
+  normal: "Normal", focus: "Focus", compact: "Compact", hidden: "Hidden",
+};
 
-function centerText(text: string, width: number): string {
-  const clipped = truncateToWidth(text, Math.max(0, width), "");
-  const padding = Math.max(0, width - visibleWidth(clipped));
-  const left = Math.floor(padding / 2);
-  return `${" ".repeat(left)}${clipped}${" ".repeat(padding - left)}`;
+type ModeItem = { mode: ToolViewMode; start: number; text: string };
+
+/** The same centered, compact coordinates drive both rendering and mouse hit-testing. */
+function modeItems(contentWidth: number, currentMode: ToolViewMode | undefined): ModeItem[] {
+  const labelsWidth = TOOL_VIEW_MODES.reduce((sum, mode) => sum + MODE_LABELS[mode].length, 0);
+  const markerWidth = TOOL_VIEW_MODES.length * 2; // "○ " before each name
+  const separatorCount = TOOL_VIEW_MODES.length - 1;
+  // Prefer two spaces between modes; on narrow widths reduce to one before hiding markers.
+  const showMarkers = contentWidth >= labelsWidth + markerWidth + separatorCount;
+  const gap = contentWidth >= labelsWidth + (showMarkers ? markerWidth : 0) + separatorCount * 2 ? 2 : 1;
+  const separatorsWidth = separatorCount * gap;
+  const items = TOOL_VIEW_MODES.map((mode) => ({
+    mode,
+    text: showMarkers
+      ? `${currentMode === undefined ? "·" : currentMode === mode ? "●" : "○"} ${MODE_LABELS[mode]}`
+      : MODE_LABELS[mode],
+  }));
+  const groupWidth = items.reduce((sum, item) => sum + item.text.length, 0) + separatorsWidth;
+  let offset = Math.max(0, Math.floor((contentWidth - groupWidth) / 2));
+  return items.map((item) => {
+    const start = offset;
+    offset += item.text.length + gap;
+    return { ...item, start };
+  });
 }
 
 type UsageColor = "dim" | "muted" | "text" | "accent" | "success";
@@ -133,16 +149,17 @@ export class ToolViewPanel implements Component {
     const box = this.getLayoutBox();
     if (!box || !contains(box.clip, x, y) || !contains(box.rect, x, y)) return undefined;
     if (y - box.rect.y !== 1) return undefined;
-
     const contentWidth = Math.max(1, Math.min(box.rect.width, this.options.getDesiredWidth()) - 4);
     const contentColumn = x - box.rect.x - 2;
     if (contentColumn < 0 || contentColumn >= contentWidth) return undefined;
 
-    const index = Math.min(
-      TOOL_VIEW_MODES.length - 1,
-      Math.floor(contentColumn * TOOL_VIEW_MODES.length / contentWidth),
-    );
-    return TOOL_VIEW_MODES[index];
+    const items = modeItems(contentWidth, this.options.getMode());
+    // Preserve the original outer click targets despite compact, centered labels.
+    if (contentColumn < items[0]!.start) return items[0]!.mode;
+    const last = items[items.length - 1]!;
+    if (contentColumn >= last.start + last.text.length) return last.mode;
+    return items.find(({ start, text }) =>
+      contentColumn >= start && contentColumn < start + text.length)?.mode;
   }
 
   private isInsidePanel(x: number, y: number): boolean {
@@ -203,20 +220,16 @@ export class ToolViewPanel implements Component {
     const renderWidth = Math.max(1, Math.min(width, this.options.getDesiredWidth()));
     const contentWidth = Math.max(1, renderWidth - 4);
     const currentMode = this.options.getMode();
-    const connected = currentMode !== undefined;
-    const baseWidth = Math.floor(contentWidth / TOOL_VIEW_MODES.length);
-    const remainder = contentWidth % TOOL_VIEW_MODES.length;
-    const body = TOOL_VIEW_MODES.map((mode, index) => {
-      const selected = mode === currentMode;
-      const pressed = mode === this.pressedMode;
-      const marker = !connected ? "·" : selected ? "●" : "○";
-      const segmentWidth = baseWidth + (index < remainder ? 1 : 0);
-      const text = centerText(`${marker} ${modeLabel(mode)}`, segmentWidth);
-      return pressed
-        ? this.theme.fg("warning", text)
-        : selected
-          ? this.theme.fg("success", text)
-          : this.theme.fg("dim", text);
+    const items = modeItems(contentWidth, currentMode);
+    let cursor = 0;
+    const modeRow = items.map(({ mode, start, text }) => {
+      const space = " ".repeat(Math.max(0, start - cursor));
+      cursor = start + text.length;
+      const clipped = truncateToWidth(text, Math.max(0, contentWidth - start), "");
+      return space + this.theme.fg(
+        mode === this.pressedMode ? "warning" : mode === currentMode ? "success" : "dim",
+        clipped,
+      );
     }).join("");
     const usage = this.options.getUsage();
     const grouped = groupUsageCounts(usage?.counts ?? []);
@@ -257,9 +270,10 @@ export class ToolViewPanel implements Component {
     appendGroup("nested", nested);
     appendGroup("mcp", grouped.mcp);
 
+    // Mode explanation lives with "Tool View: ..." in the main status/notification.
     const lines = [
       panelTop(this.theme, "VIEW", renderWidth),
-      panelContent(this.theme, body, "dim", contentWidth),
+      panelContent(this.theme, modeRow, "dim", contentWidth),
       flushSeparator(this.theme, renderWidth),
       ...usageRows,
     ];

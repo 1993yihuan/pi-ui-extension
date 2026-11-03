@@ -137,11 +137,115 @@ test("long tool names and group labels adapt to narrow terminal widths without w
   for (const width of [16, 18, 24, 32, 48, 56]) {
     const lines = panel.render(width);
     assert.ok(lines.every((line) => visibleWidth(line) <= width), `overflow at width ${width}`);
-    assert.equal(lines.length, panel.render(56).length, "all nested rows stay visible");
+    assert.equal(lines.length, panel.render(56).length, "VIEW always uses one selector row");
     assert.doesNotMatch(lines.join("\n"), /↳/, "nested rows no longer use arrows");
     assert.match(lines.join("\n"), /999/, "nested totals remain visible when labels truncate");
   }
   panel.dispose();
+});
+
+test("VIEW keeps full mode names in one compact row and retains precise click targets", async () => {
+  let width = 60;
+  let mode: "normal" | "focus" | "compact" | "hidden" = "compact";
+  let input: ((text: string) => unknown) | undefined;
+  const selected: string[] = [];
+  const tui = {
+    addInputListener(fn: (text: string) => unknown) { input = fn; return () => {}; },
+    requestRender() {},
+    currentLayout: undefined as any,
+  } as any;
+  const theme = { fg: (_color: string, text: string) => text } as any;
+  const panel = new ToolViewPanel(theme, {
+    tui, getDesiredWidth: () => width, getMode: () => mode, getUsage: () => ({ counts: [] }),
+    onSelect(next) { mode = next; selected.push(next); },
+  });
+  const click = async (x: number, y = 7) => {
+    input?.("\x1b[<0;" + x + ";" + y + "M");
+    input?.("\x1b[<0;" + x + ";" + y + "m");
+    await Promise.resolve();
+  };
+  const layout = () => {
+    const height = panel.render(width).length;
+    const rect = { x: 10, y: 5, width, height };
+    tui.currentLayout = { root: { component: panel, rect, clip: rect, children: [] } };
+  };
+  try {
+    assert.match(panel.render(60)[1]!, /○ Normal  ○ Focus  ● Compact  ○ Hidden/);
+    assert.match(panel.render(60)[2]!, /^├─+┤$/);
+    layout();
+    await click(34); // Focus label on the centered row
+    assert.deepEqual(selected, ["focus"]);
+    assert.doesNotMatch(panel.render(60).join("\n"), /Thoughts open · tools compact/);
+
+    width = 36;
+    assert.match(panel.render(width)[1]!, /Normal  Focus  Compact  Hidden/);
+    layout();
+    await click(30); // Compact
+    await click(40); // Hidden
+    assert.deepEqual(selected, ["focus", "compact", "hidden"]);
+    await click(30, 8); // Separator is not a click target
+    assert.equal(selected.length, 3);
+
+    width = 35; // Two-character gaps must not steal another mode's clicks
+    layout();
+    await click(18); // Last character of Normal
+    await click(19); // First gap cell, no action
+    await click(20); // Second gap cell, no action
+    await click(21); // First character of Focus
+    await click(28); // First character of Compact
+    await click(37); // First character of Hidden
+    assert.deepEqual(selected, ["focus", "compact", "hidden", "normal", "focus", "compact", "hidden"]);
+
+    width = 42; // All requested gaps and selection markers fit exactly
+    assert.match(panel.render(width)[1]!, /○ Normal  ○ Focus  ○ Compact  ● Hidden/);
+    width = 39; // Narrow fallback keeps markers but reduces inter-mode gaps
+    assert.match(panel.render(width)[1]!, /○ Normal ○ Focus ○ Compact ● Hidden/);
+    width = 34; // Hide markers before clipping full names
+    assert.match(panel.render(width)[1]!, /Normal  Focus  Compact  Hidden/);
+    assert.doesNotMatch(panel.render(width)[1]!, /○|●/);
+    layout();
+    await click(21); // Focus with circles hidden
+    assert.equal(selected.at(-1), "focus");
+    width = 31; // Full names still keep one gap, even if two will not fit
+    assert.match(panel.render(width)[1]!, /Normal Focus Compact Hidden/);
+
+    width = 24; // A very narrow viewport clips, rather than abbreviates, full names
+    assert.match(panel.render(width)[1]!, /Normal Focus Compact/);
+    assert.doesNotMatch(panel.render(width)[1]!, /Nrm|Fcs|Cmp|Hid/);
+    for (const w of [16, 18, 24, 30, 31, 34, 35, 36, 39, 42, 48, 56, 60]) {
+      const lines = panel.render(w);
+      assert.equal(lines.length, panel.render(60).length, "selector must never wrap");
+      assert.ok(lines.every((line) => visibleWidth(line) <= w), "no horizontal overflow");
+    }
+  } finally { panel.dispose(); }
+});
+
+
+
+test("VIEW puts the separator immediately below the selector, without repeating the main status description", () => {
+  let italicCalls = 0;
+  const theme = {
+    fg: (_color: string, value: string) => value,
+    italic(value: string) { italicCalls++; return value; },
+  } as any;
+  const tui = { addInputListener: () => () => {}, requestRender() {} } as any;
+  const panel = new ToolViewPanel(theme, {
+    tui, getDesiredWidth: () => 60, getMode: () => "focus",
+    getUsage: () => ({ counts: [] }), onSelect() {},
+  });
+  try {
+    const wide = panel.render(60);
+    assert.match(wide[1]!, /○ Normal  ● Focus  ○ Compact  ○ Hidden/);
+    assert.match(wide[2]!, /^├─+┤$/, "border follows the selector directly");
+    assert.match(wide[3]!, /RUN\s+TOTAL/);
+    assert.doesNotMatch(wide.join("\n"), /Thoughts open · tools compact/,
+      "the description belongs only in the main Tool View status/notification");
+    assert.equal(italicCalls, 0, "no caption is rendered");
+    assert.ok(wide.every((line) => visibleWidth(line) === 60));
+    const narrow = panel.render(25);
+    assert.equal(narrow.length, wide.length);
+    assert.ok(narrow.every((line) => visibleWidth(line) <= 25));
+  } finally { panel.dispose(); }
 });
 
 test("keeps the mode selector visible alongside Tool and MCP usage", () => {
@@ -150,7 +254,8 @@ test("keeps the mode selector visible alongside Tool and MCP usage", () => {
   assert.match(lines[0] ?? "", /VIEW/);
   assert.doesNotMatch(lines[0] ?? "", /TOOL VIEW/);
   assert.equal(lines.length, 12);
-  assert.match(lines[1] ?? "", /Normal.*Compact.*Hidden/);
+  assert.match(lines[1] ?? "", /○ Normal  ○ Focus  ● Compact  ○ Hidden/);
+  assert.match(lines[2] ?? "", /^├─+┤$/);
   assert.equal(lines[2], `├${"─".repeat(58)}┤`, "mode separator must reach both borders with no padding");
   assert.match(lines[3] ?? "", /RUN\s+TOTAL/);
   assert.match(output, /DIRECT TOOLS · 1/);

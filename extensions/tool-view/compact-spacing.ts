@@ -2,7 +2,7 @@ import {
   ToolExecutionComponent,
   type ToolRenderers,
 } from "@earendil-works/pi-coding-agent";
-import type { ToolViewMode } from "./types.ts";
+import { isCompactMode, type ToolViewMode } from "./types.ts";
 
 const OWNER_KEY = Symbol.for("pi-ui-extension:compact-spacing-owned-renderer");
 const GUARD_KEY = Symbol.for("pi-ui-extension:compact-spacing-guard");
@@ -75,7 +75,7 @@ export function installCompactSpacingGuard(
   if (!hasCompatibleSelfToolLayout({ render: originalRender, handleMouse: originalMouse })) return false;
   const trimmed = new WeakMap<ToolExecutionComponent, boolean>();
   const eligible = (tool: ToolInstance): boolean =>
-    getMode() === "compact" &&
+    isCompactMode(getMode()) &&
     tool.toolDefinition?.renderShell === "self" &&
     tool.toolDefinition?.[OWNER_KEY] === true;
 

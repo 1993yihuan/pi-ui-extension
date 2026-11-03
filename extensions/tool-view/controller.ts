@@ -12,7 +12,7 @@ import { Box, Container, Text, truncateToWidth, visibleWidth } from "@earendil-w
 import { dirname, isAbsolute, relative, resolve } from "node:path";
 import type { FileHandle } from "node:fs/promises";
 import { open, readFile, rename, rm } from "node:fs/promises";
-import { TOOL_VIEW_MODES, isToolViewMode, type ToolViewMode } from "./types.ts";
+import { TOOL_VIEW_MODES, isCompactMode, isToolViewMode, modeDescription, type ToolViewMode } from "./types.ts";
 import { renderCodemodeCompactCall, renderCodemodeCompactResult, singleLine } from "./codemode-compact.ts";
 import { transformThinkingText } from "./thinking.ts";
 import { ThinkingTiming } from "./thinking-timing.ts";
@@ -53,9 +53,14 @@ interface CompactToolSpec {
 function modeLabel(mode: ToolViewMode): string {
   switch (mode) {
     case "normal": return "Normal";
+    case "focus": return "Focus";
     case "compact": return "Compact";
     case "hidden": return "Hidden";
   }
+}
+
+function modeMessage(mode: ToolViewMode): string {
+  return `Tool View: ${modeLabel(mode)} · ${modeDescription(mode)}`;
 }
 
 function errorMessage(error: unknown): string {
@@ -283,7 +288,7 @@ export async function installToolViewController(
   };
   const syncTicker = (context: AnyRenderContext, isPartial: boolean): number | undefined => {
     const state = context.state as RendererState;
-    if (!isPartial || mode !== "compact") {
+    if (!isPartial || !isCompactMode(mode)) {
       stopTicker(state);
       return undefined;
     }
@@ -317,7 +322,7 @@ export async function installToolViewController(
 
   function updateStatus(ctx: ExtensionContext): void {
     if (ctx.mode !== "tui") return;
-    ctx.ui.setStatus(MODE_STATUS_ID, `Tool View: ${modeLabel(mode)}`);
+    ctx.ui.setStatus(MODE_STATUS_ID, modeMessage(mode));
   }
 
   function requestTranscriptRerender(ctx: ExtensionContext): void {
@@ -335,7 +340,7 @@ export async function installToolViewController(
     const sessionId = ctx.sessionManager.getSessionId();
     modeChangeQueue = modeChangeQueue.then(async () => {
       mode = nextMode;
-      if (mode !== "compact") stopAllTickers();
+      if (!isCompactMode(mode)) stopAllTickers();
       let persistError: unknown;
       try {
         await persistMode(mode);
@@ -358,7 +363,7 @@ export async function installToolViewController(
       // the active stream) through the official UI API, without patching internals.
       ctx.ui.setHiddenThinkingLabel();
       warnNativeThinkingHidden(ctx);
-      if (notify) ctx.ui.notify(`Tool View: ${modeLabel(mode)}`, "info");
+      if (notify) ctx.ui.notify(modeMessage(mode), "info");
     });
     return modeChangeQueue;
   }
@@ -506,10 +511,10 @@ export async function installToolViewController(
       toolName === "read" && shouldPreserveReadRenderer(args, context);
     const useNativeCall = (args: any, context: AnyRenderContext): boolean =>
       preserveCall(args, context) || mode === "normal" ||
-      (mode === "compact" && (context.expanded || (!isCodemode && context.isError)));
+      (isCompactMode(mode) && (context.expanded || (!isCodemode && context.isError)));
     const useNativeResult = (context: AnyRenderContext, options: ToolRenderResultOptions): boolean =>
       preserveCall(context.args, context) || mode === "normal" ||
-      (mode === "compact" && (options.expanded || (!isCodemode && context.isError)));
+      (isCompactMode(mode) && (options.expanded || (!isCodemode && context.isError)));
 
     return markCompactSpacingRenderer({
       renderShell: "self",
@@ -517,7 +522,7 @@ export async function installToolViewController(
         if (useNativeCall(args, context) && nativeDefinition) {
           const component = callNativeRenderer(nativeDefinition, toolName, args, theme, context);
           const decorate = (native: ReturnType<NonNullable<ToolRenderers["renderCall"]>>) =>
-            mode === "compact" && !preserveCall(args, context)
+            isCompactMode(mode) && !preserveCall(args, context)
               ? withNativeChevron(native, theme, context.expanded) : native;
           if (nativeDefinition.renderShell === "self") return decorate(component);
           const state = context.state as RendererState;
@@ -575,7 +580,7 @@ export async function installToolViewController(
   }
 
   pi.registerCommand(MODE_COMMAND, {
-    description: "Change Tool View mode: normal, compact, hidden, or status",
+    description: "Change Tool View mode: normal, focus, compact, hidden, or status",
     getArgumentCompletions: (prefix) => {
       const values = [...MODE_ORDER, "status"];
       const matches = values.filter((value) => value.startsWith(prefix.trim()));
@@ -593,11 +598,11 @@ export async function installToolViewController(
           if (selectedIndex >= 0) await setMode(MODE_ORDER[selectedIndex]!, ctx);
           return;
         }
-        ctx.ui.notify(`Tool View: ${modeLabel(mode)}`, "info");
+        ctx.ui.notify(modeMessage(mode), "info");
         return;
       }
       if (!isToolViewMode(requested)) {
-        ctx.ui.notify("Usage: /tool-view normal|compact|hidden|status", "warning");
+        ctx.ui.notify("Usage: /tool-view normal|focus|compact|hidden|status", "warning");
         return;
       }
       await setMode(requested, ctx);

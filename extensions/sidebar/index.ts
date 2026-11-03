@@ -16,7 +16,7 @@ import type {
   SidebarPanelLayout,
 } from "./registry.ts";
 
-const SIDEBAR_RATIO = 0.20;
+const SIDEBAR_RATIO = 0.22;
 const MIN_SPLIT_WIDTH = 120;
 const MIN_SIDEBAR_WIDTH = 18;
 const MAX_SIDEBAR_WIDTH = 72;
