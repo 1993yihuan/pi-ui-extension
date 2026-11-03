@@ -5,6 +5,26 @@ import { installSidebar } from "./index.ts";
 import { installPriorityInputListener } from "./resize.ts";
 import type { SidebarPanelDefinition } from "./registry.ts";
 
+test("default sidebar width grows from 20% to 22% while keeping min/max and draggable geometry", () => {
+  for (const [columns, expected] of [[120, 26], [160, 35], [200, 44], [400, 72]]) {
+    const root = { render: () => [], invalidate() {} };
+    const tui: any = {
+      [Symbol.for("@earendil-works/pi-tui/viewport")]: true,
+      terminal: { columns, rows: 40 }, layoutRoot: root,
+      addInputListener: () => () => {},
+      setLayoutRoot(next: any) { this.layoutRoot = next; },
+      requestRender() {},
+    };
+    const controller = installSidebar(tui, { fg: (_: string, text: string) => text } as any, []);
+    try {
+      assert.equal(controller.mounted, true);
+      assert.equal(tui.layoutRoot.entries[2].basis, expected, `initial width at ${columns} columns`);
+      assert.equal(tui.layoutRoot.entries[2].maxSize, 72, "maximum sidebar width unchanged");
+    } finally { controller.dispose(); }
+    assert.equal(tui.layoutRoot, root);
+  }
+});
+
 test("sidebar ignores hidden divider hits and cancels drags after terminal resize", async () => {
   let overlays = 0, hidden = 0;
   const listeners = new Set<any>();
@@ -25,7 +45,8 @@ test("sidebar ignores hidden divider hits and cancels drags after terminal resiz
     assert.equal(input("\x1b[<0;80;5M"), undefined);
     assert.equal(overlays, 0);
     tui.terminal.columns = 160;
-    assert.deepEqual(input("\x1b[<0;140;5M"), { consume: true });
+    const dividerColumn = tui.terminal.columns - tui.layoutRoot.entries[2].basis;
+    assert.deepEqual(input(`\x1b[<0;${dividerColumn};5M`), { consume: true });
     assert.deepEqual(input("\x1b[<0;130;5m"), { consume: true });
     assert.equal(tui.layoutRoot.entries[2].basis, 30);
     assert.equal(hidden, 1);

@@ -77,14 +77,14 @@ export interface CompactThinkingOptions {
  */
 const expansion = new WeakMap<AssistantMessageComponent, Map<number, boolean>>();
 
-function isExpanded(component: AssistantMessageComponent, index: number): boolean {
-  return expansion.get(component)?.get(index) ?? false;
+function isExpanded(component: AssistantMessageComponent, index: number, mode: ToolViewMode): boolean {
+  return expansion.get(component)?.get(index) ?? (mode === "focus");
 }
 
-function toggleExpanded(component: AssistantMessageComponent, index: number): void {
+function toggleExpanded(component: AssistantMessageComponent, index: number, mode: ToolViewMode): void {
   const runs = expansion.get(component) ?? new Map<number, boolean>();
   expansion.set(component, runs);
-  runs.set(index, !(runs.get(index) ?? false));
+  runs.set(index, !isExpanded(component, index, mode));
 }
 
 function isThinkingRegion(child: unknown): child is ThinkingRegion {
@@ -212,7 +212,7 @@ function decorateRegion(
   const internals = component as unknown as ComponentInternals;
   const others = (internals.markdownTransformers ?? [])
     .filter((candidate) => candidate !== transformer);
-  const body = mode === "compact"
+  const body = mode !== "hidden"
     ? createBody(run.text, shape, others, streaming, { messageId: internals.messageId, timestamp: internals.timestamp })
     : undefined;
   const nativeOnMouse = region.onMouse;
@@ -221,17 +221,17 @@ function decorateRegion(
       status,
       colors,
       width,
-      disclosure: mode === "compact",
-      expanded: isExpanded(component, index),
+      disclosure: mode !== "hidden",
+      expanded: isExpanded(component, index, mode),
     }),
     // Keep Pi's own message padding so the title, the quote bar and the
     // surrounding assistant text all start on the same column.
     outputPad: shape.paddingX ?? readOutputPad(component) ?? ASSUMED_OUTPUT_PAD,
     body,
     colors,
-    expanded: () => isExpanded(component, index),
-    toggleable: () => mode === "compact",
-    onToggle: () => toggleExpanded(component, index),
+    expanded: () => isExpanded(component, index, mode),
+    toggleable: () => mode !== "hidden",
+    onToggle: () => toggleExpanded(component, index, mode),
     trailingBlank: () => needsTrailingBlank(content, run.startIndex, stopReason, options),
   });
   // The view handles title clicks itself; everything else must stay a no-op so
@@ -291,14 +291,14 @@ function decoratePendingRun(
       status: { phase: "streaming" },
       colors,
       width,
-      disclosure: mode === "compact",
-      expanded: isExpanded(component, index),
+      disclosure: mode !== "hidden",
+      expanded: isExpanded(component, index, mode),
     }),
     outputPad: readOutputPad(component) ?? ASSUMED_OUTPUT_PAD,
     colors,
-    expanded: () => isExpanded(component, index),
-    toggleable: () => mode === "compact",
-    onToggle: () => toggleExpanded(component, index),
+    expanded: () => isExpanded(component, index, mode),
+    toggleable: () => mode !== "hidden",
+    onToggle: () => toggleExpanded(component, index, mode),
   }));
 }
 

@@ -140,6 +140,14 @@ test("uses one official renderer resolver without replacing or executing Pi tool
     assert.match(running.render(80).join(""), /^    ⎿  … Running$/, "streaming uses the same branch without inventing output");
     assert.equal(counters.nativeCall, 0, "compact must not run native renderer unnecessarily");
 
+    await controller.setMode("focus", ctx);
+    const focused = render(read, {}, args);
+    assert.match(focused, /  ›  read  example\.ts/);
+    assert.match(focused, /2 lines/);
+    assert.doesNotMatch(focused, /NATIVE CALL|NATIVE RESULT/,
+      "Focus must retain Compact tool summaries by default");
+    assert.equal(counters.nativeCall, 0);
+
     await controller.setMode("normal", ctx);
     const normal = render(read, state, args);
     assert.match(normal, /NATIVE CALL/);
@@ -251,7 +259,7 @@ test("uses one official renderer resolver without replacing or executing Pi tool
 
     await controller.setMode("compact", ctx);
     assert.deepEqual(JSON.parse(await readFile(join(directory, "mode.json"), "utf8")), { mode: "compact" });
-    assert.equal(expandedChanges.length, 16, "every mode change should refresh historical transcript rows");
+    assert.equal(expandedChanges.length, 18, "every mode change should refresh historical transcript rows");
     assert.equal(commands.has("tool-view"), true);
     assert.equal(counters.registered, 0);
   } finally {

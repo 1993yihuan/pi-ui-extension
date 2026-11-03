@@ -17,7 +17,7 @@ pi install npm:pi-ui-extension
 pi --tui-mode fullscreen
 ```
 
-The right sidebar appears automatically. It is not available in regular TUI mode.
+The right sidebar appears automatically, initially occupying about **22% of the terminal width** (minimum 18, maximum 72 character columns); drag its left divider to resize it. It is not available in regular TUI mode.
 
 ## Features
 
@@ -25,7 +25,7 @@ The right sidebar appears automatically. It is not available in regular TUI mode
 | --- | --- |
 | **SESSIONS** | Recent sessions, pinning, management, and resource shortcuts |
 | **CTX** | Context composition, model information, and run performance |
-| **VIEW** | Normal / Compact / Hidden display modes and Tool/MCP statistics |
+| **VIEW** | Normal / Focus / Compact / Hidden display modes and Tool/MCP statistics |
 
 Panels support mouse interaction, scrolling, and terminal resizing. Session management, resource browsing, and mode selection use centered dialogs: navigate with ↑/↓ and Enter, or close with Esc. While a dialog is open, background sidebar actions are paused. Resource details are read-only and scrollable.
 
@@ -81,10 +81,11 @@ One selector controls tool output and Thinking. The default is **Compact**.
 | Mode | Tools | Thinking |
 | --- | --- | --- |
 | **Normal** | Full tool output and details | Full Thinking text |
+| **Focus** | Compact tool summaries | Thinking text expanded by default; click any Thought title to fold that run |
 | **Compact** (default) | Compact, indented summaries | Collapsed title such as `+ Thought · 1.3s`; click the title to read the full Thinking text |
 | **Hidden** | Tool output hidden | Read-only status and measured time; no Thinking body |
 
-Switch with the sidebar buttons, **Ctrl+Shift+O**, or `/tool-view normal|compact|hidden|status`. The selection is saved and also updates existing messages in the current session. Display modes do not affect tool execution or usage statistics.
+Switch with the sidebar buttons, **Ctrl+Shift+O**, or `/tool-view normal|focus|compact|hidden|status`. The selection is saved and also updates existing messages in the current session. VIEW keeps the full names (`Normal / Focus / Compact / Hidden`) on one row, with one space after each selection circle and two spaces between modes; on narrower terminals the inter-mode gap shrinks to one space before selection circles are hidden, preserving full names as long as possible. The mode description appears with the main `Tool View: ...` status and mode-change notification (for example, `Tool View: Focus · Thoughts open · tools compact`), not as a separate row beneath VIEW. Display modes do not affect tool execution or usage statistics.
 
 Compact supports `read`, `bash`, `edit`, `write`, `grep`, `find`, `ls`, and `codemode`. Each call has its own summary with output counts, elapsed time when available, and running/failure status:
 
@@ -97,6 +98,8 @@ Compact supports `read`, `bash`, `edit`, `write`, `grep`, `find`, `ls`, and `cod
 ```
 
 Click `›` to expand a supported tool's details, including Codemode scripts, nested calls, output, and errors. Click `⌄` to return to the Compact summary. Third-party tools retain their own display.
+
+Focus keeps the same compact tool summaries but opens every Thinking body by default. Each Thought title can still be folded individually.
 
 Compact Thinking starts collapsed. Click the title to expand or collapse it while the model is thinking or after it finishes:
 
@@ -111,7 +114,7 @@ Expanded text starts directly below the title and wraps to the terminal width. G
 
 Elapsed time measures the Thinking phase, not the whole response. Values below a minute keep one decimal; longer values use `1m05s`. When timing is unavailable, such as in restored history, the title omits it. A live title can appear before the first text arrives. Hidden always keeps the body hidden.
 
-**Thinking visibility:** Enable Pi's native Thinking visibility (`hideThinkingBlock: false`) for Compact/Hidden Thinking titles to appear. Pi's own hide control (`Ctrl+T`) keeps its native behavior.
+**Thinking visibility:** Enable Pi's native Thinking visibility (`hideThinkingBlock: false`) for Focus/Compact/Hidden Thinking titles to appear. Pi's own hide control (`Ctrl+T`) keeps its native behavior.
 
 ### Tool / MCP usage statistics
 
@@ -134,9 +137,9 @@ A compact footer displays the current working directory and Git branch, when ava
 | Action | Command |
 | --- | --- |
 | Install latest npm release | `pi install npm:pi-ui-extension` |
-| Pin v1.10.3 | `pi install npm:pi-ui-extension@1.10.3` |
+| Pin v1.10.5 | `pi install npm:pi-ui-extension@1.10.5` |
 | Install from GitHub | `pi install git:github.com/1993yihuan/pi-ui-extension` |
-| Pin a Git tag | `pi install git:github.com/1993yihuan/pi-ui-extension@v1.10.3` |
+| Pin a Git tag | `pi install git:github.com/1993yihuan/pi-ui-extension@v1.10.5` |
 | Install only for the current project | `pi install --local npm:pi-ui-extension` |
 | Update unpinned packages | `pi update --extensions` |
 | List installed packages | `pi list` |
@@ -151,7 +154,7 @@ Project-local installation requires Pi to trust the project. Pinned versions do 
 
 1. Check `command -v pi`, `pi --version`, `node --version`, and `pi list`. If npm-global and Bun-global installations coexist, upgrade the installation that supplies the active `pi` command.
 2. Upgrade Pi using that installation's package manager, then verify the active version again.
-3. Install `pi install npm:pi-ui-extension@1.10.3` (add `--local` for a project installation), restart Pi, and run `pi --tui-mode fullscreen`. Check global and project package entries so an older pinned copy is not still loaded.
+3. Install `pi install npm:pi-ui-extension@1.10.5` (add `--local` for a project installation), restart Pi, and run `pi --tui-mode fullscreen`. Check global and project package entries so an older pinned copy is not still loaded.
 4. Confirm the sidebar, Compact tool expansion and mouse alignment, Thinking expansion (with native Thinking visibility enabled), session switching, and Tool/MCP statistics.
 
 If you must stay on an older Pi, use `pi install` with the package source `npm:pi-ui-extension@1.9.12` (Pi 1.3.x) or `npm:pi-ui-extension@1.9.2` (Pi 1.2.x), or pin the matching Git tag; preserve the original global/project scope. Pinned versions do not upgrade automatically. A successful installation alone does not establish host compatibility.

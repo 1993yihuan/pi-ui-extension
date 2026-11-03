@@ -58,8 +58,8 @@ test("applies a mode change from another context wrapper in the active session",
 
     assert.equal(controller.getMode(), "normal");
     assert.deepEqual(JSON.parse(await readFile(modeFile, "utf8")), { mode: "normal" });
-    assert.equal(statuses.at(-1), "Tool View: Normal");
-    assert.equal(notices.at(-1), "Tool View: Normal");
+    assert.equal(statuses.at(-1), "Tool View: Normal · Full thoughts & tool output");
+    assert.equal(notices.at(-1), "Tool View: Normal · Full thoughts & tool output");
     assert.deepEqual(expandedValues.slice(-2), [true, false]);
   } finally {
     await rm(directory, { recursive: true, force: true });
@@ -120,15 +120,21 @@ test("the single Tool View mode controls Thinking, persists once, and refreshes 
 
     await controller.setMode("normal", ctx);
     assert.equal(transformer("private thought", context), "private thought");
+    await commands.get("tool-view").handler("focus", ctx);
+    assert.equal(controller.getMode(), "focus");
+    assert.equal(notices.at(-1), "Tool View: Focus · Thoughts open · tools compact");
+    assert.deepEqual(JSON.parse(await readFile(modeFile, "utf8")), { mode: "focus" });
+    assert.equal(transformer("private thought", context), "private thought",
+      "fallback keeps full Thinking visible when the native adapter is unavailable");
     await commands.get("tool-view").handler("hidden", ctx);
     assert.match(transform("private thought"), /^Thought · \d\.\ds$/, "Hidden has no disclosure glyph");
     assert.equal(controller.getMode(), "hidden");
     assert.deepEqual(JSON.parse(await readFile(modeFile, "utf8")), { mode: "hidden" });
-    assert.equal(refreshed, 2, "one public refresh per mode change, including historical Thinking");
-    assert.deepEqual(expanded, [true, false, true, false], "tool transcript refresh still occurs");
+    assert.equal(refreshed, 3, "one public refresh per mode change, including historical Thinking");
+    assert.deepEqual(expanded, [true, false, true, false, true, false], "tool transcript refresh still occurs");
     assert.equal(commands.has("thinking-view"), false, "no separate Thinking command");
     assert.equal(registeredToolDefinitions, 0);
-    assert.match(notices.join("\n"), /Tool View: Hidden/);
+    assert.match(notices.join("\n"), /Tool View: Hidden · Thoughts & tools hidden/);
 
     const restarted = await installToolViewController(pi, { modeFile });
     assert.equal(restarted.getMode(), "hidden", "existing mode file persists Thinking and Tools together");
