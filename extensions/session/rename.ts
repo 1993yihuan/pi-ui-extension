@@ -53,8 +53,8 @@ export async function renameSavedSession(args: RenameSavedSessionArgs): Promise<
     return { ok: false, level: "warning", message: "Session is in use by another Pi instance; rename cancelled" };
   }
   (args.write ?? defaultWrite)(args.path, args.name);
-  // Pi 1.4.0 opens a missing path without an error and then persists nothing, so a rename
-  // is only reported once the same file grew; a replaced or truncated file failed too.
+  // A write can return without persisting anything, so a rename is only reported
+  // once the same file grew; a replaced or truncated file failed too.
   const after = await snapshotClearableSession(args.path);
   const written = after !== undefined && after.dev === args.before.dev && after.ino === args.before.ino &&
     after.size >= args.before.size &&

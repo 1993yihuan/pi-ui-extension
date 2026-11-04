@@ -234,7 +234,7 @@ export async function installToolViewController(
   const thinkingTiming = new ThinkingTiming();
   // Undo the click adapter installed by this extension's own v1.2.8 when Pi's
   // /reload swaps in a fresh module instance. That is this plugin's version,
-  // not the host Pi version: a Pi 1.4 host still reloads an older plugin.
+  // not the host Pi version: /reload can still load a plugin that old.
   // The current adapter owns only the Thinking region child of components built
   // with this extension's transformer; every other component, including Pi's
   // own Thinking click handler, keeps its native behavior.

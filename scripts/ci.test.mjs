@@ -30,7 +30,7 @@ test("the required matrix matches the workflow, the declared minimums and the pi
   assert.equal(manifest.engines.node, `>=${nodes[0]}`,
     `package.json must declare the lowest tested Node version as its runtime minimum`);
   assert.equal(new Set(PI_VERSIONS).size, PI_VERSIONS.length, "an axis must not repeat a Pi SDK version");
-  assert.ok(PI_VERSIONS.length > 1, "the maintained range needs more than the minimum tested Pi SDK");
+  // A single axis is valid while one Pi SDK is maintained; PI_VERSIONS[0] is the peer minimum.
   // The development pin is a tested axis of its own; it must not raise what users have to install.
   const pinned = manifest.devDependencies["@earendil-works/pi-coding-agent"];
   assert.ok(PI_VERSIONS.includes(pinned), `the development SDK must be a tested axis, got ${pinned}`);
@@ -51,7 +51,7 @@ test("an SDK axis cannot pass with a mixed or incomplete Pi family", () => {
   const noBundle = ["the installed Pi CLI ships no dist/bundle/cli.js for the host bundle tests"];
   assert.deepEqual(sdkVersionErrors("1.5.0", complete, "test"), noBundle);
   assert.equal(sdkVersionErrors("1.4.0", complete, "test").length, SDK_PACKAGES.length + 1,
-    "a 1.5 install cannot pass as the 1.4 axis");
+    "a 1.5 install cannot pass as an axis that expects another version");
   assert.match(sdkVersionErrors("1.5.0", { ...complete, "@earendil-works/pi-tui": "1.4.0" }, "test")[0],
     /pi-tui: expected 1\.5\.0, got 1\.4\.0/);
   // A sibling such as pi-schema is only checked when it is part of the installed family.

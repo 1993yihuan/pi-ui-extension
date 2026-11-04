@@ -53,9 +53,10 @@ jobs:
       fail-fast: false
       matrix:
         node-version: ['22.19.0', '24']
-        # The minimum supported Pi and the maintained newer one; scripts/ci.mjs owns both lists.
+        # The maintained Pi SDKs; scripts/ci.mjs owns the list. Pi 1.4.0 is no longer supported,
+        # and 1.5.0 is both the declared minimum and the newest published SDK.
         # The peer minimum never moves with the pinned development SDK.
-        pi-version: ['1.4.0', '1.5.0']
+        pi-version: ['1.5.0']
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -72,7 +73,7 @@ jobs:
         run: npm ci --no-audit --no-fund
 
       # npm ci installs the pinned development SDK; every axis then switches the whole Pi family,
-      # so the 1.4.0 job really tests 1.4.0 even though the development pin is newer.
+      # so each job really tests its axis version whatever the development pin is.
       - name: Install Pi ${{ matrix.pi-version }} SDK
         run: node scripts/ci.mjs install-sdk ${{ matrix.pi-version }}
 

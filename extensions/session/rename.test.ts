@@ -110,7 +110,7 @@ test("an unreadable active-session registry fails closed", async () => {
 test("a rename that Pi reports without persisting is reported as a failure", async () => {
   const current = await setup();
   try {
-    // Pi 1.4.0 opens a missing path and then persists nothing, so the write must be verified.
+    // A write can report success and persist nothing, so the write must be verified.
     const result = await current.call({ write: () => {} });
     assert.equal(result.ok, false, "a silent no-op write is never reported as Session renamed");
     assert.match((result as { message: string }).message, /not saved/);

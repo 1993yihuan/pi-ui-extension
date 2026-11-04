@@ -8,9 +8,12 @@ export const NODE_VERSIONS = ["22.19.0", "24"];
 /**
  * The maintained Pi range. The first entry is the declared peer minimum users
  * need; every axis switches the whole family, so no job can silently test a mix
- * of 1.4 and 1.5 classes. The pinned development SDK is chosen independently.
+ * of Pi versions. 1.5.0 alone is maintained: it is both the declared minimum and
+ * the newest published SDK, and Pi 1.4.0 is no longer supported. Add an axis
+ * here only after that SDK is published and verified. The pinned development
+ * SDK is chosen independently.
  */
-export const PI_VERSIONS = ["1.4.0", "1.5.0"];
+export const PI_VERSIONS = ["1.5.0"];
 /** Everything Pi splits its runtime into: a partial install would mix SDK families. */
 export const SDK_PACKAGES = [
   "pi-coding-agent", "pi-tui", "pi-agent-core", "pi-ai", "pi-codemode", "pi-mcp", "pi-telemetry",

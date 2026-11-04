@@ -38,7 +38,7 @@ type ComponentInternals = {
   contentContainer?: { children?: unknown[]; addChild?: (child: Component) => void };
   markdownTransformers?: readonly MarkdownTransformer[];
   isStreaming?: boolean;
-  /** Pi 1.5 session entry identity for this message; absent on Pi 1.4 and live messages. */
+  /** Pi 1.5 session entry identity for this message; absent on live messages. */
   messageId?: string;
   timestamp?: string;
   /** Pi's own Thinking visibility state; both must be honored, never bypassed. */
@@ -57,7 +57,7 @@ type MarkdownShape = {
   paddingX?: number;
 };
 type ThinkingBlockLike = { type: string; thinking?: string; text?: string; name?: string };
-/** Pi 1.5 adds the persisted session entry id and ISO timestamp to the context; Pi 1.4 has neither. */
+/** Pi 1.5 adds the persisted session entry id and ISO timestamp; live messages may carry neither. */
 type MessageHistory = { messageId?: string; timestamp?: string };
 
 export interface CompactThinkingOptions {
@@ -361,8 +361,8 @@ function unwrapPreviousAdapters(prototype: AdapterPrototype): boolean {
  * that expands on a title click. `decorate()` re-checks Pi's layout on every
  * render (region count, Markdown shape, transformer identity) and keeps native
  * behavior on an unknown shape, so no exact-version whitelist is needed. A
- * version list would only mean that a Pi version update such as 1.4.0 silently
- * disables Thinking clicks instead of failing shut on a real layout change.
+ * version list would only mean that a Pi version update silently disables
+ * Thinking clicks instead of failing shut on a real layout change.
  */
 export function installCompactThinkingAdapter(
   getMode: () => ToolViewMode,

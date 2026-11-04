@@ -721,7 +721,7 @@ test("the expanded Thinking body passes Pi 1.5 messageId and timestamp on to eve
     assert.equal(context.isStreaming, false, "the rebuilt body keeps the streaming flag");
   }
 
-  // Pi 1.4 and live messages carry no entry identity: the keys stay absent and nothing throws.
+  // Live messages carry no entry identity: the keys stay absent and nothing throws.
   const live = make([{ type: "thinking", thinking: "live body text" }], true,
     { transformers: [transformer, thirdParty] });
   assert.equal(plain(live).includes("live body text"), false, "a streaming run keeps only its title");

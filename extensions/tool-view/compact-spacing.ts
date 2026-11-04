@@ -49,8 +49,8 @@ export function markCompactSpacingRenderer<T extends ToolRenderers>(renderer: T)
  *
  * This compatibility adapter fails closed: `hasCompatibleSelfToolLayout`
  * inspects the live host methods on every install, which is the layout contract
- * it depends on. No exact-version whitelist is used, because Pi 1.4.0 keeps this
- * layout unchanged and a version update must not silently disable Compact spacing.
+ * it depends on. No exact-version whitelist is used: the guard follows the live
+ * layout, so a Pi version update cannot silently disable Compact spacing.
  */
 export function installCompactSpacingGuard(
   getMode: () => ToolViewMode,
@@ -81,7 +81,7 @@ export function installCompactSpacingGuard(
 
   const patchedRender: typeof originalRender = function (this: ToolExecutionComponent, ...args) {
     const lines = originalRender.apply(this, args);
-    // A single leading empty row is the exact layout invariant in both SDKs.
+    // A single leading empty row is the exact layout invariant of the host SDK.
     const compact = eligible(this as unknown as ToolInstance) && lines.length > 1 && lines[0] === "";
     trimmed.set(this, compact);
     return compact ? lines.slice(1) : lines;
