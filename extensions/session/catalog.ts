@@ -22,6 +22,35 @@ const expandPath = (path: string): string => resolve(path === "~" ? homedir() : 
 const record = (value: unknown): Record<string, unknown> | undefined =>
   value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
 
+/** Cached session titles are UI previews, never full message bodies. */
+export const SESSION_TITLE_PREVIEW_LIMIT = 256;
+
+function limitTitle(value: string): string {
+  if (value.length <= SESSION_TITLE_PREVIEW_LIMIT) return value;
+  let prefix = value.slice(0, SESSION_TITLE_PREVIEW_LIMIT - 1);
+  // Do not leave half a surrogate pair in the cached preview.
+  if (/[\uD800-\uDBFF]$/.test(prefix)) prefix = prefix.slice(0, -1);
+  return `${prefix}…`;
+}
+
+function previewUserContent(content: unknown): string {
+  if (typeof content === "string") return limitTitle(content);
+  if (!Array.isArray(content)) return "";
+  let preview = "";
+  let hasTextBlock = false;
+  for (const block of content) {
+    const value = record(block);
+    if (value?.type !== "text" || typeof value.text !== "string") continue;
+    const separator = hasTextBlock ? " " : "";
+    hasTextBlock = true;
+    const remaining = SESSION_TITLE_PREVIEW_LIMIT + 1 - preview.length;
+    if (remaining <= 0) break;
+    preview += separator.slice(0, remaining) + value.text.slice(0, Math.max(0, remaining - separator.length));
+    if (preview.length > SESSION_TITLE_PREVIEW_LIMIT) break;
+  }
+  return limitTitle(preview);
+}
+
 /**
  * A sidebar needs summaries, not the SDK list's concatenation of every message body.
  * I/O failures propagate so the caller can keep the last good summary instead of
@@ -49,7 +78,7 @@ async function readSummary(path: string, expected: SessionFileSnapshot): Promise
           header = entry;
           continue;
         }
-        if (entry.type === "session_info") name = typeof entry.name === "string" ? entry.name.trim() || undefined : undefined;
+        if (entry.type === "session_info") name = typeof entry.name === "string" ? limitTitle(entry.name.trim()) || undefined : undefined;
         if (entry.type !== "message") continue;
         const message = record(entry.message);
         if (message?.role === "user") userPromptCount++;
@@ -58,11 +87,7 @@ async function readSummary(path: string, expected: SessionFileSnapshot): Promise
           : typeof entry.timestamp === "string" ? Date.parse(entry.timestamp) : NaN;
         if (Number.isFinite(timestamp)) lastActivity = Math.max(lastActivity ?? 0, timestamp);
         if (!firstMessage && message.role === "user") {
-          firstMessage = typeof message.content === "string" ? message.content
-            : Array.isArray(message.content) ? message.content.flatMap(block => {
-              const value = record(block);
-              return value?.type === "text" && typeof value.text === "string" ? [value.text] : [];
-            }).join(" ") : "";
+          firstMessage = previewUserContent(message.content);
         }
       }
       // Destroying a FileHandle stream also closes its descriptor, even with

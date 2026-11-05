@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { createDialogUI } from "./dialogs/index.ts";
 import { confirmSessionCleanup } from "./dialogs/session-cleanup.ts";
 import { previewSessionCleanup } from "./session/cleanup-preview.ts";
@@ -55,9 +55,11 @@ export type ResourceEntry = { name: string; description: string; content?: strin
 
 /** Format every resource row for the scrollable resource picker. */
 export function resourceDialogOptions(rows: readonly ResourceEntry[]): string[] {
-  return rows.map((row) => {
+  // The selector returns a label, not an index. Prefix each row with an
+  // ordinal so identical names/descriptions still select different content.
+  return rows.map((row, index) => {
     const desc = row.description.length > 110 ? `${row.description.slice(0, 109)}…` : row.description;
-    return `${row.name} — ${desc}`;
+    return `${index + 1}. ${row.name} — ${desc}`;
   });
 }
 
@@ -467,7 +469,12 @@ export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
           refreshSessions();
           return;
         }
-        const before = statSync(target.path);
+        const before = await snapshotClearableSession(target.path);
+        if (!before) {
+          ctx.ui.notify("Session file is missing or is not a regular file; deletion cancelled", "warning");
+          refreshSessions();
+          return;
+        }
         const confirmed = await createDialogUI(ctx.ui).confirm(
           "Delete session",
           `Move “${target.name ?? target.firstMessage ?? target.id}” to trash? This session cannot be restored from Pi; it can be recovered from your system trash.`,
@@ -481,9 +488,9 @@ export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
           ctx.ui.notify("Session is in use by another Pi instance; deletion cancelled", "warning");
           return;
         }
-        const after = statSync(target.path);
-        if (before.dev !== after.dev || before.ino !== after.ino ||
-            before.size !== after.size || before.mtimeMs !== after.mtimeMs) {
+        // Match bulk cleanup: lstat rejects links, and ctime detects same-size
+        // rewrites even when a concurrent process restores mtime.
+        if (!(await sessionFileUnchanged(target.path, before))) {
           ctx.ui.notify("Session changed during confirmation; deletion cancelled", "warning");
           return;
         }

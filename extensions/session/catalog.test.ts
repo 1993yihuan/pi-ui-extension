@@ -5,7 +5,7 @@ import { open, type FileHandle } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
-import { createSessionCatalog } from "./catalog.ts";
+import { createSessionCatalog, SESSION_TITLE_PREVIEW_LIMIT } from "./catalog.ts";
 
 test("catalog shares unchanged summaries, reads only changed files and tracks discovery/removal", async (t) => {
   const root = mkdtempSync(join(tmpdir(), "pi-catalog-")), directory = join(root, "sessions");
@@ -139,5 +139,37 @@ test("catalog does not cache a file changed during its read", async (t) => {
     assert.deepEqual(await catalog(root, root), []);
     const stable = await catalog(root, root);
     assert.equal(stable[0]?.userPromptCount, 2);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("catalog bounds long session names and text previews without caching full messages", async () => {
+  const root = mkdtempSync(join(tmpdir(), "pi-catalog-preview-"));
+  try {
+    const session = SessionManager.create(root, root);
+    session.appendMessage({ role: "user", content: "A".repeat(20_000), timestamp: 1 });
+    session.appendSessionInfo("N".repeat(20_000));
+    const mixed = SessionManager.create(root, root);
+    mixed.appendMessage({ role: "user", content: [
+      { type: "text", text: "First" },
+      { type: "text", text: "B".repeat(20_000) },
+      { type: "text", text: "should not be cached" },
+    ], timestamp: 1 });
+    const unicode = SessionManager.create(root, root);
+    unicode.appendMessage({ role: "user", content: "Z".repeat(SESSION_TITLE_PREVIEW_LIMIT - 2) + "💻💻", timestamp: 1 });
+
+    const catalog = createSessionCatalog();
+    const summaries = await catalog(root, root);
+    const long = summaries.find(row => row.id === session.getSessionId())!;
+    assert.equal(long.firstMessage, "A".repeat(SESSION_TITLE_PREVIEW_LIMIT - 1) + "…");
+    assert.equal(long.name, "N".repeat(SESSION_TITLE_PREVIEW_LIMIT - 1) + "…");
+    const multi = summaries.find(row => row.id === mixed.getSessionId())!;
+    assert.equal(multi.firstMessage.length, SESSION_TITLE_PREVIEW_LIMIT);
+    assert.ok(multi.firstMessage.startsWith("First BBB"));
+    assert.ok(multi.firstMessage.endsWith("…"));
+    const emoji = summaries.find(row => row.id === unicode.getSessionId())!;
+    assert.ok(emoji.firstMessage.endsWith("…"));
+    assert.ok(!/[\uD800-\uDBFF](?=…$)/.test(emoji.firstMessage), "surrogate pair must not be cut in half");
+    assert.equal((await catalog(root, root)).find(row => row.id === session.getSessionId()), long,
+      "unchanged previews are reused from the cache");
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
