@@ -48,6 +48,7 @@ const SESSION_DELETE_COMMAND = "sidebar-session-delete";
 const SESSION_CLEAR_COMMAND = "sidebar-session-clear-others";
 const SESSION_MANAGER_COMMAND = "sessions-manager";
 const SESSION_PINS_FILE = join(getAgentDir(), "pi-ui-extension", "session-pins.json");
+const SIDEBAR_LAYOUT_FILE = join(getAgentDir(), "pi-ui-extension", "ui-layout.json");
 const ACTIVE_SESSIONS_DIR = join(getAgentDir(), "pi-ui-extension", "active-sessions");
 
 export type ResourceEntry = { name: string; description: string; content?: string };
@@ -762,7 +763,8 @@ export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
               });
           },
         });
-        sidebar = installSidebar(tui, theme, panels);
+        // Wiring only: the sidebar owns the file format and all width policy.
+        sidebar = installSidebar(tui, theme, panels, { layoutPath: SIDEBAR_LAYOUT_FILE });
         if (!sidebar.mounted) {
           ctx.ui.setStatus("pi-ui-extension:sidebar", "Right sidebar requires fullscreen mode");
         }
