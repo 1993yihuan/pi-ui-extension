@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { t } from "../i18n.ts";
 import { createDialogUI, modalFrame } from "./index.ts";
 import { stripTerminalSequences, visibleWidth, type Component } from "@earendil-works/pi-tui";
 const theme={fg(_key:string,text:string){return text;},bold(text:string){return text;}} as any;
@@ -14,7 +15,9 @@ function fakeUI(rows=35,columns=100){
 const plain=(c:Component,w=66)=>c.render(w).map(stripTerminalSequences);
 test('danger confirmation defaults to cancel in a centered overlay',async()=>{
  const mock=fakeUI(),first=mock.ui.confirm('Clear other sessions','Move 2 inactive sessions to trash?'),view=mock.active[0]!;
- assert.match(plain(view).join('\n'),/Clear other sessions[\s\S]*Move 2 inactive[\s\S]*Cancel[\s\S]*Move to Trash/);
+ const text=plain(view).join('\n');
+ assert.match(text,/Clear other sessions[\s\S]*Move 2 inactive/);
+ assert.ok(text.includes(t('dialog.cancel'))&&text.indexOf(t('dialog.cancel'))<text.indexOf(t('dialog.moveToTrash')));
  assert.equal(mock.options[0].overlay,true);assert.equal(mock.options[0].overlayOptions.anchor,'center');
  view.handleInput('\r');assert.equal(await first,false);
  const second=mock.ui.confirm('Delete session','Move to trash?');mock.active[1]!.handleInput('\x1b[B');mock.active[1]!.handleInput('\r');

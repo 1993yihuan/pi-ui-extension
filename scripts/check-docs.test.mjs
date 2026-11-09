@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { checkNodeRequirements } from "./check-docs.mjs";
+import { checkNodeRequirements, checkViewModes } from "./check-docs.mjs";
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), "utf8");
 const manifest = JSON.parse(read("../package.json"));
@@ -58,6 +58,29 @@ test("Markdown emphasis and inline code do not hide the Node minimum", () => {
   }
   // The real development guide states the minimum in the "only the comparison bold" shape.
   checkNodeRequirements(engines, [{ file: "docs/DEVELOPMENT.md", content: read("../docs/DEVELOPMENT.md"), required: false }]);
+});
+
+test("architecture and both READMEs document Normal, Focus, Compact and Hidden", () => {
+  const modes = "**Normal** **Focus** **Compact** **Hidden**";
+  checkViewModes([
+    { file: "README.md", content: modes },
+    { file: "README.zh-CN.md", content: modes },
+    { file: "docs/ARCHITECTURE.md", content: modes },
+  ]);
+  checkViewModes([
+    { file: "README.md", content: read("../README.md") },
+    { file: "README.zh-CN.md", content: read("../README.zh-CN.md") },
+    { file: "docs/ARCHITECTURE.md", content: read("../docs/ARCHITECTURE.md") },
+  ]);
+  assert.throws(
+    () => checkViewModes([
+      { file: "README.md", content: modes },
+      { file: "README.zh-CN.md", content: modes },
+      { file: "docs/ARCHITECTURE.md", content: "**Normal** **Compact** **Hidden**" },
+    ]),
+    /ARCHITECTURE\.md must document every VIEW mode in bold; missing Focus/,
+  );
+  assert.throws(() => checkViewModes([{ file: "README.md", content: modes }]), /Missing VIEW mode document: README\.zh-CN\.md/);
 });
 
 test("one wrong requirement in a document still fails next to a correct one", () => {

@@ -1,5 +1,6 @@
 import { resolve } from "node:path";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
+import { t } from "../i18n.ts";
 import { sessionFileUnchanged, snapshotClearableSession, type SessionFileSnapshot } from "./safety.ts";
 
 /**
@@ -37,20 +38,20 @@ export async function renameSavedSession(args: RenameSavedSessionArgs): Promise<
   const listed = (await SessionManager.list(args.cwd, args.sessionDir))
     .find((session) => session.id === args.sessionId);
   if (listed?.path !== args.path) {
-    return { ok: false, level: "warning", message: "Session changed or was removed during rename; nothing was saved" };
+    return { ok: false, level: "warning", message: t("rename.removed") };
   }
   if (!(await sessionFileUnchanged(args.path, args.before))) {
-    return { ok: false, level: "warning", message: "Session file changed or disappeared during rename; nothing was saved" };
+    return { ok: false, level: "warning", message: t("rename.disappeared") };
   }
   let active: ReadonlySet<string>;
   try {
     active = args.activePaths();
   } catch {
     // Unreadable registry data is not proof that no other Pi instance has this session open.
-    return { ok: false, level: "error", message: "Cannot verify that no other Pi instance is using this session; rename cancelled" };
+    return { ok: false, level: "error", message: t("rename.unverified") };
   }
   if (active.has(resolve(args.path))) {
-    return { ok: false, level: "warning", message: "Session is in use by another Pi instance; rename cancelled" };
+    return { ok: false, level: "warning", message: t("rename.inUse") };
   }
   (args.write ?? defaultWrite)(args.path, args.name);
   // A write can return without persisting anything, so a rename is only reported
@@ -60,7 +61,7 @@ export async function renameSavedSession(args: RenameSavedSessionArgs): Promise<
     after.size >= args.before.size &&
     (after.size !== args.before.size || after.mtimeMs !== args.before.mtimeMs);
   if (!written) {
-    return { ok: false, level: "error", message: "Session name was not saved; the file was replaced, truncated or never updated" };
+    return { ok: false, level: "error", message: t("rename.notSaved") };
   }
   return { ok: true };
 }

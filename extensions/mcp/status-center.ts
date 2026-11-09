@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { t, type MessageKey } from "../i18n.ts";
 import { validNativeMcpServer } from "./config-validation.ts";
 
 export type McpConnectionState =
@@ -42,7 +43,7 @@ function readConfig(path: string, warnings: string[], scope: "global" | "project
   try {
     raw = readFileSync(path, "utf8");
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") warnings.push(`Cannot read ${scope} MCP configuration`);
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") warnings.push(mcpWarning("mcp.warn.read", scope));
     return { servers: new Map() };
   }
   try {
@@ -51,13 +52,13 @@ function readConfig(path: string, warnings: string[], scope: "global" | "project
     const servers = config.mcpServers === undefined ? {} : record(config.mcpServers);
     if (!servers) throw new Error("invalid server map");
     if (config.autoEnableCodemode !== undefined && typeof config.autoEnableCodemode !== "boolean") {
-      warnings.push(`Invalid setting in ${scope} MCP configuration`);
+      warnings.push(mcpWarning("mcp.warn.setting", scope));
     }
     const entries = new Map<string, Record<string, unknown>>();
     for (const [name, value] of Object.entries(servers)) {
       const server = record(value);
       if (!serverName(name) || !server) {
-        warnings.push(`Invalid server entry in ${scope} MCP configuration`);
+        warnings.push(mcpWarning("mcp.warn.entry", scope));
         continue;
       }
       entries.set(name, server);
@@ -65,7 +66,7 @@ function readConfig(path: string, warnings: string[], scope: "global" | "project
     return { servers: entries };
   } catch {
     // Never include JSON contents, URLs, command lines, headers or parser excerpts.
-    warnings.push(`Invalid ${scope} MCP configuration`);
+    warnings.push(mcpWarning("mcp.warn.invalid", scope));
     return { servers: new Map() };
   }
 }
@@ -84,14 +85,14 @@ export function configuredMcpServers(
         value.command === undefined && value.url === undefined && value.type === undefined;
       const base = configs.get(name);
       if (override && (!base || Object.keys(value).some((key) => !["enabled", "exposure", "toolExposure"].includes(key)))) {
-        warnings.push(`Invalid server override in ${scope} MCP configuration`);
+        warnings.push(mcpWarning("mcp.warn.override", scope));
         continue;
       }
       const config = override ? { ...base, ...value } : value;
       const clash = [...entries.keys()].some((other) => other !== name && other.replace(/-/g, "_") === name.replace(/-/g, "_"));
       if (!validNativeMcpServer(config) || (!override && (clash ||
         (scope === "project" && "url" in config && config.auth)))) {
-        warnings.push(`Invalid server entry in ${scope} MCP configuration`);
+        warnings.push(mcpWarning("mcp.warn.entry", scope));
         continue;
       }
       configs.set(name, config);
@@ -179,15 +180,23 @@ export function buildMcpStatusSnapshot(
   return { servers: [...rows.values()], warnings: config.warnings };
 }
 
+function mcpScope(scope: "global" | "project"): string {
+  return t(scope === "global" ? "mcp.scope.global" : "mcp.scope.project");
+}
+
+function mcpWarning(key: MessageKey, scope: "global" | "project"): string {
+  return t(key, { scope: mcpScope(scope) });
+}
+
 export function describeMcpStatus(server: McpServerStatus): string {
-  const state = !server.enabled ? "Disabled"
-    : server.connection === "connected" ? "Connected (adapter reported)"
-      : server.connection === "connecting" ? "Connecting (adapter reported)"
-        : server.connection === "disconnected" ? "Disconnected (adapter reported)"
-          : server.connection === "needs-auth" ? "Sign-in required (adapter reported)"
-            : server.connection === "failed" ? "Failed (adapter reported)"
-              : server.loaded ? "Loaded (connection unverified)"
-                : server.source === "extension" ? "Registered (connection unverified)"
-                  : "Configured (connection unverified)";
+  const state = !server.enabled ? t("mcp.state.disabled")
+    : server.connection === "connected" ? t("mcp.state.connected")
+      : server.connection === "connecting" ? t("mcp.state.connecting")
+        : server.connection === "disconnected" ? t("mcp.state.disconnected")
+          : server.connection === "needs-auth" ? t("mcp.state.needsAuth")
+            : server.connection === "failed" ? t("mcp.state.failed")
+              : server.loaded ? t("mcp.state.loaded")
+                : server.source === "extension" ? t("mcp.state.registered")
+                  : t("mcp.state.configured");
   return `${state} · ${server.source}`;
 }

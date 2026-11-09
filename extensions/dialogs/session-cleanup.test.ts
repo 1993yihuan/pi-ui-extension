@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { stripTerminalSequences, visibleWidth, type Component } from "@earendil-works/pi-tui";
+import { t } from "../i18n.ts";
 import { confirmSessionCleanup } from "./session-cleanup.ts";
 import type { CleanupSummary } from "../session/cleanup-preview.ts";
 
@@ -24,14 +25,14 @@ test("cleanup preview is centered, shows actionable and protected counts and def
   const pending = confirmSessionCleanup(ui, summary);
   const modal = modals[0]!;
   const plain = modal.render(60).map(stripTerminalSequences).join("\n");
-  assert.match(plain, /Eligible to trash: 4/);
-  assert.match(plain, /Protected \/ unavailable: 6/);
-  assert.match(plain, /Current session\s+1/);
-  assert.match(plain, /Pinned sessions\s+2/);
-  assert.match(plain, /Active in another Pi\s+1/);
-  assert.match(plain, /Unavailable session files\s+2/);
-  assert.match(plain, /Recent sessions included/);
-  assert.match(plain, /Move 4 to Trash/);
+  assert.ok(plain.includes(t("cleanup.eligible", { count: 4 })));
+  assert.ok(plain.includes(t("cleanup.protected", { count: 6 })));
+  assert.match(plain, new RegExp(`${t("cleanup.reason.current")}\\s+1`));
+  assert.match(plain, new RegExp(`${t("cleanup.reason.pinned")}\\s+2`));
+  assert.match(plain, new RegExp(`${t("cleanup.reason.active")}\\s+1`));
+  assert.match(plain, new RegExp(`${t("cleanup.reason.unavailable")}\\s+2`));
+  assert.ok(plain.includes(t("cleanup.warning").slice(0, 12)));
+  assert.ok(plain.includes(t("cleanup.move", { count: 4 })));
   assert.equal(configs[0].overlay, true);
   assert.equal(configs[0].overlayOptions.anchor, "center");
   modal.handleInput?.("\r");
@@ -45,7 +46,12 @@ test("protection reason counts share a right-aligned column, including multiple 
     ...summary, current: values[0]!, pinned: values[1]!, active: values[2]!, unavailable: values[3]!,
   });
   const lines = modals[0]!.render(60).map(stripTerminalSequences);
-  const labels = ["Current session", "Pinned sessions", "Active in another Pi", "Unavailable session files"];
+  const labels = [
+    t("cleanup.reason.current"),
+    t("cleanup.reason.pinned"),
+    t("cleanup.reason.active"),
+    t("cleanup.reason.unavailable"),
+  ];
   const countEnds = labels.map((label, index) => {
     const line = lines.find(text => text.includes(label));
     assert.ok(line, `missing ${label}`);
@@ -71,8 +77,8 @@ test("zero eligible displays protection reasons but cannot authorize deletion", 
   const { ui, modals } = modalHost();
   const pending = confirmSessionCleanup(ui, { ...summary, eligible: 0, protected: 10 });
   const plain = modals[0]!.render(56).map(stripTerminalSequences).join("\n");
-  assert.match(plain, /Eligible to trash: 0/);
-  assert.doesNotMatch(plain, /Move 0 to Trash/);
+  assert.ok(plain.includes(t("cleanup.eligible", { count: 0 })));
+  assert.equal(plain.includes(t("cleanup.move", { count: 0 })), false);
   modals[0]!.handleInput?.("\x1b[B");
   modals[0]!.handleInput?.("\r");
   assert.equal(await pending, false);
@@ -85,7 +91,7 @@ test("compact overlay fits narrow terminal dimensions and supports mouse confirm
   const rendered = modal.render(33).map(stripTerminalSequences);
   assert.ok(rendered.length <= 14, `modal has ${rendered.length} rows for 16-row terminal`);
   for (const row of rendered) assert.ok(visibleWidth(row) <= 33);
-  const actionIndex = rendered.findIndex(row => row.includes("Move 4 to Trash"));
+  const actionIndex = rendered.findIndex(row => row.includes(t("cleanup.move", { count: 4 })));
   assert.ok(actionIndex >= 0);
   const click = modal.handleMouse?.({ type: "click", button: "left", x: 5, y: actionIndex, width: 33, height: 16, screenX: 5, screenY: actionIndex } as any);
   assert.equal(click?.handled, true);
@@ -94,7 +100,11 @@ test("compact overlay fits narrow terminal dimensions and supports mouse confirm
 
 test("native UI fallback remains guarded if centered custom overlays are unavailable", async () => {
   let confirmations = 0;
-  const ui = { async confirm(_title: string, message: string) { confirmations++; assert.match(message, /Recently modified history is included/); return true; } } as any;
+  const expected = t("cleanup.confirm", {
+    eligible: summary.eligible, protected: summary.protected, current: summary.current,
+    pinned: summary.pinned, active: summary.active, unavailable: summary.unavailable,
+  });
+  const ui = { async confirm(_title: string, message: string) { confirmations++; assert.equal(message, expected); return true; } } as any;
   assert.equal(await confirmSessionCleanup(ui, summary), true);
   assert.equal(await confirmSessionCleanup(ui, { ...summary, eligible: 0 }), false);
   assert.equal(confirmations, 1);

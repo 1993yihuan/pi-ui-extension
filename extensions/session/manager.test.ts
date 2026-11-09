@@ -6,11 +6,14 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { t } from "../i18n.ts";
 import {
   getSessionPage, openSessionManager, readSessionPins, sessionsEligibleForClear, sortedSessions, toggleSessionPin,
   type SessionManagerUI,
 } from "./manager.ts";
 import type { SessionListItem } from "./panel.ts";
+
+const promptRow = (title: string, count = 1) => `${title} · ${count} ${t("session.promptUnit")}`;
 
 function session(id: string, modified: number, title = `Session ${id}`, prompts = 1): SessionListItem {
   return { id, title, modified: new Date(modified), userPromptCount: prompts, current: id === "id-0" };
@@ -89,14 +92,14 @@ test("manager can navigate pages, pin and unpin, and switch using the selected s
   let changes = 0;
   const all = Array.from({ length: 21 }, (_, index) => session(`id-${index}`, index * 1000));
   const { ui, viewed, notices } = scriptedUI([
-    (_title, choices) => choices.find((item) => item === "下一页 →"),
-    (_title, choices) => choices.find((item) => item === "下一页 →"),
+    (_title, choices) => choices.find((item) => item === t("session.action.next")),
+    (_title, choices) => choices.find((item) => item === t("session.action.next")),
     (_title, choices) => choices.find((item) => item.startsWith("1. ")),
-    (_title, choices) => choices.find((item) => item === "置顶会话"),
+    (_title, choices) => choices.find((item) => item === t("session.menu.pin")),
     (_title, choices) => choices.find((item) => item.startsWith("1. ★")),
-    (_title, choices) => choices.find((item) => item === "取消置顶"),
+    (_title, choices) => choices.find((item) => item === t("session.menu.unpin")),
     (_title, choices) => choices.find((item) => item.startsWith("1. ")),
-    (_title, choices) => choices.find((item) => item === "切换到此会话"),
+    (_title, choices) => choices.find((item) => item === t("session.menu.switch")),
   ]);
   try {
     await openSessionManager({
@@ -113,9 +116,9 @@ test("manager can navigate pages, pin and unpin, and switch using the selected s
     assert.deepEqual([...readSessionPins(path)], []);
     assert.match(viewed[2]!.title, /3\/3/);
     assert.match(viewed[4]!.choices[0]!, /★/);
-    assert.match(viewed[4]!.choices[0]!, /次提问/);
+    assert.ok(viewed[4]!.choices[0]!.includes(t("session.promptUnit")));
     assert.doesNotMatch(viewed[4]!.choices[0]!, /条消息/);
-    assert.deepEqual(notices, ["会话已置顶", "已取消置顶"]);
+    assert.deepEqual(notices, [t("session.notify.pinned"), t("session.notify.unpinned")]);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -126,9 +129,9 @@ test("manager searches and sorts, then delegates session deletion to the central
   const { ui, viewed } = scriptedUI([
     (_title, choices) => choices.find((item) => item.startsWith("⌕ ")), // Search
     (_title, choices) => choices.find((item) => item.startsWith("↕ ")), // Sort
-    (_title, choices) => choices.find((item) => item.includes("会话标题")),
+    (_title, choices) => choices.find((item) => item.includes(t("session.sort.title"))),
     (_title, choices) => choices.find((value) => value.startsWith("1. ")),
-    (_title, choices) => choices.find((value) => value === "移到回收站"),
+    (_title, choices) => choices.find((value) => value === t("session.menu.trash")),
   ]);
   let redundantConfirmation = false;
   let deleted = "";
@@ -296,8 +299,8 @@ test("a failed initial load is reported with a retry entry and never looks like 
   const names = [session("a", 1, "alpha")];
   let attempts = 0;
   const { ui, viewed, notices } = scriptedUI([
-    (_title, choices) => choices.find((item) => item === "↻ 刷新列表"),
-    (_title, choices) => choices.find((item) => item === "关闭"),
+    (_title, choices) => choices.find((item) => item === t("session.action.refresh")),
+    (_title, choices) => choices.find((item) => item === t("session.action.close")),
   ]);
   await openSessionManager({
     ui,
@@ -309,19 +312,19 @@ test("a failed initial load is reported with a retry entry and never looks like 
     togglePin: () => false, onPinChanged() {}, onSwitch() {}, onRename() {}, onDelete() {},
   });
   assert.equal(attempts, 2);
-  assert.match(notices[0]!, /刷新会话列表失败：directory unreadable/);
-  assert.match(viewed[0]!.title, /⚠ 加载失败：directory unreadable/);
+  assert.equal(notices[0], t("session.notify.refreshFailed", { error: "directory unreadable" }));
+  assert.ok(viewed[0]!.title.includes(t("session.titleLoadError", { error: "directory unreadable" })));
   assert.equal(viewed[0]!.choices.filter((item) => /^\d+\. /.test(item)).length, 0);
-  assert.deepEqual(viewed[1]!.choices.filter((item) => /^\d+\. /.test(item)), ["1. alpha · 1 次提问"]);
-  assert.doesNotMatch(viewed[1]!.title, /加载失败/);
+  assert.deepEqual(viewed[1]!.choices.filter((item) => /^\d+\. /.test(item)), [`1. ${promptRow("alpha")}`]);
+  assert.equal(viewed[1]!.title.includes(t("session.titleLoadError", { error: "directory unreadable" })), false);
 });
 
 test("a failed reload inside the manager keeps the list, search, sort and page", async () => {
   const all = Array.from({ length: 21 }, (_, index) => session(`id-${index}`, index * 1000, `Branch ${index}`));
   const { ui, viewed, notices } = scriptedUI([
     (_title, choices) => choices.find((item) => item.startsWith("⌕ ")),
-    (_title, choices) => choices.find((item) => item === "↻ 刷新列表"),
-    (_title, choices) => choices.find((item) => item === "关闭"),
+    (_title, choices) => choices.find((item) => item === t("session.action.refresh")),
+    (_title, choices) => choices.find((item) => item === t("session.action.close")),
   ]);
   ui.input = async () => "BRANCH";
   let loads = 0;
@@ -335,11 +338,11 @@ test("a failed reload inside the manager keeps the list, search, sort and page",
     togglePin: () => false, onPinChanged() {}, onSwitch() {}, onRename() {}, onDelete() {},
   });
   assert.equal(loads, 2);
-  assert.match(notices[0]!, /刷新会话列表失败：disk busy/);
-  assert.match(viewed[2]!.title, /搜索：BRANCH/);
-  assert.match(viewed[2]!.title, /⚠ 加载失败：disk busy/);
+  assert.equal(notices[0], t("session.notify.refreshFailed", { error: "disk busy" }));
+  assert.ok(viewed[2]!.title.includes(t("session.titleQuery", { query: "BRANCH" })));
+  assert.ok(viewed[2]!.title.includes(t("session.titleLoadError", { error: "disk busy" })));
   assert.equal(viewed[2]!.choices.filter((item) => /^\d+\. /.test(item)).length, 8, "retained rows stay clickable");
-  assert.ok(viewed[2]!.choices.includes("下一页 →"), "paging survives a failed reload");
+  assert.ok(viewed[2]!.choices.includes(t("session.action.next")), "paging survives a failed reload");
 });
 
 test("a failed reload keeps the real sort order and the page the user reached", async () => {
@@ -347,10 +350,10 @@ test("a failed reload keeps the real sort order and the page the user reached", 
   let loads = 0;
   const { ui, viewed, notices } = scriptedUI([
     (_title, choices) => choices.find((item) => item.startsWith("↕ ")),
-    (_title, choices) => choices.find((item) => item.includes("会话标题")),
-    (_title, choices) => choices.find((item) => item === "下一页 →"),
-    (_title, choices) => choices.find((item) => item === "↻ 刷新列表"),
-    (_title, choices) => choices.find((item) => item === "关闭"),
+    (_title, choices) => choices.find((item) => item.includes(t("session.sort.title"))),
+    (_title, choices) => choices.find((item) => item === t("session.action.next")),
+    (_title, choices) => choices.find((item) => item === t("session.action.refresh")),
+    (_title, choices) => choices.find((item) => item === t("session.action.close")),
   ]);
   await openSessionManager({
     ui,
@@ -362,17 +365,17 @@ test("a failed reload keeps the real sort order and the page the user reached", 
     togglePin: () => false, onPinChanged() {}, onSwitch() {}, onRename() {}, onDelete() {},
   });
   assert.equal(loads, 2);
-  assert.match(notices[0]!, /刷新会话列表失败：disk busy/);
+  assert.equal(notices[0], t("session.notify.refreshFailed", { error: "disk busy" }));
   const rows = (index: number) => viewed[index]!.choices.filter((item) => /^\d+\. /.test(item));
   assert.deepEqual(rows(2).slice(0, 3).map((row) => row.replace(/^\d+\. /, "")),
-    ["● Branch 0 · 1 次提问", "Branch 1 · 1 次提问", "Branch 10 · 1 次提问"],
+    [promptRow("● Branch 0"), promptRow("Branch 1"), promptRow("Branch 10")],
     "the list is title-sorted, not in the default recent order");
-  assert.equal(viewed[2]!.choices.includes("↕ 排序：会话标题"), true);
+  assert.equal(viewed[2]!.choices.includes(t("session.action.sort", { label: t("session.sort.title") })), true);
   assert.match(rows(3)[0]!, /Branch 16/, "the second page of the title sort is what the user reached");
   assert.deepEqual(rows(4), rows(3), "the rows the user reached survive the failed reload");
   assert.match(viewed[4]!.title, /2\/3/, "the page number survives the failed reload");
-  assert.match(viewed[4]!.title, /⚠ 加载失败：disk busy/);
-  assert.equal(viewed[4]!.choices.includes("↕ 排序：会话标题"), true, "the non-default sort survives");
+  assert.ok(viewed[4]!.title.includes(t("session.titleLoadError", { error: "disk busy" })));
+  assert.equal(viewed[4]!.choices.includes(t("session.action.sort", { label: t("session.sort.title") })), true, "the non-default sort survives");
 });
 
 test("a pin saved before a failed reload reports success and stays visible", async () => {
@@ -380,8 +383,8 @@ test("a pin saved before a failed reload reports success and stays visible", asy
   let loads = 0;
   const { ui, viewed, notices } = scriptedUI([
     (_title, choices) => choices.find((item) => item.startsWith("1. ")),
-    (_title, choices) => choices.find((item) => item === "置顶会话"),
-    (_title, choices) => choices.find((item) => item === "关闭"),
+    (_title, choices) => choices.find((item) => item === t("session.menu.pin")),
+    (_title, choices) => choices.find((item) => item === t("session.action.close")),
   ]);
   await openSessionManager({
     ui,
@@ -392,16 +395,16 @@ test("a pin saved before a failed reload reports success and stays visible", asy
     },
     togglePin: () => true, onPinChanged() {}, onSwitch() {}, onRename() {}, onDelete() {},
   });
-  assert.deepEqual(notices, ["刷新会话列表失败：disk busy", "会话已置顶"]);
-  assert.match(viewed[2]!.choices[0]!, /^1\. ★ beta · 1 次提问$/, "the saved pin is shown without a reload");
+  assert.deepEqual(notices, [t("session.notify.refreshFailed", { error: "disk busy" }), t("session.notify.pinned")]);
+  assert.equal(viewed[2]!.choices[0], `1. ${promptRow("★ beta")}`, "the saved pin is shown without a reload");
 });
 
 test("a failed pin write still reports an error and leaves the list untouched", async () => {
   const names = [session("a", 1, "alpha")];
   const { ui, viewed, notices } = scriptedUI([
     (_title, choices) => choices.find((item) => item.startsWith("1. ")),
-    (_title, choices) => choices.find((item) => item === "置顶会话"),
-    (_title, choices) => choices.find((item) => item === "关闭"),
+    (_title, choices) => choices.find((item) => item === t("session.menu.pin")),
+    (_title, choices) => choices.find((item) => item === t("session.action.close")),
   ]);
   await openSessionManager({
     ui,
@@ -409,7 +412,7 @@ test("a failed pin write still reports an error and leaves the list untouched", 
     togglePin: () => { throw new Error("locked by another process"); },
     onPinChanged() {}, onSwitch() {}, onRename() {}, onDelete() {},
   });
-  assert.deepEqual(notices, ["保存置顶失败：locked by another process"]);
+  assert.deepEqual(notices, [t("session.notify.pinFailed", { error: "locked by another process" })]);
   assert.doesNotMatch(viewed[2]!.choices[0]!, /★/);
 });
 
@@ -514,8 +517,8 @@ test("a blank load failure message is still reported as a failure", async () => 
   const names = [session("a", 1, "alpha")];
   let attempts = 0;
   const { ui, viewed, notices } = scriptedUI([
-    (_title, choices) => choices.find((item) => item === "↻ 刷新列表"),
-    (_title, choices) => choices.find((item) => item === "关闭"),
+    (_title, choices) => choices.find((item) => item === t("session.action.refresh")),
+    (_title, choices) => choices.find((item) => item === t("session.action.close")),
   ]);
   await openSessionManager({
     ui,
@@ -527,8 +530,8 @@ test("a blank load failure message is still reported as a failure", async () => 
     togglePin: () => false, onPinChanged() {}, onSwitch() {}, onRename() {}, onDelete() {},
   });
   assert.equal(attempts, 2);
-  assert.match(notices[0]!, /刷新会话列表失败：Unknown error/);
-  assert.match(viewed[0]!.title, /⚠ 加载失败：Unknown error/);
+  assert.equal(notices[0], t("session.notify.refreshFailed", { error: t("session.unknownError") }));
+  assert.ok(viewed[0]!.title.includes(t("session.titleLoadError", { error: t("session.unknownError") })));
   assert.equal(viewed[0]!.choices.filter((item) => /^\d+\. /.test(item)).length, 0,
     "an empty message never renders as an empty list");
 });
@@ -538,8 +541,8 @@ test("a throwing pin-change callback never turns a saved pin into a save failure
   let loads = 0;
   const { ui, viewed, notices } = scriptedUI([
     (_title, choices) => choices.find((item) => item.startsWith("1. ")),
-    (_title, choices) => choices.find((item) => item === "置顶会话"),
-    (_title, choices) => choices.find((item) => item === "关闭"),
+    (_title, choices) => choices.find((item) => item === t("session.menu.pin")),
+    (_title, choices) => choices.find((item) => item === t("session.action.close")),
   ]);
   await openSessionManager({
     ui,
@@ -548,7 +551,7 @@ test("a throwing pin-change callback never turns a saved pin into a save failure
     onPinChanged() { throw new Error("sidebar gone"); },
     onSwitch() {}, onRename() {}, onDelete() {},
   });
-  assert.deepEqual(notices, ["刷新侧边栏失败：sidebar gone", "会话已置顶"],
+  assert.deepEqual(notices, [t("session.notify.sidebarFailed", { error: "sidebar gone" }), t("session.notify.pinned")],
     "the callback failure is a refresh failure, the pin still reports success");
   assert.equal(loads, 2, "the manager keeps working and reloads after the callback failed");
   assert.equal(viewed.length, 3);

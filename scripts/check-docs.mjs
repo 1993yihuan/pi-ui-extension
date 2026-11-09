@@ -9,6 +9,29 @@ const rootReadme = /^README(?:\.[\w-]+)?\.md$/;
  * Every explicit Node minimum must equal package.json engines.node.
  * Root READMEs must state it; other documents are only checked for drift.
  */
+/** VIEW modes the sidebar, READMEs and architecture notes must all name. */
+export const VIEW_MODES = ["Normal", "Focus", "Compact", "Hidden"];
+
+/**
+ * README.md, README.zh-CN.md and ARCHITECTURE.md must mention every mode in bold.
+ * A document that still stops at Normal/Compact/Hidden fails here.
+ */
+export function checkViewModes(documents) {
+  const required = [
+    [/(^|\/)README\.md$/, "README.md"],
+    [/(^|\/)README\.zh-CN\.md$/, "README.zh-CN.md"],
+    [/(^|\/)ARCHITECTURE\.md$/, "ARCHITECTURE.md"],
+  ];
+  for (const [pattern, label] of required) {
+    const doc = documents.find((item) => pattern.test(item.file.replaceAll("\\", "/")));
+    if (!doc) throw new Error(`Missing VIEW mode document: ${label}`);
+    const missing = VIEW_MODES.filter((mode) => !doc.content.includes(`**${mode}**`));
+    if (missing.length) {
+      throw new Error(`${doc.file} must document every VIEW mode in bold; missing ${missing.join(", ")}`);
+    }
+  }
+}
+
 export function checkNodeRequirements(enginesNode, documents) {
   const expected = /^>=(\d+\.\d+\.\d+)$/.exec(enginesNode ?? "")?.[1];
   if (!expected) throw new Error(`package.json engines.node must declare a ">=x.y.z" minimum: ${enginesNode}`);
@@ -64,7 +87,8 @@ function checkDocs() {
     }
   }
   checkNodeRequirements(engines?.node, nodeRequirements);
-  console.log(`Documentation OK: ${files.length} Markdown files, valid UTF-8, local links and the declared Node.js minimum`);
+  checkViewModes(nodeRequirements);
+  console.log(`Documentation OK: ${files.length} Markdown files, valid UTF-8, local links, VIEW modes and the declared Node.js minimum`);
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) checkDocs();

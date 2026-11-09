@@ -55,6 +55,7 @@ test("selecting among several AGENTS files opens full content, with descriptions
     showResourceDialog({ ui: {
       async select(_title, choices) { return choices[index]; },
       async editor(_title, content) { viewed = content; return undefined; },
+      notify() {},
     } }, "agents", rows);
     await Promise.resolve();
     assert.equal(viewed, rows[index]!.content ?? rows[index]!.description);
@@ -72,6 +73,7 @@ test("identical resource labels still open the selected row, not the first match
   showResourceDialog({ ui: {
     async select(_title, options) { return options[1]; },
     async editor(_title, content) { viewed = content; return undefined; },
+    notify() {},
   } }, "agents", rows);
   await Promise.resolve();
   assert.equal(viewed, "Project instructions");
