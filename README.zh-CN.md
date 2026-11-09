@@ -6,7 +6,7 @@
 
 ## 界面预览
 
-<img width="1377" height="744" alt="pi-ui-extension 界面预览" src="https://github.com/1993yihuan/pi-ui-extension/raw/main/preview.png" />
+<img width="1377" height="744" alt="pi-ui-extension 界面预览" src="https://github.com/1993yihuan/pi-ui-extension/releases/download/v1.7.1/preview.png" />
 
 ## 快速开始
 
