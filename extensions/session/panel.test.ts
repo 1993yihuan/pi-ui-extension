@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { stripTerminalSequences, visibleWidth, type TuiInputListener } from "@earendil-works/pi-tui";
+import { t } from "../i18n.ts";
 import { SessionPanel, type SessionListItem } from "./panel.ts";
 
 const theme = { fg: (_color: string, text: string) => text } as any;
@@ -556,7 +557,7 @@ test("an unavailable session keeps its row and flags the partial failure", async
 
   const output = panel.render(40).join("\n");
   assert.match(output, /Cached session/, "the last good summary stays visible");
-  assert.match(output, /⚠ 1 个会话暂不可用，显示上次摘要/);
+  assert.ok(stripTerminalSequences(output).includes(t("session.panel.unavailable", { count: 1 })));
   assert.match(panel.render(40)[0]!, /SESSIONS ⚠/);
   assert.doesNotMatch(output, /No saved sessions/);
   panel.dispose();
@@ -571,7 +572,7 @@ test("a failed first load shows a retry hint instead of No saved sessions", asyn
 
   const output = panel.render(40).join("\n");
   assert.doesNotMatch(output, /No saved sessions/);
-  assert.match(output, /刷新失败，点标题重试：offline/);
+  assert.ok(stripTerminalSequences(output).includes(t("session.panel.refreshFailed", { error: "offline" })));
   assert.match(panel.render(40)[0]!, /SESSIONS ⚠/);
   assert.match(panel.render(40)[0]!, /SESSIONS ⚠/, "the header flags the failure on the retry target itself");
 
@@ -583,7 +584,7 @@ test("a failed first load shows a retry hint instead of No saved sessions", asyn
 
   const recovered = panel.render(40).join("\n");
   assert.match(recovered, /One session/);
-  assert.doesNotMatch(recovered, /刷新失败/);
+  assert.equal(stripTerminalSequences(recovered).includes("offline"), false);
   assert.match(panel.render(40)[0]!, /SESSIONS ↻/);
   panel.dispose();
 });
@@ -603,10 +604,13 @@ test("a failed refresh keeps the last good list and the hint fits a narrow panel
   const output = lines.join("\n");
   assert.match(output, /First session/);
   assert.match(output, /Second session/);
-  assert.match(output, /刷新失败，点标题重试/);
+  const failure = t("session.panel.refreshFailed", { error: "permission denied on a long error message" });
+  const hint = stripTerminalSequences(lines[3]!);
+  assert.ok(hint.includes(failure.slice(0, 8)));
+  assert.equal(hint.includes("long error message"), false, "the long reason is truncated, not wrapped");
   assert.doesNotMatch(output, /No saved sessions/);
   assert.ok(lines.every((line) => visibleWidth(line) <= 44), "failure hint stays inside the panel width");
-  assert.match(stripTerminalSequences(lines[3]!), /⚠ 刷新失败，点标题重试：permission/, "the long reason is truncated, not wrapped");
+  assert.match(hint, /permission/, "the long reason is truncated, not wrapped");
   panel.dispose();
 });
 
@@ -680,7 +684,7 @@ test("after a failed refresh the error hint row triggers no session action, and 
 
   const lines = panel.render(40);
   assert.match(stripTerminalSequences(lines[4]!), /Row 3/, "only four rows fit beside the hint");
-  assert.match(stripTerminalSequences(lines[5]!), /刷新失败，点标题重试：boom/);
+  assert.ok(stripTerminalSequences(lines[5]!).includes(t("session.panel.refreshFailed", { error: "boom" })));
 
   // The hint sits on the row the hidden fifth session used to occupy.
   // Content columns start at rect.x + 2, and SGR x is one-based.
@@ -708,7 +712,7 @@ test("a blank failure message still shows the retry hint instead of No saved ses
 
   const output = panel.render(40).join("\n");
   assert.doesNotMatch(output, /No saved sessions/);
-  assert.match(output, /刷新失败，点标题重试：Unknown/);
+  assert.ok(stripTerminalSequences(output).includes(t("session.panel.refreshFailed", { error: t("session.unknownError") })));
   assert.match(panel.render(40)[0]!, /SESSIONS ⚠/);
 
   press(20, 6);
@@ -717,7 +721,7 @@ test("a blank failure message still shows the retry hint instead of No saved ses
   await flushAsync();
   const recovered = panel.render(40).join("\n");
   assert.match(recovered, /One session/);
-  assert.doesNotMatch(recovered, /刷新失败/);
+  assert.equal(stripTerminalSequences(recovered).includes(t("session.unknownError")), false);
   panel.dispose();
 });
 
@@ -732,7 +736,7 @@ test("a synchronously throwing load reports the failure and the title click retr
   await flushAsync();
 
   const output = panel.render(40).join("\n");
-  assert.match(output, /刷新失败，点标题重试：sync boom/);
+  assert.ok(stripTerminalSequences(output).includes(t("session.panel.refreshFailed", { error: "sync boom" })));
   assert.doesNotMatch(output, /No saved sessions/);
   assert.doesNotMatch(output, /Loading sessions/, "a synchronous throw never leaves the panel loading forever");
 

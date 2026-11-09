@@ -7,6 +7,7 @@ import {
   type TUI,
   type TuiInputListener,
 } from "@earendil-works/pi-tui";
+import { t } from "../i18n.ts";
 import { panelBottom, panelContent } from "../sidebar/panel.ts";
 import { installPriorityInputListener, isSidebarInputBlocked, parseSgrMouseEvent } from "../sidebar/resize.ts";
 
@@ -93,7 +94,7 @@ function findLayoutBox(box: LayoutBox, component: Component): LayoutBox | undefi
 
 function normalizeTitle(title: string): string {
   const plainText = stripTerminalSequences(title).replace(/[\u0000-\u001f\u007f]/g, " ");
-  return plainText.replace(/\s+/g, " ").trim() || "(untitled session)";
+  return plainText.replace(/\s+/g, " ").trim() || t("session.untitled");
 }
 
 function formatRelativeTime(modified: Date, now: number): string {
@@ -484,7 +485,7 @@ export class SessionPanel implements Component {
         if (this.disposed) return;
         // Keep the last good list: a failed refresh must not look like "no sessions".
         // A blank message must still render as a failure, not as "No saved sessions".
-        this.error = (error instanceof Error ? error.message : String(error)).trim() || "Unknown error";
+        this.error = (error instanceof Error ? error.message : String(error)).trim() || t("session.unknownError");
         this.loading = false;
       })
       .finally(() => {
@@ -516,15 +517,15 @@ export class SessionPanel implements Component {
         ))
       : this.error ? [] : [panelContent(
           this.theme,
-          this.loading ? "Loading sessions…" : "No saved sessions",
+          this.loading ? t("session.panel.loading") : t("session.panel.empty"),
           "dim",
           contentWidth,
         )];
     // Sits under the retained rows, so row hit-testing keeps its index mapping.
     if (this.error) {
-      body.push(panelContent(this.theme, `⚠ 刷新失败，点标题重试：${this.error}`, "warning", contentWidth));
+      body.push(panelContent(this.theme, t("session.panel.refreshFailed", { error: this.error }), "warning", contentWidth));
     } else if (this.unavailable > 0) {
-      body.push(panelContent(this.theme, `⚠ ${this.unavailable} 个会话暂不可用，显示上次摘要`, "warning", contentWidth));
+      body.push(panelContent(this.theme, t("session.panel.unavailable", { count: this.unavailable }), "warning", contentWidth));
     }
 
     const buttonRow = resourceButtonSpans(contentWidth).map((button) => {

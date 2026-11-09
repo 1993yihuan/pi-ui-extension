@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { closeSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { stripTerminalSequences, truncateToWidth } from "@earendil-works/pi-tui";
+import { t } from "../i18n.ts";
 import type { SessionListItem } from "./panel.ts";
 
 export type SessionSort = "recent" | "oldest" | "prompts" | "title";
@@ -154,19 +155,21 @@ export type SessionManagerOptions = {
 };
 
 function errorText(error: unknown): string {
-  return (error instanceof Error ? error.message : String(error)).trim() || "Unknown error";
+  return (error instanceof Error ? error.message : String(error)).trim() || t("session.unknownError");
 }
 
-const SORT_CHOICES: ReadonlyArray<{ sort: SessionSort; label: string }> = [
-  { sort: "recent", label: "最近更新" },
-  { sort: "oldest", label: "最早更新" },
-  { sort: "prompts", label: "提问次数" },
-  { sort: "title", label: "会话标题" },
-];
+function sortChoices(): ReadonlyArray<{ sort: SessionSort; label: string }> {
+  return [
+    { sort: "recent", label: t("session.sort.recent") },
+    { sort: "oldest", label: t("session.sort.oldest") },
+    { sort: "prompts", label: t("session.sort.prompts") },
+    { sort: "title", label: t("session.sort.title") },
+  ];
+}
 
 function safeLabel(title: string): string {
   const cleaned = stripTerminalSequences(title).replace(/[\u0000-\u001f\u007f]/g, " ")
-    .replace(/\s+/g, " ").trim() || "(未命名会话)";
+    .replace(/\s+/g, " ").trim() || t("session.untitled");
   return truncateToWidth(cleaned, 65, "…");
 }
 
@@ -186,64 +189,74 @@ export async function openSessionManager(options: SessionManagerOptions): Promis
     } catch (error) {
       // A blank message must still read as a failure, never as an empty list.
       loadError = errorText(error);
-      ui.notify(`刷新会话列表失败：${loadError}`, "warning");
+      ui.notify(t("session.notify.refreshFailed", { error: loadError }), "warning");
     }
   };
   await reload();
   for (;;) {
     const current = getSessionPage(sessions, query, sort, page);
     page = current.page;
+    const sorts = sortChoices();
     const labels = current.items.map((session, index) =>
-      `${index + 1}. ${session.pinned ? "★ " : ""}${session.current ? "● " : ""}${session.unavailable ? "⚠ " : ""}${safeLabel(session.title)} · ${session.userPromptCount ?? "?"} 次提问`,
+      `${index + 1}. ${session.pinned ? "★ " : ""}${session.current ? "● " : ""}${session.unavailable ? "⚠ " : ""}${safeLabel(session.title)} · ${session.userPromptCount ?? "?"} ${t("session.promptUnit")}`,
     );
     const unavailable = sessions.filter((session) => session.unavailable).length;
+    const close = t("session.action.close");
+    const previous = t("session.action.prev");
+    const nextPage = t("session.action.next");
+    const refresh = t("session.action.refresh");
     const actions = [
-      "⌕ 搜索 / 清除搜索",
-      `↕ 排序：${SORT_CHOICES.find((choice) => choice.sort === sort)!.label}`,
-      ...(page > 0 ? ["← 上一页"] : []),
-      ...(page + 1 < current.pages ? ["下一页 →"] : []),
-      "↻ 刷新列表",
-      "关闭",
+      t("session.action.search"),
+      t("session.action.sort", { label: sorts.find((choice) => choice.sort === sort)!.label }),
+      ...(page > 0 ? [previous] : []),
+      ...(page + 1 < current.pages ? [nextPage] : []),
+      refresh,
+      close,
     ];
     const choice = await ui.select(
-      `Sessions · ${current.total}/${sessions.length} · ${page + 1}/${current.pages}${query ? ` · 搜索：${safeLabel(query)}` : ""}` +
-        (loadError ? ` · ⚠ 加载失败：${safeLabel(loadError)}` : "") +
-        (unavailable > 0 ? ` · ⚠ ${unavailable} 个会话暂不可用` : ""),
+      t("session.title", { shown: current.total, total: sessions.length, page: page + 1, pages: current.pages }) +
+        (query ? t("session.titleQuery", { query: safeLabel(query) }) : "") +
+        (loadError ? t("session.titleLoadError", { error: safeLabel(loadError) }) : "") +
+        (unavailable > 0 ? t("session.titleUnavailable", { count: unavailable }) : ""),
       [...labels, ...actions],
     );
-    if (!choice || choice === "关闭") return;
+    if (!choice || choice === close) return;
     if (choice === actions[0]) {
-      const next = await ui.input("搜索会话标题或 ID（留空清除搜索）", query);
+      const next = await ui.input(t("session.searchPrompt"), query);
       if (next !== undefined) { query = next.trim(); page = 0; }
     } else if (choice === actions[1]) {
-      const names = SORT_CHOICES.map(({ label, sort: key }) => `${key === sort ? "● " : "○ "}${label}`);
-      const selection = await ui.select("会话排序（置顶始终优先）", names);
+      const names = sorts.map(({ label, sort: key }) => `${key === sort ? "● " : "○ "}${label}`);
+      const selection = await ui.select(t("session.sortTitle"), names);
       const index = names.indexOf(selection ?? "");
-      if (index >= 0) { sort = SORT_CHOICES[index]!.sort; page = 0; }
-    } else if (choice === "← 上一页") {
+      if (index >= 0) { sort = sorts[index]!.sort; page = 0; }
+    } else if (choice === previous) {
       page--;
-    } else if (choice === "下一页 →") {
+    } else if (choice === nextPage) {
       page++;
-    } else if (choice === "↻ 刷新列表") {
+    } else if (choice === refresh) {
       await reload();
     } else {
       const index = labels.indexOf(choice);
       const session = current.items[index];
       if (index < 0 || !session) continue;
+      const pinLabel = session.pinned ? t("session.menu.unpin") : t("session.menu.pin");
+      const switchLabel = t("session.menu.switch");
+      const renameLabel = t("session.menu.rename");
+      const trashLabel = t("session.menu.trash");
       const menu = [
-        ...(session.current ? [] : ["切换到此会话"]),
-        "重命名",
-        session.pinned ? "取消置顶" : "置顶会话",
-        ...(session.current ? [] : ["移到回收站"]),
-        "返回列表",
+        ...(session.current ? [] : [switchLabel]),
+        renameLabel,
+        pinLabel,
+        ...(session.current ? [] : [trashLabel]),
+        t("session.menu.back"),
       ];
-      const action = await ui.select(`${safeLabel(session.title)} · 管理`, menu);
-      if (action === "置顶会话" || action === "取消置顶") {
+      const action = await ui.select(t("session.menu.title", { title: safeLabel(session.title) }), menu);
+      if (action === t("session.menu.pin") || action === t("session.menu.unpin")) {
         let pinned: boolean;
         try {
           pinned = options.togglePin(session.id);
         } catch (error) {
-          ui.notify(`保存置顶失败：${error instanceof Error ? error.message : String(error)}`, "error");
+          ui.notify(t("session.notify.pinFailed", { error: error instanceof Error ? error.message : String(error) }), "error");
           continue;
         }
         // Already persisted: show it even if the reload below fails.
@@ -252,20 +265,20 @@ export async function openSessionManager(options: SessionManagerOptions): Promis
           options.onPinChanged();
         } catch (error) {
           // The pin is already saved: a sidebar refresh failure is not a save failure.
-          ui.notify(`刷新侧边栏失败：${errorText(error)}`, "warning");
+          ui.notify(t("session.notify.sidebarFailed", { error: errorText(error) }), "warning");
         }
         page = 0;
         await reload();
-        ui.notify(pinned ? "会话已置顶" : "已取消置顶", "info");
-      } else if (action === "移到回收站") {
+        ui.notify(pinned ? t("session.notify.pinned") : t("session.notify.unpinned"), "info");
+      } else if (action === trashLabel) {
         // The central delete command owns the final confirmation for both
         // the sidebar and this manager. Never present two successive prompts.
         options.onDelete(session);
         return;
-      } else if (action === "切换到此会话") {
+      } else if (action === switchLabel) {
         options.onSwitch(session);
         return;
-      } else if (action === "重命名") {
+      } else if (action === renameLabel) {
         options.onRename(session);
         return;
       }
