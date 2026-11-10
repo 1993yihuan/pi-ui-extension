@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.20.2
+
+- Align the Chinese protection reason counts in the full cleanup confirmation layout by terminal display width, so a CJK label no longer pushes the count column out of line.
+
 ## 1.20.1
 
 - Keep every session cleanup protection count visible in Chinese when the confirmation dialog uses its narrow layout.

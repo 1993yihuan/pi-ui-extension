@@ -139,9 +139,9 @@ A compact footer displays the current working directory and Git branch, when ava
 | Action | Command |
 | --- | --- |
 | Install latest npm release | `pi install npm:pi-ui-extension` |
-| Pin v1.20.1 | `pi install npm:pi-ui-extension@1.20.1` |
+| Pin v1.20.2 | `pi install npm:pi-ui-extension@1.20.2` |
 | Install from GitHub | `pi install git:github.com/1993yihuan/pi-ui-extension` |
-| Pin a Git tag | `pi install git:github.com/1993yihuan/pi-ui-extension@v1.20.1` |
+| Pin a Git tag | `pi install git:github.com/1993yihuan/pi-ui-extension@v1.20.2` |
 | Install only for the current project | `pi install --local npm:pi-ui-extension` |
 | Update unpinned packages | `pi update --extensions` |
 | List installed packages | `pi list` |
@@ -156,12 +156,14 @@ Project-local installation requires Pi to trust the project. Pinned versions do 
 
 1. Check `command -v pi`, `pi --version`, `node --version`, and `pi list`. If npm-global and Bun-global installations coexist, upgrade the installation that supplies the active `pi` command.
 2. Upgrade Pi using that installation's package manager, then verify the active version again.
-3. Install `pi install npm:pi-ui-extension@1.20.1` (add `--local` for a project installation), restart Pi, and run `pi --tui-mode fullscreen`. Check global and project package entries so an older pinned copy is not still loaded.
+3. Install `pi install npm:pi-ui-extension@1.20.2` (add `--local` for a project installation), restart Pi, and run `pi --tui-mode fullscreen`. Check global and project package entries so an older pinned copy is not still loaded.
 4. Confirm the sidebar, Compact tool expansion and mouse alignment, Thinking expansion (with native Thinking visibility enabled), session switching, and Tool/MCP statistics.
 
 If you must stay on an older Pi, use `pi install` with the package source `npm:pi-ui-extension@1.10.5` (Pi 1.4.x), `npm:pi-ui-extension@1.9.12` (Pi 1.3.x) or `npm:pi-ui-extension@1.9.2` (Pi 1.2.x), or pin the matching Git tag; preserve the original global/project scope. Pinned versions do not upgrade automatically. A successful installation alone does not establish host compatibility.
 
 CI verifies Pi SDK **1.5.0** on Node.js **22.19.0 and 24**. The declared `>=1.5.0` range also permits later versions, but they are not individually verified by this matrix. This release adds no session/configuration format migration.
+
+v1.20.2 aligns the Chinese cleanup protection counts in the full confirmation layout by terminal display width.
 
 v1.20.1 keeps all session cleanup protection counts visible in the narrow Chinese confirmation dialog.
 

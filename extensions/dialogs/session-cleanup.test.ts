@@ -129,3 +129,35 @@ test("Chinese compact cleanup keeps every protection count visible", async () =>
     else process.env.PI_UI_LANG = previous;
   }
 });
+
+test("Chinese full-layout protection reason counts share a display-width column", async () => {
+  const previous = process.env.PI_UI_LANG;
+  process.env.PI_UI_LANG = "zh";
+  try {
+    const { ui, modals } = modalHost();
+    const values = [1, 20, 300, 4000];
+    confirmSessionCleanup(ui, {
+      ...summary, current: values[0]!, pinned: values[1]!, active: values[2]!, unavailable: values[3]!,
+    });
+    const lines = modals[0]!.render(60).map(stripTerminalSequences);
+    const labels = [
+      t("cleanup.reason.current"),
+      t("cleanup.reason.pinned"),
+      t("cleanup.reason.active"),
+      t("cleanup.reason.unavailable"),
+    ];
+    const columns = labels.map((label, index) => {
+      const line = lines.find(text => text.includes(label));
+      assert.ok(line, `missing ${label}`);
+      const countText = String(values[index]);
+      const start = line.indexOf(countText, line.indexOf(label) + label.length);
+      assert.ok(start > 0, `missing count ${countText} for ${label}`);
+      // Display columns of the right-aligned count end, not code units: a CJK label is 2 cells per character.
+      return visibleWidth(line.slice(0, start + countText.length));
+    });
+    assert.equal(new Set(columns).size, 1, `count columns differ: ${columns}`);
+  } finally {
+    if (previous === undefined) delete process.env.PI_UI_LANG;
+    else process.env.PI_UI_LANG = previous;
+  }
+});

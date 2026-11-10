@@ -1,5 +1,5 @@
 import type { ExtensionUIContext } from "@earendil-works/pi-coding-agent";
-import { SelectList, type Component, type TuiMouseEventResult } from "@earendil-works/pi-tui";
+import { SelectList, visibleWidth, type Component, type TuiMouseEventResult } from "@earendil-works/pi-tui";
 import { t } from "../i18n.ts";
 import { modalFrame } from "./index.ts";
 import type { CleanupSummary } from "../session/cleanup-preview.ts";
@@ -43,14 +43,16 @@ export async function confirmSessionCleanup(ui: ExtensionUIContext, summary: Cle
           [t("cleanup.reason.active"), summary.active],
           [t("cleanup.reason.unavailable"), summary.unavailable],
         ] as const;
-        const labelWidth = Math.max(...reasons.map(([label]) => label.length));
+        // CJK labels are 1 code unit but 2 terminal cells wide, so pad by display columns, not by string length.
+        const labelWidth = Math.max(...reasons.map(([label]) => visibleWidth(label)));
         const countWidth = Math.max(...reasons.map(([, count]) => String(count).length));
         const details = compact
           ? [
               t("cleanup.compact.current", { current: summary.current, pinned: summary.pinned }),
               t("cleanup.compact.other", { active: summary.active, unavailable: summary.unavailable }),
             ]
-          : reasons.map(([label, count]) => `${label.padEnd(labelWidth)}  ${String(count).padStart(countWidth)}`);
+          : reasons.map(([label, count]) =>
+              `${label}${" ".repeat(Math.max(0, labelWidth - visibleWidth(label)))}  ${String(count).padStart(countWidth)}`);
         const info = tiny ? [
           theme.fg("success", total), theme.fg("warning", kept),
           ...details.map(text => theme.fg("muted", text)),
