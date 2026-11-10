@@ -109,3 +109,23 @@ test("native UI fallback remains guarded if centered custom overlays are unavail
   assert.equal(await confirmSessionCleanup(ui, { ...summary, eligible: 0 }), false);
   assert.equal(confirmations, 1);
 });
+
+test("Chinese compact cleanup keeps every protection count visible", async () => {
+  const previous = process.env.PI_UI_LANG;
+  process.env.PI_UI_LANG = "zh";
+  try {
+    const { ui, modals } = modalHost(16);
+    const pending = confirmSessionCleanup(ui, summary);
+    const lines = modals[0]!.render(33).map(stripTerminalSequences);
+    const text = lines.join("\n");
+    for (const detail of ["当前 1", "置顶 2", "Pi 1", "不可用 2"]) {
+      assert.ok(text.includes(detail), `missing protection count: ${detail}`);
+    }
+    assert.ok(lines.length <= 14);
+    modals[0]!.handleInput?.("\x1b");
+    assert.equal(await pending, false);
+  } finally {
+    if (previous === undefined) delete process.env.PI_UI_LANG;
+    else process.env.PI_UI_LANG = previous;
+  }
+});

@@ -53,9 +53,7 @@ export async function confirmSessionCleanup(ui: ExtensionUIContext, summary: Cle
           : reasons.map(([label, count]) => `${label.padEnd(labelWidth)}  ${String(count).padStart(countWidth)}`);
         const info = tiny ? [
           theme.fg("success", total), theme.fg("warning", kept),
-          theme.fg("muted", t("cleanup.tiny", {
-            current: summary.current, pinned: summary.pinned, active: summary.active, unavailable: summary.unavailable,
-          })),
+          ...details.map(text => theme.fg("muted", text)),
         ] : [
           theme.fg("success", theme.bold(total)),
           theme.fg("warning", kept),
