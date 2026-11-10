@@ -139,9 +139,9 @@ VIEW 下方按调用来源分组：
 | 操作 | 命令 |
 | --- | --- |
 | 安装最新 npm 版本 | `pi install npm:pi-ui-extension` |
-| 固定 v1.20.0 | `pi install npm:pi-ui-extension@1.20.0` |
+| 固定 v1.20.1 | `pi install npm:pi-ui-extension@1.20.1` |
 | 从 GitHub 安装 | `pi install git:github.com/1993yihuan/pi-ui-extension` |
-| 固定 Git tag | `pi install git:github.com/1993yihuan/pi-ui-extension@v1.20.0` |
+| 固定 Git tag | `pi install git:github.com/1993yihuan/pi-ui-extension@v1.20.1` |
 | 仅当前项目安装 | `pi install --local npm:pi-ui-extension` |
 | 更新非固定版本 | `pi update --extensions` |
 | 列出已配置扩展 | `pi list` |
@@ -156,12 +156,14 @@ VIEW 下方按调用来源分组：
 
 1. 检查 `command -v pi`、`pi --version`、`node --version` 和 `pi list`。若 npm-global 与 Bun-global 安装并存，请升级实际提供当前 `pi` 命令的安装。
 2. 使用对应安装渠道的包管理器升级 Pi，再次确认当前执行的版本。
-3. 执行 `pi install npm:pi-ui-extension@1.20.0`（项目级安装添加 `--local`），重启 Pi，并以 `pi --tui-mode fullscreen` 启动。检查全局和项目级配置，避免仍加载旧的固定版本。
+3. 执行 `pi install npm:pi-ui-extension@1.20.1`（项目级安装添加 `--local`），重启 Pi，并以 `pi --tui-mode fullscreen` 启动。检查全局和项目级配置，避免仍加载旧的固定版本。
 4. 确认边栏、Compact 工具展开及鼠标点击位置、Thinking 展开（需开启原生 Thinking 可见性）、会话切换和 Tool/MCP 统计正常。
 
 如果必须保留较旧的 Pi，请使用 `pi install` 将安装来源指定为 `npm:pi-ui-extension@1.10.5`（Pi 1.4.x）、`npm:pi-ui-extension@1.9.12`（Pi 1.3.x）或 `npm:pi-ui-extension@1.9.2`（Pi 1.2.x），或将 Git 来源固定到对应标签；保持原来的全局或项目安装范围。固定版本不会自动升级。安装成功本身不能证明宿主兼容。
 
 CI 验证的是 Node.js **22.19.0 / 24** 与 Pi SDK **1.5.0** 的组合。`>=1.5.0` 声明允许后续版本，但矩阵未逐一验证。本版本未新增会话或配置格式迁移。
+
+v1.20.1 修复中文会话清理确认弹窗在窄布局下保护原因计数显示不全的问题。
 
 v1.20.0 让会话列表、弹窗和通知使用同一种界面语言。区域设置为 `zh` 时使用中文，否则使用英文；`PI_UI_LANG` 可覆盖该选择。打开资源或 MCP 状态弹窗失败时会提示错误，不再留下未处理的 rejection。npm 包包含 `README.zh-CN.md`。
 
