@@ -6,6 +6,7 @@ import {
   type ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import { installContextEstimates } from "./ctx/data.ts";
+import { createPanelContextUsage, panelContextUsageReader, type ContextUsageCache } from "./ctx/usage.ts";
 import { createActivityTracker, createStreamingTokenSampler, type ActivityTracker } from "./ctx/activity.ts";
 import { createDialogUI } from "./dialogs/index.ts";
 import { installFooter, type FooterController } from "./footer/index.ts";
@@ -60,6 +61,7 @@ export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
   let toolViewMode: ToolViewMode | undefined;
   let footer: FooterController | undefined;
   let sidebar: SidebarController | undefined;
+  let contextUsage: ContextUsageCache | undefined;
   let activity: ActivityTracker | undefined;
   let toolUsage: ToolUsageTracker | undefined;
   let getCurrentBranch: (() => readonly unknown[]) | undefined;
@@ -109,6 +111,9 @@ export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
   };
   const refreshSessions = (): void => {
     sidebar?.updatePanel(SESSION_PANEL_ID, undefined);
+  };
+  const invalidateContextUsage = (): void => {
+    contextUsage?.invalidate();
   };
   const sessions = createSessionUi(pi, {
     pinsFile: SESSION_PINS_FILE,
@@ -183,6 +188,9 @@ export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
       addCacheUsage(event.message.usage);
       activity?.finishResponse(event.message.usage.output);
     }
+    // A message may be replaced in place before the host appends it, which moves
+    // no branch leaf, so the cached usage scan cannot detect it on its own.
+    invalidateContextUsage();
     refreshContextUi();
   });
   pi.on("tool_execution_start", (event) => {
@@ -204,6 +212,7 @@ export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
     refreshContextUi();
   });
   pi.on("session_tree", () => {
+    invalidateContextUsage();
     const branch = getCurrentBranch?.();
     if (branch) {
       resetCacheUsage(branch);
@@ -213,12 +222,19 @@ export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
     refreshSessions();
   });
   pi.on("session_info_changed", refreshSessions);
-  pi.on("model_select", refreshContextUi);
+  pi.on("session_compact", invalidateContextUsage);
+  pi.on("model_select", () => {
+    // The context window comes from the active model, which may change without
+    // an appended entry.
+    invalidateContextUsage();
+    refreshContextUi();
+  });
   pi.on("thinking_level_select", refreshContextUi);
 
   const clearControllers = (): void => {
     sidebar = undefined;
     footer = undefined;
+    contextUsage = undefined;
     activity = undefined;
     toolUsage = undefined;
     getCurrentBranch = undefined;
@@ -250,11 +266,16 @@ export default async function piUiExtension(pi: ExtensionAPI): Promise<void> {
     if (ctx.mode !== "tui") return;
 
     activity = createActivityTracker(ctx.cwd, refreshContextUi);
+    // The CTX panel renders on every frame, and the host answers getContextUsage()
+    // with a full session projection. Keep the answer until the branch leaf or the
+    // model that supplies the context window changes; events above invalidate it
+    // for changes that move no leaf.
+    contextUsage = createPanelContextUsage(ctx);
     footer = installFooter(
       ctx,
       (tui, theme) => {
         const panels = createDefaultSidebarPanels({
-          getContextUsage: () => ctx.getContextUsage(),
+          getContextUsage: panelContextUsageReader(contextUsage, () => ctx.getContextUsage()),
           getContextEstimate: () => contextEstimates.getSnapshot(),
           getContextDelta: () => contextEstimates.getDelta(),
           getActivity: () => activity?.getSnapshot(),

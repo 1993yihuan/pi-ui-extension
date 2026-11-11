@@ -1,4 +1,5 @@
 import { convertToLlm, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { readBranchKey, sameBranchKey, type BranchKey } from "./usage.ts";
 
 
 const knownRoles = new Set(["user", "assistant", "toolResult", "custom", "bashExecution", "compactionSummary", "branchSummary"]);
@@ -120,22 +121,19 @@ function activeToolDefinitions(pi: ExtensionAPI): readonly ToolDefinition[] | un
   }
 }
 
-export function estimateContext(
-  messages: readonly unknown[] | undefined,
-  systemPrompt?: string,
-  source: ContextEstimate["source"] = "unavailable",
-  tools?: readonly ToolDefinition[],
-  imagesWire?: ImagesWireEstimate,
-): ContextEstimate {
-  const counts: Record<ContextCategory, number | undefined> = {
-    System: systemPrompt === undefined ? undefined : estimateTextTokens(systemPrompt),
-    Tools: estimateToolTokens(tools), Messages: messages ? 0 : undefined,
-    "Tool Results": messages ? 0 : undefined, Summary: messages ? 0 : undefined, Other: messages ? 0 : undefined,
-  };
-  for (const value of messages ?? []) {
+type MessageCategory = Exclude<ContextCategory, "System" | "Tools">;
+export type MessageContextEstimate = {
+  readonly counts: Readonly<Record<MessageCategory, number>>;
+  readonly imagesWire: ImagesWireEstimate;
+};
+
+/** Everything the active branch's messages contribute; the expensive half of an estimate. */
+export function estimateMessageContext(messages: readonly unknown[]): MessageContextEstimate {
+  const counts: Record<MessageCategory, number> = { Messages: 0, "Tool Results": 0, Summary: 0, Other: 0 };
+  for (const value of messages) {
     const message = record(value);
     if (message.role === "bashExecution" && message.excludeFromContext) continue;
-    const category: ContextCategory = message.role === "toolResult" ? "Tool Results"
+    const category: MessageCategory = message.role === "toolResult" ? "Tool Results"
       : message.role === "compactionSummary" || message.role === "branchSummary" ? "Summary"
       : message.role === "user" || message.role === "assistant" ? "Messages" : "Other";
     // Let the public SDK supply summary/bash wrappers; retain the original role for attribution.
@@ -144,16 +142,47 @@ export function estimateContext(
       ? convertToLlm([value as Parameters<typeof convertToLlm>[0][number]])
         .map(converted => contentText(converted.content)).join("")
       : contentText(message.content);
-    const tokens = estimateTextTokens(body);
-    counts[category] = (counts[category] ?? 0) + tokens;
+    counts[category] += estimateTextTokens(body);
   }
+  return { counts, imagesWire: countImages(messages, "message") };
+}
+
+/** Combine message counts with the always-cheap system prompt and tool schema costs. */
+export function composeContextEstimate(
+  messages: MessageContextEstimate | undefined,
+  systemPrompt: string | undefined,
+  source: ContextEstimate["source"],
+  tools: readonly ToolDefinition[] | undefined,
+  imagesWire: ImagesWireEstimate | undefined,
+): ContextEstimate {
+  const counts: Record<ContextCategory, number | undefined> = {
+    System: systemPrompt === undefined ? undefined : estimateTextTokens(systemPrompt),
+    Tools: estimateToolTokens(tools),
+    Messages: messages?.counts.Messages,
+    "Tool Results": messages?.counts["Tool Results"],
+    Summary: messages?.counts.Summary,
+    Other: messages?.counts.Other,
+  };
   const total = Object.values(counts).reduce<number>((sum, value) => sum + (value ?? 0), 0);
   const percent = (tokens: number | undefined): number | undefined => tokens === undefined || total === 0 ? undefined : tokens / total * 100;
   return {
     total, source,
-    imagesWire: imagesWire ?? countImages(messages, "message"),
+    imagesWire: imagesWire ?? messages?.imagesWire ?? { images: 0, source: "unavailable" },
     categories: CONTEXT_CATEGORIES.map(name => ({ name, tokens: counts[name], percent: percent(counts[name]) })),
   };
+}
+
+export function estimateContext(
+  messages: readonly unknown[] | undefined,
+  systemPrompt?: string,
+  source: ContextEstimate["source"] = "unavailable",
+  tools?: readonly ToolDefinition[],
+  imagesWire?: ImagesWireEstimate,
+): ContextEstimate {
+  return composeContextEstimate(
+    messages ? estimateMessageContext(messages) : undefined,
+    systemPrompt, source, tools, imagesWire,
+  );
 }
 
 export function installContextEstimates(pi: ExtensionAPI, onChange: () => void): {
@@ -167,16 +196,32 @@ export function installContextEstimates(pi: ExtensionAPI, onChange: () => void):
   let delta: number | undefined;
   let latestProviderImagesWire: ImagesWireEstimate | undefined;
   let latestProviderToolsTokens: number | undefined;
+  let cachedMessages: { readonly key: BranchKey; readonly estimate: MessageContextEstimate } | undefined;
+  /**
+   * The projection and its message estimate are the expensive part of a refresh.
+   * turn_end and the agent_settled that follows it usually see the same branch,
+   * so reuse them until the leaf moves. The system prompt and the active tool
+   * definitions are re-read every call: they can change with an unchanged leaf.
+   */
+  const messageEstimate = (ctx: ExtensionContext): MessageContextEstimate => {
+    const key = readBranchKey(ctx.sessionManager);
+    if (cachedMessages && key && sameBranchKey(cachedMessages.key, key)) return cachedMessages.estimate;
+    // Pi's projection applies branch-local context edits and compaction before
+    // estimating. System messages are already represented by getSystemPrompt().
+    const messages = ctx.sessionManager.buildSessionProjection().messages
+      .filter(message => message.role !== "system");
+    const estimate = estimateMessageContext(messages);
+    cachedMessages = key ? { key, estimate } : undefined;
+    return estimate;
+  };
   const restore = (ctx: ExtensionContext, keepProviderMeasurement = false): void => {
     if (!keepProviderMeasurement) {
       latestProviderImagesWire = undefined;
       latestProviderToolsTokens = undefined;
     }
-    // Pi's projection applies branch-local context edits and compaction before
-    // estimating. System messages are already represented by getSystemPrompt().
-    const messages = ctx.sessionManager.buildSessionProjection().messages
-      .filter(message => message.role !== "system");
-    contextFallback = estimateContext(messages, ctx.getSystemPrompt(), "active branch", activeToolDefinitions(pi));
+    contextFallback = composeContextEstimate(
+      messageEstimate(ctx), ctx.getSystemPrompt(), "active branch", activeToolDefinitions(pi), undefined,
+    );
     snapshot = latestProviderImagesWire === undefined ? contextFallback
       : { ...contextFallback, imagesWire: latestProviderImagesWire };
     if (keepProviderMeasurement && latestProviderToolsTokens !== undefined) {
@@ -240,6 +285,7 @@ export function installContextEstimates(pi: ExtensionAPI, onChange: () => void):
   pi.on("session_shutdown", () => {
     latestProviderImagesWire = undefined;
     latestProviderToolsTokens = undefined;
+    cachedMessages = undefined;
     snapshot = estimateContext(undefined);
     contextFallback = snapshot;
     settledTotal = undefined;

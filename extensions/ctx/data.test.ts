@@ -124,3 +124,98 @@ test("restoring CTX respects SDK context removals, replacements and branch chang
   handlers.get("session_compact")!({}, ctx);
   assert.ok(tracker.getSnapshot().categories.find(category => category.name === "Summary")!.tokens! > 0);
 });
+
+function trackingTracker(options: { systemPrompt?: string; active?: string[]; all?: unknown[] } = {}) {
+  const handlers = new Map<string, Function>();
+  const state = { systemPrompt: options.systemPrompt ?? "", active: options.active ?? [], all: options.all ?? [], changes: 0 };
+  const tracker = installContextEstimates({
+    on: (name: string, fn: Function) => handlers.set(name, fn),
+    getActiveTools: () => state.active,
+    getAllTools: () => state.all,
+  } as any, () => { state.changes += 1; });
+  const session = SessionManager.inMemory();
+  const project = session.buildSessionProjection.bind(session);
+  let projections = 0;
+  session.buildSessionProjection = () => { projections += 1; return project(); };
+  const ctx = { sessionManager: session, getSystemPrompt: () => state.systemPrompt };
+  return { tracker, handlers, state, session, ctx, projections: () => projections };
+}
+
+test("turn_end and the agent_settled that follows reuse one projection for the same branch", () => {
+  const { tracker, handlers, session, ctx, projections, state } = trackingTracker();
+  handlers.get("session_start")!({}, ctx);
+  const base = projections();
+  session.appendMessage({ role: "user", content: "x".repeat(4000), timestamp: 1 } as any);
+  handlers.get("turn_end")!({}, ctx);
+  assert.equal(projections(), base + 1);
+  const settled = tracker.getSnapshot();
+  assert.equal(tracker.getDelta(), 1000);
+
+  handlers.get("agent_settled")!({}, ctx);
+  assert.equal(projections(), base + 1, "an unchanged leaf must not rebuild the projection");
+  assert.equal(tracker.getDelta(), 1000, "delta semantics survive the reuse");
+  assert.equal(tracker.getSnapshot().total, settled.total);
+  assert.equal(state.changes, 3, "every refresh still notifies the UI");
+
+  session.appendMessage({ role: "user", content: "x".repeat(400), timestamp: 2 } as any);
+  handlers.get("agent_settled")!({}, ctx);
+  assert.equal(projections(), base + 2, "a new leaf rebuilds the projection");
+  assert.equal(tracker.getDelta(), 100);
+});
+
+test("the reused message estimate still re-reads the system prompt and active tools", () => {
+  const { tracker, handlers, session, ctx, projections, state } = trackingTracker({ active: ["sample_runner"], all: [tool] });
+  handlers.get("session_start")!({}, ctx);
+  const base = projections();
+  session.appendMessage({ role: "user", content: "abcd", timestamp: 1 } as any);
+  handlers.get("turn_end")!({}, ctx);
+  const first = tracker.getSnapshot();
+  const tokens = (name: string) => tracker.getSnapshot().categories.find(category => category.name === name)!.tokens;
+  assert.equal(tokens("System"), 0);
+  assert.equal(tokens("Tools"), Math.ceil(JSON.stringify(tool).length / 4));
+
+  state.systemPrompt = "abcd";
+  state.active = [];
+  handlers.get("agent_settled")!({}, ctx);
+  assert.equal(projections(), base + 1, "the message projection is still reused");
+  assert.equal(tokens("System"), 1, "a changed system prompt is picked up without a new leaf");
+  assert.equal(tokens("Tools"), 0, "a changed tool loadout is picked up without a new leaf");
+  assert.equal(tokens("Messages"), first.categories.find(category => category.name === "Messages")!.tokens);
+});
+
+test("branch switches and compaction rebuild the message estimate", () => {
+  const { tracker, handlers, session, ctx, projections } = trackingTracker();
+  handlers.get("session_start")!({}, ctx);
+  const base = projections();
+  const user = session.appendMessage({ role: "user", content: "x".repeat(4000), timestamp: 1 } as any);
+  session.appendMessage({ role: "toolResult", toolName: "read", toolCallId: "read-1", content: [{ type: "text", text: "x".repeat(40000) }], isError: false, timestamp: 2 } as any);
+  handlers.get("turn_end")!({}, ctx);
+  assert.equal(projections(), base + 1);
+
+  session.branch(user);
+  const beforeSwitch = projections();
+  handlers.get("session_tree")!({}, ctx);
+  assert.equal(projections() - beforeSwitch, 1, "a branch switch rebuilds");
+  assert.equal(tracker.getSnapshot().total, 1000);
+
+  // appendCompaction projects internally, so measure only the handler's own work.
+  session.appendCompaction("kept summary", null, 1000);
+  const beforeCompact = projections();
+  handlers.get("session_compact")!({}, ctx);
+  assert.equal(projections() - beforeCompact, 1, "compaction rebuilds");
+  assert.ok(tracker.getSnapshot().categories.find(category => category.name === "Summary")!.tokens! > 0);
+});
+
+test("a context edit appended after a reuse rebuilds instead of serving the old projection", () => {
+  const { tracker, handlers, session, ctx, projections } = trackingTracker();
+  handlers.get("session_start")!({}, ctx);
+  const base = projections();
+  const user = session.appendMessage({ role: "user", content: "x".repeat(4000), timestamp: 1 } as any);
+  handlers.get("turn_end")!({}, ctx);
+  handlers.get("agent_settled")!({}, ctx);
+  assert.equal(projections(), base + 1);
+  session.appendContextEdit(user, { content: "abcd" });
+  handlers.get("turn_end")!({}, ctx);
+  assert.equal(projections(), base + 2);
+  assert.equal(tracker.getSnapshot().total, 1);
+});
