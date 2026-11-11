@@ -1,4 +1,5 @@
 import nodePath from "node:path";
+import { t } from "../i18n.ts";
 
 export type ToolActivityStatus = "running" | "done" | "failed" | "cancelled";
 export type ToolActivity = {
@@ -62,11 +63,11 @@ function ttftSpeed(ms: number): SpeedLabel { return ms < 2_000 ? "fast" : ms < 5
 function tpsSpeed(tps: number): SpeedLabel { return tps >= 50 ? "fast" : tps >= 20 ? "normal" : "slow"; }
 export function formatTtft(value: number | undefined): string {
   return value === undefined || !Number.isFinite(value) ? "~"
-    : `${value < 1_000 ? "1s" : `${Math.max(0, value / 1_000).toFixed(1)}s`}[${ttftSpeed(value)}]`;
+    : `${value < 1_000 ? "1s" : `${Math.max(0, value / 1_000).toFixed(1)}s`}[${t(`ctx.speed.${ttftSpeed(value)}`)}]`;
 }
 export function formatTps(value: number | undefined, estimated = false): string {
   return value === undefined || !Number.isFinite(value) ? "~"
-    : `${estimated ? "~" : ""}${Math.max(0, value).toFixed(1)}[${tpsSpeed(value)}]`;
+    : `${estimated ? "~" : ""}${Math.max(0, value).toFixed(1)}[${t(`ctx.speed.${tpsSpeed(value)}`)}]`;
 }
 export function formatResponsePerformance(performance?: ResponsePerformance): string {
   return `TTFT ${formatTtft(performance?.ttftMs)} · TPS ${formatTps(performance?.tokensPerSecond, performance?.estimated)}`;

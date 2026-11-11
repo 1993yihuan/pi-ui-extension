@@ -75,6 +75,37 @@ test("catalog shares unchanged summaries, reads only changed files and tracks di
 
 const rootCannotBeBlocked = process.getuid?.() === 0 ? "chmod does not restrict root" : false;
 
+test("catalog keeps unreadable cached summaries within the requested project", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "pi-catalog-project-fallback-"));
+  try {
+    const current = SessionManager.create(root, root);
+    current.appendMessage({ role: "user", content: "Current project", timestamp: 1 });
+    const otherCwd = join(root, "other-project");
+    const other = SessionManager.create(otherCwd, root);
+    other.appendMessage({ role: "user", content: "Other project", timestamp: 1 });
+    const catalog = createSessionCatalog();
+    assert.deepEqual((await catalog(root, root)).map(row => row.id), [current.getSessionId()]);
+    const handle = await open(current.getSessionFile()!);
+    const prototype = Object.getPrototypeOf(handle);
+    await handle.close();
+    current.appendMessage({ role: "user", content: "Changed", timestamp: 2 });
+    other.appendMessage({ role: "user", content: "Changed", timestamp: 2 });
+    const failure = t.mock.method(prototype, "createReadStream", () => {
+      throw Object.assign(new Error("fixture read denied"), { code: "EACCES" });
+    });
+    const rows = await catalog(root, root);
+    assert.deepEqual(rows.map(row => ({ id: row.id, title: row.firstMessage, unavailable: row.unavailable, prompts: row.userPromptCount })), [
+      { id: current.getSessionId(), title: "Current project", unavailable: true, prompts: 1 },
+    ]);
+    assert.deepEqual((await catalog(otherCwd, root)).map(row => row.id), [other.getSessionId()]);
+    failure.mock.restore();
+    const recovered = await catalog(root, root);
+    assert.deepEqual(recovered.map(row => ({ id: row.id, unavailable: row.unavailable, prompts: row.userPromptCount })), [
+      { id: current.getSessionId(), unavailable: undefined, prompts: 2 },
+    ]);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
 test("catalog keeps the last good summary while a session file cannot be read", { skip: rootCannotBeBlocked }, async () => {
   const root = mkdtempSync(join(tmpdir(), "pi-catalog-unreadable-"));
   try {

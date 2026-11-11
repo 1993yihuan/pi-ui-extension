@@ -1,6 +1,7 @@
 import type { ContextUsage, Theme } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth, visibleWidth, type Component } from "@earendil-works/pi-tui";
 import { panelBottom, panelContent, panelTop, type PanelColor } from "../sidebar/panel.ts";
+import { t } from "../i18n.ts";
 
 import type { ContextEstimate } from "./data.ts";
 import {
@@ -60,11 +61,11 @@ function activityRows(
     ? formatDuration(activity.durationMs ?? 0)
     : formatDuration(Math.max(0, at - (activity.startedAt ?? at)));
   const status = activity.phase === "idle"
-    ? "Ready"
-    : `${activity.turns.length} turn${activity.turns.length === 1 ? "" : "s"} · ${activity.phase === "running" ? duration : `${activity.aborted ? "aborted" : "done"} ${duration}`}`;
+    ? t("ctx.ready")
+    : `${t(activity.turns.length === 1 ? "ctx.turn" : "ctx.turns", { count: activity.turns.length })} · ${activity.phase === "running" ? duration : `${t(activity.aborted ? "ctx.aborted" : "ctx.done")} ${duration}`}`;
   const plain = (value: string): string => value.replace(/\[[^\]]+\]/g, "");
   const average = `AVG TTFT ${plain(formatTtft(activity.averagePerformance?.ttftMs))} · AVG TPS ${plain(formatTps(activity.averagePerformance?.tokensPerSecond))}`;
-  const compact = `${activity.turns.length}T ${activity.phase === "settled" ? (activity.aborted ? "aborted " : "done ") : ""}${duration}`;
+  const compact = `${t("ctx.turnsCompact", { count: activity.turns.length })} ${activity.phase === "settled" ? `${t(activity.aborted ? "ctx.aborted" : "ctx.done")} ` : ""}${duration}`;
   const header = [`${status} · ${average}`, status, compact, average]
     .find((candidate) => visibleWidth(candidate) <= contentWidth) ?? compact;
   const statusColor: PanelColor = activity.phase === "running"
@@ -81,7 +82,7 @@ function activityRows(
     panelContent(theme, "─".repeat(contentWidth), "dim", contentWidth),
     panelContent(theme, header, statusColor, contentWidth),
     // Latest observed TTFT, not the run average: AVG TTFT stays in the header.
-    panelContent(theme, `TTFT ${formatTtft(ttft)}${pending ? " · pending" : ""}`, "accent", contentWidth),
+    panelContent(theme, `TTFT ${formatTtft(ttft)}${pending ? ` · ${t("ctx.pending")}` : ""}`, "accent", contentWidth),
   ];
 }
 
@@ -119,8 +120,8 @@ export class ContextPanel implements Component {
     const summary = `${baseSummary}${deltaSuffix}`;
     const cacheHitRate = this.options.getCacheHitRate?.();
     const cacheSummary = cacheHitRate === undefined
-      ? "Cache:?"
-      : `Cache:${Math.round(Math.max(0, Math.min(100, cacheHitRate)))}%`;
+      ? `${t("ctx.cache")}:?`
+      : `${t("ctx.cache")}:${Math.round(Math.max(0, Math.min(100, cacheHitRate)))}%`;
     const summaryText = `${this.theme.fg(color, baseSummary)}${deltaSuffix ? this.theme.fg(deltaColor, deltaSuffix) : ""}`;
     const summaryRow = visibleWidth(summary) + visibleWidth(cacheSummary) + 1 <= contentWidth
       ? `${summaryText}${" ".repeat(contentWidth - visibleWidth(summary) - visibleWidth(cacheSummary))}${this.theme.fg(color, cacheSummary)}`
@@ -129,15 +130,16 @@ export class ContextPanel implements Component {
       typeof windowTokens !== "number" || !Number.isFinite(windowTokens) || windowTokens <= 0
       ? 0
       : Math.min(filledWidth, Math.max(1, Math.round(contentWidth * delta / windowTokens)));
-    const model = this.options.getModel() || "no-model";
-    const thinking = this.options.getThinkingLevel() || "off";
+    const model = this.options.getModel() || t("ctx.noModel");
+    const thinkingLevel = this.options.getThinkingLevel() || "off";
+    const thinking = thinkingLevel === "off" ? t("ctx.thinkingOff") : thinkingLevel;
     const modelLabel = `${this.theme.fg("accent", model)}${this.theme.fg("dim", "｜")}${gradientText(thinking)}`;
 
     const rows: string[] = [];
     const row = (text: string): void => { rows.push(panelContent(this.theme, text, "dim", contentWidth)); };
     const estimate = this.options.getEstimate?.();
     const amount = (tokens: number | undefined, percent: number | undefined): string =>
-      tokens === undefined ? "unknown" : `~${tokens === 0 ? "0" : formatContextWindow(tokens)} ${percent === undefined ? "?" : percent.toFixed(1)}%`;
+      tokens === undefined ? t("ctx.unknown") : `~${tokens === 0 ? "0" : formatContextWindow(tokens)} ${percent === undefined ? "?" : percent.toFixed(1)}%`;
     const alignedRow = (label: string, value: string, labelColor: PanelColor = "dim", valueColor: PanelColor = "dim"): void => {
       const gap = contentWidth - visibleWidth(label) - visibleWidth(value) - 1;
       if (gap >= 1) {
@@ -151,13 +153,13 @@ export class ContextPanel implements Component {
       alignedRow(`${label}:`, amount(tokens, percent));
     };
     const imagesWire = estimate?.imagesWire ?? { images: 0, source: "unavailable" as const };
-    const imageLabel = imagesWire.source === "unavailable" ? "⚠ Images" : "Images";
+    const imageLabel = `${imagesWire.source === "unavailable" ? "⚠ " : ""}${t("ctx.images")}`;
     const imageValue = imagesWire.source === "unavailable"
-      ? "not observed"
-      : `${imagesWire.images} ${imagesWire.images === 1 ? "image" : "images"}`;
+      ? t("ctx.notObserved")
+      : t(imagesWire.images === 1 ? "ctx.imageCount" : "ctx.imagesCount", { count: imagesWire.images });
     row("─".repeat(contentWidth));
-    for (const category of estimate?.categories ?? []) estimateRow(category.name, category.tokens, category.percent);
-    if (!estimate) row("No snapshot available");
+    for (const category of estimate?.categories ?? []) estimateRow(t(`ctx.category.${category.name}`), category.tokens, category.percent);
+    if (!estimate) row(t("ctx.noSnapshot"));
     alignedRow(imageLabel, imageValue, imagesWire.source === "unavailable" ? "warning" : "dim", "dim");
     return [
       panelTop(this.theme, "CTX", renderWidth),

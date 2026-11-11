@@ -4,6 +4,7 @@ import { visibleWidth, ScrollView } from "@earendil-works/pi-tui";
 import { renderLayoutFrame } from "@earendil-works/pi-tui/dist/layout.js";
 import { ContextPanel } from "./panel.ts";
 import { estimateContext } from "./data.ts";
+import { createActivityTracker } from "./activity.ts";
 
 for (const width of [18, 30, 50]) test(`composition is always visible below a separator at width ${width}`, () => {
  const panel = new ContextPanel({fg:(_c:string,s:string)=>s} as any, {
@@ -102,4 +103,46 @@ test("activity rows render below the composition and bar", () => {
   getActivity:()=>({...activity,phase:"idle",turns:[],startedAt:undefined} as any),
  });
  assert.match(idle.render(50).join("\n"),/Ready/);
+});
+
+test("CTX translates Chinese copy and keeps narrow layouts within display columns", (t) => {
+ const previous=process.env.PI_UI_LANG;
+ process.env.PI_UI_LANG="zh";
+ t.after(()=>{if(previous===undefined)delete process.env.PI_UI_LANG;else process.env.PI_UI_LANG=previous;});
+ const activity=createActivityTracker("/fixture",()=>{});
+ const panel=new ContextPanel({fg:(_c:string,s:string)=>s} as any,{
+  getDesiredWidth:()=>72,getUsage:()=>undefined,getModel:()=>"",getThinkingLevel:()=>"",
+  getActivity:()=>activity.getSnapshot(),now:()=>3000,
+ });
+ const idle=panel.render(72).join("\n");
+ for(const label of ["就绪","暂无上下文快照","未观测到","图片","缓存:?","未选择模型"])
+  assert.ok(idle.includes(label),label);
+ assert.doesNotMatch(idle,/Ready|No snapshot available|not observed|Images|Cache:|no-model/);
+ activity.startRun(0);
+ activity.startTurn(0,0);
+ activity.startResponse(0);
+ assert.match(panel.render(72).join("\n"),/1 轮 · 3s/);
+ assert.match(panel.render(72).join("\n"),/TTFT ~ · 等待中/);
+ activity.updateResponseEstimate(1,1000);
+ activity.finishResponse(80,3000);
+ activity.settle(3000);
+ for(const width of [18,30,50,72]){
+  const lines=panel.render(width);
+  assert.ok(lines.every(line=>visibleWidth(line)<=width),String(width));
+  assert.match(lines.join("\n"),/已完成 3s/);
+  assert.doesNotMatch(lines.join("\n"),/\bdone\b|\bturns?\b/);
+ }
+ assert.match(panel.render(72).join("\n"),/TTFT 1\.0s\[快\]/);
+ activity.startRun(0);
+ activity.startTurn(0,0);
+ activity.settle(3000,true);
+ assert.match(panel.render(18).join("\n"),/已中断 3s/);
+ const composition=new ContextPanel({fg:(_c:string,s:string)=>s} as any,{
+  getDesiredWidth:()=>72,getUsage:()=>undefined,getModel:()=>"model",getThinkingLevel:()=>"off",
+  getEstimate:()=>({...estimateContext([{role:"user",content:"abcd"}]),imagesWire:{images:2,source:"provider payload"}}),
+ });
+ const output=composition.render(72).join("\n");
+ for(const label of ["系统","工具定义","消息","工具结果","摘要","其他","未知","图片","2 张"])
+  assert.ok(output.includes(label),label);
+ assert.doesNotMatch(output,/System|Tools|Messages|Tool Results|Summary|Other|unknown|images/);
 });

@@ -136,8 +136,7 @@ export function createSessionCatalog() {
             const summary = cached && sameFile(cached.snapshot, info) ? cached.summary : await readSummary(path, info);
             if (summary) {
               cache.set(path, { snapshot: { dev: info.dev, ino: info.ino, size: info.size, mtimeMs: info.mtimeMs, ctimeMs: info.ctimeMs }, summary });
-              // Custom/shared directories must not expose another project's sessions.
-              if (summary.cwd && expandPath(summary.cwd) === expandPath(cwd)) summaries.push(summary);
+              summaries.push(summary);
             } else cache.delete(path);
           } catch (error) {
             // A transient read failure must not hide a session: keep the last good
@@ -149,7 +148,8 @@ export function createSessionCatalog() {
           }
         }
       }));
-      return summaries;
+      // Apply project isolation to fresh summaries and unreadable cached fallbacks alike.
+      return summaries.filter(summary => summary.cwd && expandPath(summary.cwd) === expandPath(cwd));
     };
     queue = queue.then(load, load);
     return queue;

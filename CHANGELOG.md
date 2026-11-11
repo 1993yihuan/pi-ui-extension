@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.20.3
+
+- Keep cached session summaries isolated to the current project when reads fail in a shared session directory. Preserve the current project's last good summary until the file is readable again.
+- Complete Chinese CTX status, composition, image, and performance labels. Preserve English text, technical abbreviations, and narrow-terminal layouts.
+
 ## 1.20.2
 
 - Align the Chinese protection reason counts in the full cleanup confirmation layout by terminal display width, so a CJK label no longer pushes the count column out of line.
